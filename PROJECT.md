@@ -5,6 +5,7 @@
 - **Локальная версия:** `http://localhost:5173/` (бэкенд API: `http://localhost:3001/api`)
 - **Wi-Fi доступ с телефона:** `http://192.168.100.82:5173/`
 - **Тесты:** 495 / 495 passed (100% green)
+- **GitHub:** `https://github.com/Freez501/findoctor` (ветка `main`)
 
 ## Architecture
 Единая масштабируемая модульная fullstack-архитектура на TypeScript:
