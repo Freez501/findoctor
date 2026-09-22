@@ -300,6 +300,35 @@ export const Header: React.FC<HeaderProps> = ({
                   <RotateCcw size={13} className={isResetting ? 'animate-spin' : ''} />
                   <span>{isResetting ? 'Сброс данных...' : 'Сбросить демо-данные'}</span>
                 </button>
+
+                {/* Logout Button */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setShowProfileMenu(false);
+                    await logout();
+                  }}
+                  className="profile-logout-button"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    width: '100%',
+                    padding: '8px 12px',
+                    marginTop: '6px',
+                    background: 'rgba(239, 68, 68, 0.08)',
+                    color: '#f87171',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <LogOut size={13} />
+                  <span>Выйти из аккаунта</span>
+                </button>
               </div>
             )}
           </div>

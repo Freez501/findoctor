@@ -42,25 +42,16 @@ export class JsonFileStore extends InMemoryStore implements IFinanceStore {
         const raw = fs.readFileSync(this.filePath, 'utf-8');
         if (raw && raw.trim().length > 0) {
           const parsed = JSON.parse(raw);
-          if (
-            Array.isArray(parsed.accounts) &&
-            Array.isArray(parsed.events) &&
-            Array.isArray(parsed.categories) &&
-            Array.isArray(parsed.transactions)
-          ) {
+          if (parsed && typeof parsed === 'object') {
             const seed = createInitialDatabaseState();
-            if (!Array.isArray(parsed.partners)) {
-              parsed.partners = seed.partners;
-            }
-            if (!Array.isArray(parsed.companies)) {
-              parsed.companies = seed.companies;
-            }
-            if (!Array.isArray(parsed.users)) {
-              parsed.users = seed.users;
-            }
-            if (!Array.isArray(parsed.memberships)) {
-              parsed.memberships = seed.memberships;
-            }
+            if (!Array.isArray(parsed.accounts)) parsed.accounts = seed.accounts;
+            if (!Array.isArray(parsed.events)) parsed.events = seed.events;
+            if (!Array.isArray(parsed.categories)) parsed.categories = seed.categories;
+            if (!Array.isArray(parsed.transactions)) parsed.transactions = seed.transactions;
+            if (!Array.isArray(parsed.partners)) parsed.partners = seed.partners;
+            if (!Array.isArray(parsed.companies)) parsed.companies = seed.companies;
+            if (!Array.isArray(parsed.users)) parsed.users = seed.users;
+            if (!Array.isArray(parsed.memberships)) parsed.memberships = seed.memberships;
             return parsed;
           }
         }

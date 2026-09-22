@@ -15,8 +15,11 @@ import { SettingsView } from './components/settings/SettingsView.js';
 import { SuperAdminView } from './components/admin/SuperAdminView.js';
 import { QuickEntryModal } from './components/entry/QuickEntryModal.js';
 import { Toast } from './components/common/Toast.js';
+import { AuthView } from './components/auth/AuthView.js';
+import { useAuth } from './context/AuthContext.js';
 
 export const App: React.FC = () => {
+  const { isAuthenticated } = useAuth();
   const [currentTab, setCurrentTab] = useState<TabType>('accounts');
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>(undefined);
@@ -30,6 +33,15 @@ export const App: React.FC = () => {
     setIsOpen(false);
     setSelectedAccountId(undefined);
   };
+
+  if (!isAuthenticated) {
+    return (
+      <>
+        <AuthView />
+        <Toast />
+      </>
+    );
+  }
 
   return (
     <div className="min-h-screen" style={{ paddingBottom: '90px' }}>
