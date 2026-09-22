@@ -49,15 +49,79 @@ export type CategoryType = 'income' | 'expense' | 'both' | 'transfer';
 export type TransactionDirection = 'operational' | 'business' | 'dividends' | 'transfer';
 
 /**
+ * User roles in the SaaS platform:
+ * - super_admin: Platform owner (has access to global admin panel, manage all companies/tenants)
+ * - owner: Company owner / founder (full access to company finances, settings, invites)
+ * - admin: Partner / Co-founder (full access to company finances, reports)
+ * - staff: Employee (bartender, mover, warehouse) with restricted access (quick entry only, no dividends/total margin)
+ */
+export type UserRole = 'super_admin' | 'owner' | 'admin' | 'staff';
+
+/**
+ * Company (Tenant / Organization) entity
+ */
+export interface Company {
+  id: string;
+  name: string;
+  slug: string;
+  plan: 'free' | 'starter' | 'pro' | 'enterprise';
+  isActive: boolean;
+  ownerId?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/**
+ * User Profile in the SaaS system
+ */
+export interface UserProfile {
+  id: string;
+  email: string;
+  fullName: string;
+  avatarUrl?: string;
+  isSuperAdmin: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/**
+ * Membership connecting a User to a Company with a specific role
+ */
+export interface CompanyMembership {
+  id: string;
+  companyId: string;
+  userId: string;
+  role: UserRole;
+  invitedBy?: string;
+  createdAt: string;
+}
+
+/**
+ * Audit author metadata for tracking who created or updated an operation
+ */
+export interface AuditUser {
+  id: string;
+  name: string;
+}
+
+/**
  * Business Partner domain model (e.g. Влад, Никита)
  */
 export interface Partner {
   /** Unique partner ID (e.g. 'partner_vlad', 'partner_nikita') */
   id: string;
+  /** Multi-tenant company identifier */
+  companyId?: string;
   /** Partner display name */
   name: string;
+  /** Role or title in the business (e.g. Соучредитель, Инвестор, Шеф-бармен) */
+  role?: string;
   /** Whether partner is active */
   isActive: boolean;
+  /** Author who created this record */
+  createdBy?: AuditUser;
+  /** Author who last updated this record */
+  updatedBy?: AuditUser;
   /** Creation timestamp */
   createdAt?: string;
   /** Last update timestamp */
@@ -65,11 +129,13 @@ export interface Partner {
 }
 
 /**
- * Account domain model representing one of the 5 distinct liquidity nodes.
+ * Account domain model representing one of the distinct liquidity nodes.
  */
 export interface Account {
   /** Unique account identifier (e.g. 'cash_1', 'cash_2', 'bank_1', 'bank_2', 'card_sbp') */
   id: string;
+  /** Multi-tenant company identifier */
+  companyId?: string;
   /** Human-readable display name (e.g. "Нал 1 (Касса на площадке)") */
   name: string;
   /** Account category type */
@@ -84,6 +150,14 @@ export interface Account {
   description: string;
   /** Account active status */
   isActive: boolean;
+  /** Visual badge color (hex) */
+  color?: string;
+  /** Visual icon identifier (e.g. banknote, coins, landmark, credit-card, smartphone, wallet, shield) */
+  icon?: string;
+  /** Author who created this record */
+  createdBy?: AuditUser;
+  /** Author who last updated this record */
+  updatedBy?: AuditUser;
   /** Creation timestamp (ISO 8601) */
   createdAt?: string;
   /** Last balance modification timestamp (ISO 8601) */
@@ -96,20 +170,30 @@ export interface Account {
 export interface CateringEvent {
   /** Unique event identifier (e.g. 'event-wedding', 'event-corporate') */
   id: string;
+  /** Multi-tenant company identifier */
+  companyId?: string;
   /** Event title / name */
   title: string;
+  /** Client / customer name */
+  clientName?: string;
   /** Event date formatted as YYYY-MM-DD */
   eventDate: string;
   /** Current lifecycle status */
   status: EventStatus;
-  /** Target planned budget / contract value in rubles */
+  /** Target planned budget in rubles */
   budget?: number;
+  /** Contract amount / agreed revenue in rubles */
+  contractAmount?: number;
   /** Expected or confirmed guest count */
   guestCount?: number;
   /** Venue / location title */
   location?: string;
   /** Additional notes, cocktail menu specifics, organizer contacts */
   notes?: string;
+  /** Author who created this record */
+  createdBy?: AuditUser;
+  /** Author who last updated this record */
+  updatedBy?: AuditUser;
   /** Creation timestamp (ISO 8601) */
   createdAt?: string;
   /** Last update timestamp (ISO 8601) */
@@ -122,12 +206,14 @@ export interface CateringEvent {
 export interface Category {
   /** Unique category identifier (e.g. 'alcohol', 'supplies', 'staff') */
   id: string;
+  /** Multi-tenant company identifier */
+  companyId?: string;
   /** Category display name in Russian */
   name: string;
   /** Permitted transaction type */
   type: CategoryType;
-  /** Operational direction (operational, business, dividends, transfer) */
-  direction?: TransactionDirection;
+  /** Operational direction (operational, business, dividends, transfer, all) */
+  direction?: TransactionDirection | 'all';
   /** Color hex code for UI badges and charts */
   color: string;
   /** Lucide icon identifier or visual token */
@@ -136,6 +222,10 @@ export interface Category {
   isEventSpecific: boolean;
   /** True for immutable system categories */
   isSystem?: boolean;
+  /** Author who created this record */
+  createdBy?: AuditUser;
+  /** Author who last updated this record */
+  updatedBy?: AuditUser;
   /** Creation timestamp (ISO 8601) */
   createdAt?: string;
 }
@@ -146,6 +236,8 @@ export interface Category {
 export interface Transaction {
   /** Unique transaction identifier (e.g. 'tx-001' or UUID) */
   id: string;
+  /** Multi-tenant company identifier */
+  companyId?: string;
   /** Operation type: income, expense, or transfer */
   type: TransactionType;
   /** Operational direction */
@@ -170,6 +262,12 @@ export interface Transaction {
   transactionDate: string;
   /** Soft-deletion flag (true when transaction has been reversed/cancelled) */
   isDeleted: boolean;
+  /** Flag indicating whether imported transaction requires category/event review by user */
+  needsReview?: boolean;
+  /** Author who created this record */
+  createdBy?: AuditUser;
+  /** Author who last updated this record */
+  updatedBy?: AuditUser;
   /** System creation timestamp */
   createdAt?: string;
   /** System modification timestamp */
@@ -180,6 +278,7 @@ export interface Transaction {
  * Query filter criteria for transactions listing.
  */
 export interface TransactionFilter {
+  companyId?: string;
   accountId?: string;
   eventId?: string;
   partnerId?: string;
@@ -305,4 +404,21 @@ export interface FinancialOverview {
   eventsCount: number;
   /** Summary of all accounts */
   accounts: Account[];
+}
+
+/**
+ * Normalized item parsed from bank statement or text dump.
+ */
+export interface ParsedStatementItem {
+  id: string;
+  date: string;
+  type: TransactionType;
+  amount: number;
+  description: string;
+  counterparty?: string;
+  categoryId?: string;
+  eventId?: string | null;
+  needsReview: boolean;
+  rawText?: string;
+  selected?: boolean;
 }

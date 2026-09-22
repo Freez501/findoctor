@@ -19,7 +19,7 @@ import {
   Partner,
   Transaction,
 } from '../../shared/types.js';
-import { CreateTransactionDTO } from '../../shared/dto.js';
+import { CreateTransactionDTO, CreateEventDTO, UpdateTransactionDTO } from '../../shared/dto.js';
 import { api } from '../api/apiClient.js';
 import { roundRubles } from '../utils/formatters.js';
 
@@ -48,12 +48,21 @@ export interface FinanceContextType {
   refreshAccounts: () => Promise<void>;
   refreshCategories: () => Promise<void>;
   refreshPartners: () => Promise<void>;
+  refreshEvents: () => Promise<void>;
   refreshTransactions: () => Promise<void>;
   refreshBotStatus: () => Promise<void>;
   createTransaction: (dto: CreateTransactionDTO) => Promise<{ success: boolean; transaction?: Transaction; error?: string }>;
+  updateTransaction: (id: string, updates: UpdateTransactionDTO) => Promise<{ success: boolean; transaction?: Transaction; error?: string }>;
+  batchImportTransactions: (items: CreateTransactionDTO[]) => Promise<{ success: boolean; count?: number; error?: string }>;
   deleteTransaction: (id: string) => Promise<{ success: boolean; error?: string }>;
+  deleteBatchTransactions: (ids: string[]) => Promise<{ success: boolean; count?: number; error?: string }>;
+  updateBatchTransactions: (ids: string[], updates: { accountId?: string; fromAccountId?: string | null; toAccountId?: string | null; categoryId?: string; eventId?: string | null }) => Promise<{ success: boolean; count?: number; error?: string }>;
+  createEvent: (dto: CreateEventDTO) => Promise<{ success: boolean; event?: CateringEvent; error?: string }>;
+  updateEvent: (id: string, updates: Partial<CateringEvent>) => Promise<{ success: boolean; event?: CateringEvent; error?: string }>;
+  deleteEvent: (id: string) => Promise<{ success: boolean; error?: string }>;
   executeTelegramCommand: (text: string) => Promise<{ success: boolean; transaction?: Transaction; error?: string }>;
   resetDemoData: () => Promise<boolean>;
+  resetAccountBalances: () => Promise<boolean>;
 
   // Toasts
   toasts: ToastItem[];
@@ -149,6 +158,15 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setPartners(res.partners);
     } catch (err: any) {
       console.error('Failed to load partners:', err);
+    }
+  }, []);
+
+  const refreshEvents = useCallback(async () => {
+    try {
+      const res = await api.getEvents();
+      setEvents(res.events);
+    } catch (err: any) {
+      console.error('Failed to load events:', err);
     }
   }, []);
 
@@ -342,7 +360,117 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     [mergeUpdatedAccounts, addToast]
   );
 
-  // 3. Execute Telegram Command
+  // 3. Update Existing Transaction
+  const updateTransaction = useCallback(
+    async (
+      id: string,
+      updates: UpdateTransactionDTO
+    ): Promise<{ success: boolean; transaction?: Transaction; error?: string }> => {
+      try {
+        const res = await api.updateTransaction(id, updates);
+        if (res.success && res.transaction) {
+          setTransactions((current) =>
+            current.map((tx) => (tx.id === id ? res.transaction : tx))
+          );
+          if (res.updatedAccounts && res.updatedAccounts.length > 0) {
+            mergeUpdatedAccounts(res.updatedAccounts);
+          }
+          addToast('Операция успешно обновлена', 'success');
+          return { success: true, transaction: res.transaction };
+        }
+        return { success: false, error: 'Ошибка обновления операции' };
+      } catch (err: any) {
+        const msg = err.message || 'Не удалось обновить операцию';
+        addToast(msg, 'error');
+        return { success: false, error: msg };
+      }
+    },
+    [mergeUpdatedAccounts, addToast]
+  );
+
+  // 4. Batch Import Transactions
+  const batchImportTransactions = useCallback(
+    async (
+      items: CreateTransactionDTO[]
+    ): Promise<{ success: boolean; count?: number; error?: string }> => {
+      try {
+        const res = await api.createBatchTransactions(items);
+        if (res.success && res.transactions) {
+          setTransactions((current) => [...res.transactions, ...current]);
+          if (res.updatedAccounts && res.updatedAccounts.length > 0) {
+            mergeUpdatedAccounts(res.updatedAccounts);
+          }
+          addToast(`Успешно импортировано операций: ${res.count}`, 'success');
+          return { success: true, count: res.count };
+        }
+        return { success: false, error: 'Ошибка пакетного импорта' };
+      } catch (err: any) {
+        const msg = err.message || 'Не удалось импортировать операции';
+        addToast(msg, 'error');
+        return { success: false, error: msg };
+      }
+    },
+    [mergeUpdatedAccounts, addToast]
+  );
+
+  // 5. Batch Delete Transactions
+  const deleteBatchTransactions = useCallback(
+    async (ids: string[]): Promise<{ success: boolean; count?: number; error?: string }> => {
+      try {
+        const res = await api.deleteBatchTransactions(ids);
+        if (res.success) {
+          const idSet = new Set(res.deletedIds || ids);
+          setTransactions((current) => current.filter((tx) => !idSet.has(tx.id)));
+          if (res.updatedAccounts && res.updatedAccounts.length > 0) {
+            mergeUpdatedAccounts(res.updatedAccounts);
+          }
+          addToast(`Успешно удалено операций: ${res.deletedCount}`, 'success');
+          return { success: true, count: res.deletedCount };
+        }
+        return { success: false, error: res.message || 'Ошибка массового удаления' };
+      } catch (err: any) {
+        const msg = err.message || 'Не удалось удалить выбранные операции';
+        addToast(msg, 'error');
+        return { success: false, error: msg };
+      }
+    },
+    [mergeUpdatedAccounts, addToast]
+  );
+
+  // 6. Batch Update Transactions (e.g. Move to another account)
+  const updateBatchTransactions = useCallback(
+    async (
+      ids: string[],
+      updates: {
+        accountId?: string;
+        fromAccountId?: string | null;
+        toAccountId?: string | null;
+        categoryId?: string;
+        eventId?: string | null;
+      }
+    ): Promise<{ success: boolean; count?: number; error?: string }> => {
+      try {
+        const res = await api.updateBatchTransactions(ids, updates);
+        if (res.success) {
+          const txRes = await api.getTransactions({ includeDeleted: false });
+          setTransactions(txRes.transactions);
+          if (res.updatedAccounts && res.updatedAccounts.length > 0) {
+            mergeUpdatedAccounts(res.updatedAccounts);
+          }
+          addToast(`Счёт успешно изменён для ${res.updatedCount} операций`, 'success');
+          return { success: true, count: res.updatedCount };
+        }
+        return { success: false, error: res.message || 'Ошибка обновления счёта' };
+      } catch (err: any) {
+        const msg = err.message || 'Не удалось перенести операции на другой счёт';
+        addToast(msg, 'error');
+        return { success: false, error: msg };
+      }
+    },
+    [mergeUpdatedAccounts, addToast]
+  );
+
+  // 5. Execute Telegram Command
   const executeTelegramCommand = useCallback(
     async (text: string): Promise<{ success: boolean; transaction?: Transaction; error?: string }> => {
       try {
@@ -363,7 +491,65 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     [mergeUpdatedAccounts, refreshBotStatus]
   );
 
-  // 4. Reset Demo Data
+  // 4. Events management
+  const createEvent = useCallback(
+    async (dto: CreateEventDTO): Promise<{ success: boolean; event?: CateringEvent; error?: string }> => {
+      try {
+        const res = await api.createEvent(dto);
+        if (res.event) {
+          setEvents((cur) => [res.event, ...cur]);
+          addToast(`Мероприятие «${res.event.title}» успешно создано`, 'success');
+          return { success: true, event: res.event };
+        }
+        return { success: false, error: 'Не удалось создать мероприятие' };
+      } catch (err: any) {
+        const msg = err.message || 'Ошибка создания мероприятия';
+        addToast(msg, 'error');
+        return { success: false, error: msg };
+      }
+    },
+    [addToast]
+  );
+
+  const updateEvent = useCallback(
+    async (id: string, updates: Partial<CateringEvent>): Promise<{ success: boolean; event?: CateringEvent; error?: string }> => {
+      try {
+        const res = await api.updateEvent(id, updates);
+        if (res.event) {
+          setEvents((cur) => cur.map((e) => (e.id === id ? res.event : e)));
+          addToast(`Мероприятие «${res.event.title}» обновлено`, 'success');
+          return { success: true, event: res.event };
+        }
+        return { success: false, error: 'Не удалось обновить мероприятие' };
+      } catch (err: any) {
+        const msg = err.message || 'Ошибка обновления мероприятия';
+        addToast(msg, 'error');
+        return { success: false, error: msg };
+      }
+    },
+    [addToast]
+  );
+
+  const deleteEvent = useCallback(
+    async (id: string): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const res = await api.deleteEvent(id);
+        if (res.success) {
+          setEvents((cur) => cur.filter((e) => e.id !== id));
+          addToast('Мероприятие удалено', 'info');
+          return { success: true };
+        }
+        return { success: false, error: 'Не удалось удалить мероприятие' };
+      } catch (err: any) {
+        const msg = err.message || 'Ошибка удаления мероприятия';
+        addToast(msg, 'error');
+        return { success: false, error: msg };
+      }
+    },
+    [addToast]
+  );
+
+  // 5. Reset Demo Data
   const resetDemoData = useCallback(async (): Promise<boolean> => {
     setIsLoading(true);
     try {
@@ -382,6 +568,25 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [refreshAll, addToast]);
 
+  // 6. Reset All Account Balances to 0 ₽
+  const resetAccountBalances = useCallback(async (): Promise<boolean> => {
+    setIsLoading(true);
+    try {
+      const res = await api.resetAccountBalances();
+      if (res.success && res.accounts) {
+        setAccounts(sortAccounts(res.accounts));
+        addToast('Остатки всех счетов успешно обнулены до 0 ₽', 'success');
+        return true;
+      }
+      return false;
+    } catch (err: any) {
+      addToast(err.message || 'Не удалось обнулить остатки счетов', 'error');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [addToast]);
+
   const value = useMemo(
     () => ({
       accounts,
@@ -398,12 +603,21 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       refreshAccounts,
       refreshCategories,
       refreshPartners,
+      refreshEvents,
       refreshTransactions,
       refreshBotStatus,
       createTransaction,
+      updateTransaction,
+      batchImportTransactions,
       deleteTransaction,
+      deleteBatchTransactions,
+      updateBatchTransactions,
+      createEvent,
+      updateEvent,
+      deleteEvent,
       executeTelegramCommand,
       resetDemoData,
+      resetAccountBalances,
       toasts,
       addToast,
       removeToast,
@@ -423,12 +637,21 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       refreshAccounts,
       refreshCategories,
       refreshPartners,
+      refreshEvents,
       refreshTransactions,
       refreshBotStatus,
       createTransaction,
+      updateTransaction,
+      batchImportTransactions,
       deleteTransaction,
+      deleteBatchTransactions,
+      updateBatchTransactions,
+      createEvent,
+      updateEvent,
+      deleteEvent,
       executeTelegramCommand,
       resetDemoData,
+      resetAccountBalances,
       toasts,
       addToast,
       removeToast,

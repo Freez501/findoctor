@@ -6,7 +6,7 @@
  * Final capital after 21 transactions: exactly 1 166 300 ₽.
  */
 
-import { Account, CateringEvent, Category, Transaction, Partner } from '../../shared/types.js';
+import { Account, CateringEvent, Category, Transaction, Partner, Company, UserProfile, CompanyMembership } from '../../shared/types.js';
 import {
   ACCOUNT_IDS,
   INITIAL_ACCOUNTS_SEED,
@@ -15,6 +15,9 @@ import {
   CATEGORY_IDS,
   INITIAL_CATEGORIES_SEED,
   INITIAL_PARTNERS_SEED,
+  INITIAL_COMPANIES_SEED,
+  INITIAL_USERS_SEED,
+  INITIAL_MEMBERSHIPS_SEED,
 } from '../../shared/constants.js';
 
 /**
@@ -374,11 +377,26 @@ export function getInitialPartners(): Partner[] {
   return JSON.parse(JSON.stringify(INITIAL_PARTNERS_SEED));
 }
 
+export function getInitialCompanies(): Company[] {
+  return JSON.parse(JSON.stringify(INITIAL_COMPANIES_SEED));
+}
+
+export function getInitialUsers(): UserProfile[] {
+  return JSON.parse(JSON.stringify(INITIAL_USERS_SEED));
+}
+
+export function getInitialMemberships(): CompanyMembership[] {
+  return JSON.parse(JSON.stringify(INITIAL_MEMBERSHIPS_SEED));
+}
+
 export function getSeedTransactions(): Transaction[] {
   return JSON.parse(JSON.stringify(SEED_TRANSACTIONS));
 }
 
 export interface DatabaseState {
+  companies?: Company[];
+  users?: UserProfile[];
+  memberships?: CompanyMembership[];
   accounts: Account[];
   events: CateringEvent[];
   categories: Category[];
@@ -388,6 +406,9 @@ export interface DatabaseState {
 
 export function createInitialDatabaseState(): DatabaseState {
   return {
+    companies: getInitialCompanies(),
+    users: getInitialUsers(),
+    memberships: getInitialMemberships(),
     accounts: getInitialAccounts(),
     events: getInitialEvents(),
     categories: getInitialCategories(),

@@ -5,9 +5,11 @@
  * Renders the responsive grid of 5 catering accounts with loading states.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { WalletCards, RefreshCw } from 'lucide-react';
 import { useAccounts } from '../../hooks/useAccounts.js';
+import { useFinance } from '../../context/FinanceContext.js';
+import { getAccountsWord } from '../../utils/formatters.js';
 import { AccountCard } from './AccountCard.js';
 
 interface AccountsGridProps {
@@ -15,7 +17,21 @@ interface AccountsGridProps {
 }
 
 export const AccountsGrid: React.FC<AccountsGridProps> = ({ onOpenEntryWithAccount }) => {
-  const { accounts, totalBalance, isLoading, refetch } = useAccounts();
+  const { accounts, totalBalance, isLoading } = useAccounts();
+  const { refreshAll, addToast } = useFinance();
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshAll();
+      addToast('Остатки счетов и журнал операций успешно обновлены', 'success');
+    } catch {
+      addToast('Ошибка при обновлении данных с сервера', 'error');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   return (
     <section className="accounts-section" aria-label="Счета кейтеринга">
@@ -26,7 +42,7 @@ export const AccountsGrid: React.FC<AccountsGridProps> = ({ onOpenEntryWithAccou
             <WalletCards size={18} />
           </div>
           <div>
-            <h2 className="section-heading">Счета кейтеринга (5 счетов)</h2>
+            <h2 className="section-heading">Счета кейтеринга ({getAccountsWord(accounts.length)})</h2>
             <p className="section-subtext">
               Раздельный учёт кассы на площадке, сейфа, расчетных счетов и СБП
             </p>
@@ -35,14 +51,14 @@ export const AccountsGrid: React.FC<AccountsGridProps> = ({ onOpenEntryWithAccou
 
         <button
           type="button"
-          onClick={() => refetch()}
-          disabled={isLoading}
+          onClick={handleRefresh}
+          disabled={isLoading || isRefreshing}
           className="btn-refresh-accounts"
           title="Обновить остатки по счетам"
           aria-label="Обновить остатки"
         >
-          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} aria-hidden="true" />
-          <span className="btn-text">Обновить</span>
+          <RefreshCw size={14} className={isLoading || isRefreshing ? 'animate-spin' : ''} aria-hidden="true" />
+          <span className="btn-text">{isRefreshing ? 'Обновление...' : 'Обновить'}</span>
         </button>
       </div>
 

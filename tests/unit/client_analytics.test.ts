@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { classifyMargin } from '../../src/client/hooks/useAnalytics.js';
-import { filterTransactions, FilterState } from '../../src/client/components/history/TransactionHistory.js';
+import { filterTransactions, FilterState, isDateInPeriod } from '../../src/client/components/history/TransactionHistory.js';
 import { Transaction } from '../../src/shared/types.js';
 
 describe('Client Analytics: Margin Classification & Math', () => {
@@ -78,5 +78,83 @@ describe('Client History: Filter Predicates (filterTransactions)', () => {
     const resultSearch = filterTransactions(dummyTxs, { ...defaultFilters, searchQuery: 'барменов' });
     expect(resultSearch).toHaveLength(1);
     expect(resultSearch[0].id).toBe('tx-2');
+  });
+
+  it('filters by category ID (статьи расходов/доходов)', () => {
+    const resultStaff = filterTransactions(dummyTxs, { ...defaultFilters, categoryId: 'cat_staff' });
+    expect(resultStaff).toHaveLength(1);
+    expect(resultStaff[0].id).toBe('tx-2');
+
+    const resultRent = filterTransactions(dummyTxs, { ...defaultFilters, categoryId: 'cat_rent' });
+    expect(resultRent).toHaveLength(1);
+    expect(resultRent[0].id).toBe('tx-3');
+
+    const resultAll = filterTransactions(dummyTxs, { ...defaultFilters, categoryId: 'all' });
+    expect(resultAll).toHaveLength(4);
+  });
+
+  it('filters transactions by custom date range', () => {
+    const resultRange = filterTransactions(dummyTxs, {
+      ...defaultFilters,
+      period: 'custom',
+      startDate: '2026-09-11',
+      endDate: '2026-09-14',
+    });
+    expect(resultRange).toHaveLength(1);
+    expect(resultRange[0].id).toBe('tx-2'); // 2026-09-12
+  });
+
+  it('filters transactions by start date only and end date only', () => {
+    const resultFrom15 = filterTransactions(dummyTxs, {
+      ...defaultFilters,
+      startDate: '2026-09-15',
+    });
+    expect(resultFrom15).toHaveLength(2); // tx-3 (15th) and tx-4 (16th)
+
+    const resultUpTo10 = filterTransactions(dummyTxs, {
+      ...defaultFilters,
+      endDate: '2026-09-10',
+    });
+    expect(resultUpTo10).toHaveLength(1); // tx-1 (10th)
+  });
+});
+
+describe('Client History: Date Helper (isDateInPeriod)', () => {
+  const fixedNow = new Date('2026-09-22T12:00:00Z'); // Tuesday, Sept 22, 2026
+
+  it('returns true for all or undefined period without boundaries', () => {
+    expect(isDateInPeriod('2026-09-10T10:00:00Z', 'all', '', '', fixedNow)).toBe(true);
+    expect(isDateInPeriod('2026-09-10T10:00:00Z', undefined, undefined, undefined, fixedNow)).toBe(true);
+  });
+
+  it('correctly matches "today"', () => {
+    expect(isDateInPeriod('2026-09-22T08:00:00Z', 'today', '', '', fixedNow)).toBe(true);
+    expect(isDateInPeriod('2026-09-21T20:00:00Z', 'today', '', '', fixedNow)).toBe(false);
+  });
+
+  it('correctly matches "week" (Monday to Sunday in local time)', () => {
+    // Week of Sept 22 (Tue) is Monday Sept 21 to Sunday Sept 27
+    expect(isDateInPeriod('2026-09-21T12:00:00Z', 'week', '', '', fixedNow)).toBe(true);
+    expect(isDateInPeriod('2026-09-27T12:00:00Z', 'week', '', '', fixedNow)).toBe(true);
+    expect(isDateInPeriod('2026-09-20T12:00:00Z', 'week', '', '', fixedNow)).toBe(false);
+    expect(isDateInPeriod('2026-09-28T12:00:00Z', 'week', '', '', fixedNow)).toBe(false);
+  });
+
+  it('correctly matches "month" (current calendar month)', () => {
+    expect(isDateInPeriod('2026-09-01T12:00:00Z', 'month', '', '', fixedNow)).toBe(true);
+    expect(isDateInPeriod('2026-09-30T12:00:00Z', 'month', '', '', fixedNow)).toBe(true);
+    expect(isDateInPeriod('2026-08-31T12:00:00Z', 'month', '', '', fixedNow)).toBe(false);
+    expect(isDateInPeriod('2026-10-01T12:00:00Z', 'month', '', '', fixedNow)).toBe(false);
+  });
+
+  it('correctly matches "prev_month" (August 2026)', () => {
+    expect(isDateInPeriod('2026-08-15T12:00:00Z', 'prev_month', '', '', fixedNow)).toBe(true);
+    expect(isDateInPeriod('2026-09-05T12:00:00Z', 'prev_month', '', '', fixedNow)).toBe(false);
+  });
+
+  it('correctly matches custom boundaries', () => {
+    expect(isDateInPeriod('2026-09-15T12:00:00Z', 'custom', '2026-09-10', '2026-09-20', fixedNow)).toBe(true);
+    expect(isDateInPeriod('2026-09-09T12:00:00Z', 'custom', '2026-09-10', '2026-09-20', fixedNow)).toBe(false);
+    expect(isDateInPeriod('2026-09-21T12:00:00Z', 'custom', '2026-09-10', '2026-09-20', fixedNow)).toBe(false);
   });
 });

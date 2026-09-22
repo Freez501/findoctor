@@ -1,25 +1,20 @@
 /**
- * Truespace — Барный кейтеринг и финансы
+ * Brilliant Event — Барный кейтеринг и финансы
  * Root Application Component (`src/client/App.tsx`)
  */
 
 import React, { useState } from 'react';
-import { Plus, Wallet, BarChart3, History } from 'lucide-react';
-import { Header } from './components/common/Header.js';
+import { Plus } from 'lucide-react';
+import { Header, TabType } from './components/common/Header.js';
 import { TotalCapitalBanner } from './components/accounts/TotalCapitalBanner.js';
 import { AccountsGrid } from './components/accounts/AccountsGrid.js';
+import { EventsView } from './components/events/EventsView.js';
 import { AnalyticsDashboard } from './components/analytics/AnalyticsDashboard.js';
 import { TransactionHistory } from './components/history/TransactionHistory.js';
+import { SettingsView } from './components/settings/SettingsView.js';
+import { SuperAdminView } from './components/admin/SuperAdminView.js';
 import { QuickEntryModal } from './components/entry/QuickEntryModal.js';
 import { Toast } from './components/common/Toast.js';
-
-type TabType = 'accounts' | 'analytics' | 'history';
-
-const TABS = [
-  { id: 'accounts' as TabType, label: 'Счета и ввод', icon: Wallet },
-  { id: 'analytics' as TabType, label: 'Маржинальность', icon: BarChart3 },
-  { id: 'history' as TabType, label: 'Журнал операций', icon: History },
-];
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<TabType>('accounts');
@@ -38,46 +33,29 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen" style={{ paddingBottom: '90px' }}>
-      <Header onOpenQuickEntry={() => handleOpenEntry()} />
-
-      {/* Main Navigation Tabs */}
-      <nav className="app-container" style={{ paddingBottom: 0, paddingTop: '12px' }} aria-label="Разделы системы">
-        <div style={{ display: 'flex', gap: '8px', backgroundColor: 'rgba(23, 32, 25, 0.05)', padding: '4px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-          {TABS.map(({ id, label, icon: Icon }) => {
-            const active = currentTab === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setCurrentTab(id)}
-                style={{
-                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                  padding: '8px 12px', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', fontWeight: 600,
-                  backgroundColor: active ? '#fff' : 'transparent', color: active ? 'var(--color-text)' : 'var(--color-text-muted)',
-                  boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s ease',
-                }}
-              >
-                <Icon size={16} aria-hidden="true" />
-                <span>{label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+      <Header
+        currentTab={currentTab}
+        onSelectTab={setCurrentTab}
+        onOpenQuickEntry={() => handleOpenEntry()}
+        onNavigateToAdmin={() => setCurrentTab('admin')}
+      />
 
       {/* Main Tab Content */}
-      <main className="app-container">
+      <main className="app-container app-main-content">
         {currentTab === 'accounts' && (
           <>
             <TotalCapitalBanner />
             <AccountsGrid onOpenEntryWithAccount={(accId) => handleOpenEntry(accId)} />
           </>
         )}
+        {currentTab === 'events' && <EventsView />}
         {currentTab === 'analytics' && <AnalyticsDashboard />}
         {currentTab === 'history' && <TransactionHistory />}
+        {currentTab === 'settings' && <SettingsView />}
+        {currentTab === 'admin' && <SuperAdminView />}
       </main>
 
-      {/* Floating Action Button */}
+      {/* Floating Action Button (Mobile) */}
       <button
         type="button"
         onClick={() => handleOpenEntry()}
@@ -86,7 +64,7 @@ export const App: React.FC = () => {
         aria-label="Внести операцию"
       >
         <Plus size={20} aria-hidden="true" />
-        <span>Внести операцию (+)</span>
+        <span>Внести операцию</span>
       </button>
 
       {/* Quick Entry Modal & Toasts */}

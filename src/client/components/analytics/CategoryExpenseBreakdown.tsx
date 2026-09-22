@@ -13,13 +13,23 @@ interface Props {
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
-  cat_alcohol: '#dc2626',
+  cat_alcohol: '#e11d48',
   cat_staff: '#2563eb',
-  cat_ice: '#0891b2',
+  cat_ice: '#0284c7',
   cat_logistics: '#d97706',
   cat_supplies: '#7c3aed',
-  cat_rent: '#4b5563',
+  cat_rent: '#64748b',
+  cat_tips: '#10b981',
+  cat_decor: '#ec4899',
+  cat_food: '#f97316',
 };
+
+const PALETTE = ['#e11d48', '#2563eb', '#0284c7', '#d97706', '#7c3aed', '#10b981', '#f59e0b', '#64748b', '#0d9488'];
+
+function getCategoryColor(id: string, index: number): string {
+  if (CATEGORY_COLORS[id]) return CATEGORY_COLORS[id];
+  return PALETTE[index % PALETTE.length];
+}
 
 export const CategoryExpenseBreakdown: React.FC<Props> = ({ expenses, totalDirectExpenses }) => {
   if (!expenses || expenses.length === 0 || totalDirectExpenses === 0) {
@@ -36,8 +46,8 @@ export const CategoryExpenseBreakdown: React.FC<Props> = ({ expenses, totalDirec
         Структура прямых расходов:
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {expenses.map((item) => {
-          const color = CATEGORY_COLORS[item.categoryId] || 'var(--color-accent)';
+        {expenses.map((item, idx) => {
+          const color = getCategoryColor(item.categoryId, idx);
           const safePercent = Math.max(0, Math.min(100, item.percentage));
 
           return (

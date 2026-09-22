@@ -16,6 +16,7 @@ export interface BadgeProps {
   color?: string;
   icon?: React.ReactNode;
   className?: string;
+  style?: React.CSSProperties;
 }
 
 export const Badge: React.FC<BadgeProps> = ({
@@ -25,6 +26,7 @@ export const Badge: React.FC<BadgeProps> = ({
   color,
   icon,
   className = '',
+  style,
 }) => {
   const sizeClasses = size === 'sm' ? 'badge-sm' : 'badge-md';
 
@@ -49,7 +51,7 @@ export const Badge: React.FC<BadgeProps> = ({
   return (
     <span
       className={`badge ${variantClass} ${sizeClasses} ${className}`}
-      style={customStyle}
+      style={{ ...customStyle, ...style }}
     >
       {icon && <span className="badge-icon" aria-hidden="true">{icon}</span>}
       <span>{children}</span>

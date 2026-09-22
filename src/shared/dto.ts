@@ -14,9 +14,12 @@ import {
   EventMarginMetrics,
   EventStatus,
   ParsedCommand,
+  ParsedStatementItem,
   Transaction,
   TransactionType,
 } from './types.js';
+
+export type { ParsedStatementItem };
 
 // ==========================================
 // 1. ACCOUNTS DTOS
@@ -41,12 +44,17 @@ export interface GetEventsResponseDTO {
 
 export interface CreateEventDTO {
   title: string;
+  clientName?: string;
   eventDate: string; // YYYY-MM-DD
   status?: EventStatus;
   budget?: number;
+  contractAmount?: number;
   guestCount?: number;
   location?: string;
   notes?: string;
+  companyId?: string;
+  createdBy?: string;
+  updatedBy?: string;
 }
 
 export interface CreateEventResponseDTO {
@@ -76,6 +84,8 @@ export interface GetTransactionsQueryDTO {
 
 export interface CreateTransactionDTO {
   type: TransactionType;
+  /** Direction: operational (event-based), business (overhead), dividends (partner payouts), transfer */
+  direction?: import('./types.js').TransactionDirection;
   /** Strictly positive amount in rubles (> 0) */
   amount: number;
   /** Source account ID (mandatory for expense and transfer) */
@@ -86,16 +96,73 @@ export interface CreateTransactionDTO {
   categoryId: string;
   /** Event ID or null for general bar overhead */
   eventId?: string | null;
+  /** Partner ID (for dividends or partner-attributed transactions) */
+  partnerId?: string | null;
+  /** Partner name */
+  partnerName?: string | null;
   /** Optional transaction memo or description */
   description?: string;
   /** ISO 8601 date string (optional, defaults to current time) */
   transactionDate?: string;
+  /** Flag indicating whether imported transaction requires category/event review by user */
+  needsReview?: boolean;
+  companyId?: string;
+  createdBy?: string;
+  updatedBy?: string;
 }
 
 export interface CreateTransactionResponseDTO {
   success: boolean;
   transaction: Transaction;
   updatedAccounts: Account[];
+}
+
+export interface UpdateTransactionDTO {
+  type?: TransactionType;
+  direction?: import('./types.js').TransactionDirection;
+  amount?: number;
+  fromAccountId?: string | null;
+  toAccountId?: string | null;
+  categoryId?: string;
+  eventId?: string | null;
+  partnerId?: string | null;
+  partnerName?: string | null;
+  description?: string;
+  transactionDate?: string;
+  needsReview?: boolean;
+  companyId?: string;
+  updatedBy?: string;
+}
+
+export interface UpdateTransactionResponseDTO {
+  success: boolean;
+  transaction: Transaction;
+  updatedAccounts: Account[];
+}
+
+export interface BatchCreateTransactionsDTO {
+  transactions: CreateTransactionDTO[];
+}
+
+export interface BatchCreateTransactionsResponseDTO {
+  success: boolean;
+  count: number;
+  transactions: Transaction[];
+  updatedAccounts: Account[];
+}
+
+export interface ParseStatementRequestDTO {
+  targetAccountId: string;
+  text?: string;
+  fileBase64?: string;
+  fileName?: string;
+}
+
+export interface ParseStatementResponseDTO {
+  targetAccountId: string;
+  items: ParsedStatementItem[];
+  totalParsed: number;
+  needsReviewCount: number;
 }
 
 export interface DeleteTransactionResponseDTO {
@@ -293,6 +360,10 @@ export function validateCreateEventDTO(input: unknown): ValidationResult<CreateE
     errors.push("Бюджет мероприятия 'budget' должен быть неотрицательным числом");
   }
 
+  if (payload.contractAmount !== undefined && (typeof payload.contractAmount !== 'number' || payload.contractAmount < 0)) {
+    errors.push("Сумма договора 'contractAmount' должна быть неотрицательным числом");
+  }
+
   if (payload.guestCount !== undefined && (typeof payload.guestCount !== 'number' || payload.guestCount < 0)) {
     errors.push("Количество гостей 'guestCount' должно быть целым неотрицательным числом");
   }
@@ -306,9 +377,11 @@ export function validateCreateEventDTO(input: unknown): ValidationResult<CreateE
     errors: [],
     data: {
       title: payload.title!.trim(),
+      clientName: payload.clientName ? payload.clientName.trim() : undefined,
       eventDate: payload.eventDate!.trim(),
       status: payload.status || 'planned',
       budget: payload.budget,
+      contractAmount: payload.contractAmount,
       guestCount: payload.guestCount,
       location: payload.location ? payload.location.trim() : undefined,
       notes: payload.notes ? payload.notes.trim() : undefined,

@@ -183,7 +183,7 @@ export class AnalyticsService {
         (tx) =>
           tx.partnerId === p.id ||
           (tx.partnerName && tx.partnerName.toLowerCase() === p.name.toLowerCase()) ||
-          (tx.direction === 'dividends' && tx.description.toLowerCase().includes(p.name.toLowerCase()))
+          (tx.direction === 'dividends' && tx.description?.toLowerCase().includes(p.name.toLowerCase()))
       );
 
       const totalWithdrawn = round2(

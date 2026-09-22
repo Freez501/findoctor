@@ -20,6 +20,10 @@ export function createTransactionsRouter(financeService?: FinanceService): Route
   router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const filter: TransactionFilter = {};
+      const companyId = (req.headers['x-company-id'] as string) || (req.query.companyId as string) || undefined;
+      if (companyId) {
+        filter.companyId = companyId;
+      }
 
       if (req.query.accountId) {
         filter.accountId = String(req.query.accountId);
@@ -75,7 +79,8 @@ export function createTransactionsRouter(financeService?: FinanceService): Route
 
   router.post('/', async (req: Request, res: Response) => {
     try {
-      const result = await service.createTransaction(req.body);
+      const companyId = req.body.companyId || (req.headers['x-company-id'] as string) || undefined;
+      const result = await service.createTransaction({ ...req.body, companyId });
       res.status(201).json({
         success: true,
         transaction: result.transaction,
@@ -83,6 +88,120 @@ export function createTransactionsRouter(financeService?: FinanceService): Route
       });
     } catch (err: any) {
       res.status(400).json({ error: err.message || 'Ошибка создания транзакции', statusCode: 400 });
+    }
+  });
+
+  router.post('/batch', async (req: Request, res: Response) => {
+    try {
+      const items = Array.isArray(req.body.transactions) ? req.body.transactions : req.body;
+      if (!Array.isArray(items) || items.length === 0) {
+        res.status(400).json({ error: 'Список транзакций для пакетного создания пуст', statusCode: 400 });
+        return;
+      }
+
+      const result = await service.createBatchTransactions(items);
+      res.status(201).json({
+        success: true,
+        count: result.transactions.length,
+        transactions: result.transactions,
+        updatedAccounts: result.updatedAccounts,
+      });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || 'Ошибка пакетного создания транзакций', statusCode: 400 });
+    }
+  });
+
+  router.post('/batch-delete', async (req: Request, res: Response) => {
+    try {
+      const ids = req.body.ids;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        res.status(400).json({ error: 'Список идентификаторов для удаления пуст', statusCode: 400 });
+        return;
+      }
+
+      const result = await service.deleteBatchTransactions(ids);
+      res.json({
+        success: true,
+        deletedCount: result.deletedCount,
+        deletedIds: result.deletedIds,
+        updatedAccounts: result.updatedAccounts,
+        message: `Успешно удалено транзакций: ${result.deletedCount}`,
+      });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || 'Ошибка пакетного удаления транзакций', statusCode: 400 });
+    }
+  });
+
+  router.post('/batch-update', async (req: Request, res: Response) => {
+    try {
+      const { ids, updates } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        res.status(400).json({ error: 'Список идентификаторов для обновления пуст', statusCode: 400 });
+        return;
+      }
+      if (!updates || typeof updates !== 'object') {
+        res.status(400).json({ error: 'Параметры обновления не указаны', statusCode: 400 });
+        return;
+      }
+
+      const result = await service.updateBatchTransactions(ids, updates);
+      res.json({
+        success: true,
+        updatedCount: result.updatedCount,
+        updatedAccounts: result.updatedAccounts,
+        message: `Успешно обновлено транзакций: ${result.updatedCount}`,
+      });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || 'Ошибка пакетного обновления транзакций', statusCode: 400 });
+    }
+  });
+
+  router.post('/parse-statement', async (req: Request, res: Response) => {
+    try {
+      const { ImportStatementService } = await import('../services/ImportStatementService.js');
+      const importService = new ImportStatementService();
+
+      const targetAccountId = req.body.targetAccountId;
+      const text = req.body.text;
+      const fileName = req.body.fileName;
+      let fileBuffer: Buffer | undefined = undefined;
+
+      if (req.body.fileBase64) {
+        fileBuffer = Buffer.from(req.body.fileBase64, 'base64');
+      }
+
+      const items = await importService.parseStatement({
+        targetAccountId,
+        text,
+        fileBuffer,
+        fileName,
+      });
+
+      const needsReviewCount = items.filter((it) => it.needsReview).length;
+
+      res.json({
+        targetAccountId,
+        items,
+        totalParsed: items.length,
+        needsReviewCount,
+      });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || 'Ошибка разбора выписки', statusCode: 400 });
+    }
+  });
+
+  router.put('/:id', async (req: Request, res: Response) => {
+    try {
+      const result = await service.updateTransaction(req.params.id, req.body);
+      res.json({
+        success: true,
+        transaction: result.transaction,
+        updatedAccounts: result.updatedAccounts,
+      });
+    } catch (err: any) {
+      const isNotFound = err.message && err.message.includes('не найдена');
+      const statusCode = isNotFound ? 404 : 400;
+      res.status(statusCode).json({ error: err.message || 'Ошибка обновления транзакции', statusCode });
     }
   });
 

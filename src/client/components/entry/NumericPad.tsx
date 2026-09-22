@@ -36,17 +36,6 @@ export const NumericPad: React.FC<NumericPadProps> = ({
     }
   };
 
-  const handleDoubleZero = () => {
-    if (amount === 0) return;
-    const currentStr = String(amount);
-    let nextStr = currentStr + '00';
-    if (nextStr.length > 8) return;
-
-    const nextNum = parseInt(nextStr, 10);
-    if (!isNaN(nextNum) && nextNum <= maxAmount) {
-      onAmountChange(nextNum);
-    }
-  };
 
   const handleBackspace = () => {
     const currentStr = String(amount);
@@ -67,6 +56,30 @@ export const NumericPad: React.FC<NumericPadProps> = ({
     const next = Math.min(maxAmount, amount + increment);
     onAmountChange(next);
   };
+
+  // Keyboard input support (0-9, Backspace, Delete/C)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) {
+        return;
+      }
+
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        handleDigit(e.key);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        handleBackspace();
+      } else if (e.key === 'c' || e.key === 'C' || e.key === 'Delete') {
+        e.preventDefault();
+        handleClear();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [amount, maxAmount]);
 
   return (
     <div className="numeric-pad-container">
@@ -127,6 +140,7 @@ export const NumericPad: React.FC<NumericPadProps> = ({
         <button type="button" onClick={() => handleDigit('8')} className="numpad-key">8</button>
         <button type="button" onClick={() => handleDigit('9')} className="numpad-key">9</button>
 
+        {/* Row 4: Clear | 0 | Backspace */}
         <button
           type="button"
           onClick={handleClear}
@@ -134,7 +148,7 @@ export const NumericPad: React.FC<NumericPadProps> = ({
           title="Сбросить сумму"
           aria-label="Сбросить сумму"
         >
-          <RotateCcw size={18} aria-hidden="true" />
+          <RotateCcw size={16} aria-hidden="true" />
           <span className="sr-only">Сбросить</span>
         </button>
 
@@ -142,27 +156,15 @@ export const NumericPad: React.FC<NumericPadProps> = ({
 
         <button
           type="button"
-          onClick={handleDoubleZero}
-          className="numpad-key key-double-zero"
-          title="Два нуля (00)"
-        >
-          00
-        </button>
-      </div>
-
-      {/* Bottom helper row with backspace */}
-      <div className="numpad-bottom-actions">
-        <button
-          type="button"
           onClick={handleBackspace}
-          className="btn-numpad-backspace"
+          className="numpad-key key-backspace"
           title="Удалить последнюю цифру"
-          aria-label="Стереть последнюю цифру"
+          aria-label="Стереть цифру"
         >
           <Delete size={18} aria-hidden="true" />
-          <span>Стереть цифру</span>
         </button>
       </div>
     </div>
   );
 };
+

@@ -5,10 +5,66 @@
  * Authoritative identifiers, default values, metadata lists, and parser dictionaries.
  */
 
-import { Account, Category, CateringEvent, Partner } from './types.js';
+import { Account, Category, CateringEvent, Partner, Company, UserProfile, CompanyMembership } from './types.js';
 
 // ==========================================
-// 0. PARTNER CONSTANTS
+// 0. COMPANY & MULTI-TENANT CONSTANTS
+// ==========================================
+
+export const DEFAULT_COMPANY_ID = 'company_truespace_default';
+export const DEFAULT_COMPANY_NAME = 'Truespace Catering';
+
+export const INITIAL_COMPANIES_SEED: readonly Company[] = [
+  {
+    id: DEFAULT_COMPANY_ID,
+    name: DEFAULT_COMPANY_NAME,
+    slug: 'truespace',
+    plan: 'pro',
+    isActive: true,
+    ownerId: 'user_nikita',
+    createdAt: '2026-03-01T00:00:00Z',
+    updatedAt: '2026-03-01T00:00:00Z',
+  },
+] as const;
+
+export const INITIAL_USERS_SEED: readonly UserProfile[] = [
+  {
+    id: 'user_nikita',
+    email: 'nikita@truespace.ru',
+    fullName: 'Никита',
+    isSuperAdmin: true,
+    createdAt: '2026-03-01T00:00:00Z',
+    updatedAt: '2026-03-01T00:00:00Z',
+  },
+  {
+    id: 'user_vlad',
+    email: 'vlad@truespace.ru',
+    fullName: 'Влад',
+    isSuperAdmin: false,
+    createdAt: '2026-03-01T00:00:00Z',
+    updatedAt: '2026-03-01T00:00:00Z',
+  },
+] as const;
+
+export const INITIAL_MEMBERSHIPS_SEED: readonly CompanyMembership[] = [
+  {
+    id: 'mem_nikita',
+    companyId: DEFAULT_COMPANY_ID,
+    userId: 'user_nikita',
+    role: 'owner',
+    createdAt: '2026-03-01T00:00:00Z',
+  },
+  {
+    id: 'mem_vlad',
+    companyId: DEFAULT_COMPANY_ID,
+    userId: 'user_vlad',
+    role: 'admin',
+    createdAt: '2026-03-01T00:00:00Z',
+  },
+] as const;
+
+// ==========================================
+// 0.1. PARTNER CONSTANTS
 // ==========================================
 
 export const PARTNER_IDS = {

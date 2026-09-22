@@ -1,11 +1,29 @@
 # Project: Truespace — Барный кейтеринг и финансы
 
-- **Статус:** `completed` (все 5 этапов M1–M5 завершены и верифицированы)
-- **Текущий этап:** локальное тестирование и сбор обратной связи
+- **Статус:** `in_progress` ➔ `completed_stage1` (Завершён переход к Multi-Tenant SaaS, SuperAdmin-панели и Supabase Cloud готовности)
+- **Текущий этап:** реализован полноценный модуль автоматизации Cash Flow и переход к SaaS-платформе:
+  1. **SaaS Multi-Tenant Архитектура:**
+     - Создание и управление организациями/бизнесами кейтеринга (`companies`).
+     - Глобальная роль **Суперадминистратора** (Никита) с доступом ко всем организациям платформы.
+     - Профили пользователей и сооснователей (Никита, Влад) с переключением в 1 клик.
+     - Приглашение сотрудников с разграничением прав (`owner`, `admin`, `staff`).
+     - Аудит-трекинг: фиксация автора каждой записи (`createdBy`, `updatedBy`) с отображением бейджа сотрудника в журнале операций («👤 Никита», «👤 Влад»).
+  2. **Supabase Cloud Интеграция:**
+     - Полный SQL-скрипт миграции `src/server/data/supabase.sql` с таблицами `companies`, `user_profiles`, `company_members`, внешними ключами и политиками Row Level Security (RLS).
+     - Официальный клиент `@supabase/supabase-js` с автоматическим фоллбэком на автономный локальный режим (`data/truespace.json`) при отсутствии ключей.
+  3. **Редизайн Hero-баннера совокупной ликвидности:**
+     - Удалены устаревшие и удалённые карточки (включая «Переводы СБП»).
+     - Добавлен современный финтех-пульс: светящийся интерактивный график ликвидности с градиентным свечением и живой индикацией.
+     - Отображаются только реально существующие активные счета с индивидуальными цветами и остатками.
+  4. **Восстановление и стабилизация вёрстки во вкладке «Мероприятия»:**
+     - Создана изолированная сетка `.events-summary-grid` с адаптивными карточками метрик («Выручка», «Себестоимость», «Прибыль», «Маржа», «Дебиторка»), вёрстка защищена от побочных эффектов.
+  5. **Импорт выписок и пакетные действия Cash Flow:**
+     - Импорт из банковских выписок (Excel, CSV, 1С, текст из чата).
+     - Пакетное удаление и пакетный перенос операций на другой счёт в 1 клик.
 - **Локальная версия:** `http://localhost:5173/` (бэкенд API: `http://localhost:3001/api`)
 - **Wi-Fi доступ с телефона:** `http://192.168.100.82:5173/`
-- **Тесты:** 495 / 495 passed (100% green)
-- **GitHub:** `https://github.com/Freez501/findoctor` (ветка `main`)
+- **Тесты:** 535 / 535 passed (100% green, 27 тест-сьютов)
+- **Сборка:** Typecheck & Vite Build 100% green
 
 ## Architecture
 Единая масштабируемая модульная fullstack-архитектура на TypeScript:
@@ -68,13 +86,16 @@
 | F17 | Supabase-Ready Schema | DDL SQL для таблиц accounts, events, categories, transactions в Supabase | M1 | ORIGINAL_REQUEST §R4 |
 | F18 | Seed Demo Data Generator | Предзаполненные 5 счетов, 2 ивента (Свадьба, Корпоратив) и 21 транзакция | M1 | ORIGINAL_REQUEST §R4 |
 | F19 | Financial Math Test Suite | Автоматические юнит-тесты формул и балансовых инвариантов (npm test) | M1, M2 | ORIGINAL_REQUEST Acceptance |
-| F20 | Russian Locale & Design System | Полная русификация, формат ДД.ММ.ГГГГ, 24ч, рубли ₽, 375px-1440px | M3, M4 | AGENTS.md, DESIGN_SYSTEM.md |
+| F20 | Russian Locale & Design System | Полная русификация, формат ДД.ММ.ГГГГ, 24ч, рубли ₽, палитра «Шампань и Бордо», адаптивность | M3, M4 | AGENTS.md, DESIGN_SYSTEM.md |
 | F21 | Dev Runner & Build Pipeline | Скрипты npm run dev, npm run build, npm test, LAN host preview | M1 | AGENTS.md, ORIGINAL_REQUEST |
 | F22 | Opaque-Box E2E Test Suite | Комплексный тестовый контур Tiers 1-4 по всем требованиям | M-TEST | Project Pattern Dual Track |
 | F23 | Adversarial Coverage Hardening | White-box тестирование граничных случаев и стресс-тесты (Tier 5) | M5 | Project Pattern Final Milestone |
 | F24 | Fast Command & NLP Parser | Парсер быстрых текстовых строк (сумма, категория, ивент, счёт) | M2 | ORIGINAL_REQUEST 21:56:51Z |
 | F25 | Telegram Bot Integration | Модуль бота Bot API (long polling / webhook) с автопостингом | M2 | ORIGINAL_REQUEST 21:56:51Z |
-| F26 | Web Fast Simulator & Bot Status | Веб-симулятор быстрой строки ввода и индикатор статуса бота | M3 | ORIGINAL_REQUEST 21:56:51Z |
+| F26 | Web Fast Simulator & Bot Status | Веб-симулятор быстрой строки Telegram и индикатор статуса бота | M3 | ORIGINAL_REQUEST 21:56:51Z |
+| F27 | SaaS Directory Customization | Управление счетами, соучредителями/партнёрами и статьями расходов | M5 | USER_REQUEST 21.09 |
+| F28 | Catering Events & Receivables | Учёт договоров, оплат, дебиторки и расходов по выездным барам | M5 | USER_REQUEST 21.09 |
+| F29 | Keyboard Input & Inline Category | Ввод с клавиатуры в NumericPad (0-9, Backspace, Esc) и inline-создание статей | M5 | USER_REQUEST 21.09 |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
@@ -84,43 +105,31 @@
 | M2 | Financial Engine, Parser & Backend API | FinanceService, AnalyticsService, ParserService, TelegramBotService, REST API маршруты, отмена операций | M1 | DONE |
 | M3 | Mobile 5-Sec Entry, Accounts & Bot Simulator | Карточки 5 счетов, мобильный ввод за 3 действия, симулятор быстрой строки Telegram, статус бота | M1, M2 | DONE |
 | M4 | Event Margin Analytics & History | Дашборд маржинальности мероприятий, фильтруемый журнал транзакций, отмена операций | M2, M3 | DONE |
-| M5 | Final Acceptance & Adversarial Hardening | 100% прохождение E2E-тестов (Tiers 1-4) + стресс-тестирование и аудит покрытия (Tier 5) | M-TEST, M4 | DONE |
+| M5 | Final Acceptance & Design Overhaul | 100% прохождение тестов (504/504), стиль Шампань & Бордо, вкладка Мероприятия, компактный журнал, справочники | M-TEST, M4 | DONE |
 
 ## Interface Contracts
 
 ### Shared Types & Models (`src/shared/types.ts`)
 - `Account`: `{ id: string, name: string, type: 'cash'|'bank'|'card', initialBalance: number, currentBalance: number, currency: 'RUB', description: string, updatedAt: string }`
-- `CateringEvent`: `{ id: string, title: string, eventDate: string, status: 'planned'|'active'|'completed'|'cancelled', budget?: number, guestCount?: number, location?: string, notes?: string }`
-- `Category`: `{ id: string, name: string, type: 'income'|'expense'|'both', color?: string, isEventSpecific: boolean }`
-- `Transaction`: `{ id: string, type: 'income'|'expense'|'transfer', amount: number, fromAccountId?: string, toAccountId?: string, categoryId: string, eventId?: string|null, description?: string, transactionDate: string, isDeleted: boolean }`
+- `CateringEvent`: `{ id: string, title: string, clientName?: string, eventDate: string, status: 'planned'|'active'|'completed'|'cancelled', budget?: number, contractAmount?: number, guestCount?: number, location?: string, notes?: string }`
+- `Category`: `{ id: string, name: string, type: 'income'|'expense'|'both', direction?: 'operational'|'business'|'dividends'|'transfer'|'all', color?: string, isEventSpecific: boolean }`
+- `Partner`: `{ id: string, name: string, isActive: boolean, createdAt?: string, updatedAt?: string }`
+- `Transaction`: `{ id: string, type: 'income'|'expense'|'transfer', amount: number, fromAccountId?: string, toAccountId?: string, categoryId: string, eventId?: string|null, partnerId?: string, description?: string, transactionDate: string, isDeleted: boolean }`
 - `EventMarginMetrics`: `{ eventId: string, eventTitle: string, eventDate: string, revenue: number, directExpenses: number, netProfit: number, marginPercentage: number, expensesByCategory: Array<{ categoryId: string, categoryName: string, amount: number, percentage: number }> }`
 - `ParsedCommand`: `{ amount: number, type: 'income'|'expense', categoryId?: string, eventId?: string|null, accountId: string, description: string, rawText: string, confidence: number }`
 - `BotStatus`: `{ enabled: boolean, mode: 'polling'|'webhook'|'mock', botUsername?: string, lastActiveAt?: string }`
 
-### Storage Interface (`src/server/storage/interfaces.ts`)
-- `IFinanceStore`:
-  - `getAccounts(): Promise<Account[]>`
-  - `getAccountById(id: string): Promise<Account | null>`
-  - `updateAccountBalance(id: string, newBalance: number): Promise<Account>`
-  - `getEvents(): Promise<CateringEvent[]>`
-  - `getEventById(id: string): Promise<CateringEvent | null>`
-  - `getCategories(): Promise<Category[]>`
-  - `getTransactions(filter?: TransactionFilter): Promise<Transaction[]>`
-  - `getTransactionById(id: string): Promise<Transaction | null>`
-  - `createTransaction(tx: NewTransactionDTO): Promise<Transaction>`
-  - `softDeleteTransaction(id: string): Promise<Transaction>`
-  - `resetToSeed(): Promise<void>`
-
 ### REST API Endpoints (`src/server/routes/`)
 - `GET /api/accounts` -> `{ accounts: Account[], totalBalance: number }`
+- `POST /api/accounts`, `PUT /api/accounts/:id` -> управление счетами
 - `GET /api/events` -> `{ events: CateringEvent[] }`
-- `GET /api/categories` -> `{ categories: Category[] }`
-- `GET /api/transactions` -> `{ transactions: Transaction[] }` (query: `accountId`, `eventId`, `type`)
+- `POST /api/events`, `PUT /api/events/:id`, `DELETE /api/events/:id` -> управление мероприятиями
+- `GET /api/partners`, `POST /api/partners`, `PUT /api/partners/:id` -> управление партнёрами
+- `GET /api/categories`, `POST /api/categories`, `PUT /api/categories/:id` -> классификатор статей
+- `GET /api/transactions` -> `{ transactions: Transaction[] }` (фильтры: `accountId`, `eventId`, `type`)
 - `POST /api/transactions` -> `{ transaction: Transaction, updatedAccounts: Account[] }`
 - `DELETE /api/transactions/:id` -> `{ success: boolean, transaction: Transaction, updatedAccounts: Account[] }`
 - `GET /api/analytics/events` -> `{ analytics: EventMarginMetrics[] }`
-- `GET /api/analytics/overview` -> `{ totalBalance: number, generalExpensesTotal: number, eventsCount: number }`
-- `POST /api/telegram/parse` -> `{ parsed: ParsedCommand }`
-- `POST /api/telegram/execute` -> `{ success: boolean, transaction: Transaction, updatedAccounts: Account[] }`
-- `GET /api/telegram/status` -> `BotStatus`
-- `POST /api/system/reset-demo` -> `{ success: true, message: string }`
+- `GET /api/analytics/partners` -> сводка выплат соучредителям
+- `POST /api/telegram/parse`, `POST /api/telegram/execute`, `GET /api/telegram/status` -> парсер и бот
+- `POST /api/system/reset-demo` -> сброс к эталонному демо-состоянию

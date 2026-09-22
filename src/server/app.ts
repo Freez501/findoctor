@@ -26,6 +26,8 @@ import { createAnalyticsRouter } from './routes/analytics.js';
 import { createPartnersRouter } from './routes/partners.js';
 import { createTelegramRouter } from './routes/telegram.js';
 import { createSystemRouter } from './routes/system.js';
+import { createCompaniesRouter } from './routes/companies.js';
+import { createAuthRouter } from './routes/auth.js';
 
 export interface AppOptions {
   store?: IFinanceStore;
@@ -75,6 +77,8 @@ export function createApp(options?: AppOptions): Express {
   app.use('/api/partners', createPartnersRouter(financeService));
   app.use('/api/telegram', createTelegramRouter(telegramService));
   app.use('/api/system', createSystemRouter(store));
+  app.use('/api/companies', createCompaniesRouter(store));
+  app.use('/api/auth', createAuthRouter(store));
 
   // Serve static client build if available (production / fullstack single port runner)
   const clientDist = path.resolve(process.cwd(), 'dist/client');

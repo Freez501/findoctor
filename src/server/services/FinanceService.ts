@@ -12,12 +12,13 @@
 
 import { IFinanceStore } from '../storage/interfaces.js';
 import { getStorageInstance } from '../storage/factory.js';
-import { Account, Transaction, TransactionFilter, TransactionType, Partner, TransactionDirection } from '../../shared/types.js';
+import { Account, Category, Transaction, TransactionFilter, TransactionType, Partner, TransactionDirection } from '../../shared/types.js';
 import {
   DEFAULT_EXPENSE_CATEGORY_ID,
   DEFAULT_INCOME_CATEGORY_ID,
   CATEGORY_IDS,
 } from '../../shared/constants.js';
+import { mirrorTransactionToCloud, mirrorAccountToCloud } from '../storage/cloudMirror.js';
 
 export function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -45,8 +46,8 @@ export class FinanceService {
   /**
    * Retrieves all accounts along with the aggregated total liquidity.
    */
-  public async getAccounts(): Promise<{ accounts: Account[]; totalBalance: number }> {
-    const accounts = await this.store.getAccounts();
+  public async getAccounts(companyId?: string): Promise<{ accounts: Account[]; totalBalance: number }> {
+    const accounts = await this.store.getAccounts(companyId);
     const totalBalance = round2(accounts.reduce((sum, a) => sum + a.currentBalance, 0));
     return {
       accounts,
@@ -90,15 +91,45 @@ export class FinanceService {
   }
 
   public async saveAccount(account: Partial<Account> & { id: string }): Promise<Account> {
-    return this.store.saveAccount(account);
+    const acc = await this.store.saveAccount(account);
+    mirrorAccountToCloud(acc).catch(() => {});
+    return acc;
   }
 
-  public async createAccount(account: Omit<Account, 'currentBalance' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<Account> {
-    return this.store.createAccount(account);
+  public async createAccount(account: Partial<Account> & { name: string }): Promise<Account> {
+    const acc = await this.store.createAccount(account);
+    mirrorAccountToCloud(acc).catch(() => {});
+    return acc;
   }
 
-  public async saveCategory(category: Category): Promise<Category> {
+  public async deleteAccount(id: string): Promise<boolean> {
+    return this.store.deleteAccount(id);
+  }
+
+  public async resetAllAccountBalances(): Promise<Account[]> {
+    const accounts = await this.store.getAccounts();
+    const updated: Account[] = [];
+    for (const acc of accounts) {
+      const res = await this.store.saveAccount({
+        id: acc.id,
+        currentBalance: 0,
+        initialBalance: 0,
+      });
+      updated.push(res);
+    }
+    return updated;
+  }
+
+  public async deletePartner(id: string): Promise<boolean> {
+    return this.store.deletePartner(id);
+  }
+
+  public async saveCategory(category: Partial<Category> & { id: string }): Promise<Category> {
     return this.store.saveCategory(category);
+  }
+
+  public async deleteCategory(id: string): Promise<boolean> {
+    return this.store.deleteCategory(id);
   }
 
   /**
@@ -158,8 +189,9 @@ export class FinanceService {
     const transactionDate = dto.transactionDate || new Date().toISOString();
 
     // 5. Operation branch execution
+    let result: CreateTransactionResult;
     if (type === 'expense') {
-      return this.executeExpense({
+      result = await this.executeExpense({
         amount,
         sourceAccountId,
         categoryId,
@@ -169,11 +201,12 @@ export class FinanceService {
         direction,
         description,
         transactionDate,
+        companyId: dto.companyId,
+        createdBy: dto.createdBy,
+        updatedBy: dto.updatedBy,
       });
-    }
-
-    if (type === 'income') {
-      return this.executeIncome({
+    } else if (type === 'income') {
+      result = await this.executeIncome({
         amount,
         targetAccountId,
         categoryId,
@@ -183,18 +216,27 @@ export class FinanceService {
         direction,
         description,
         transactionDate,
+        companyId: dto.companyId,
+        createdBy: dto.createdBy,
+        updatedBy: dto.updatedBy,
+      });
+    } else {
+      result = await this.executeTransfer({
+        amount,
+        sourceAccountId,
+        targetAccountId,
+        categoryId,
+        direction,
+        description,
+        transactionDate,
+        companyId: dto.companyId,
+        createdBy: dto.createdBy,
+        updatedBy: dto.updatedBy,
       });
     }
 
-    return this.executeTransfer({
-      amount,
-      sourceAccountId,
-      targetAccountId,
-      categoryId,
-      direction,
-      description,
-      transactionDate,
-    });
+    mirrorTransactionToCloud(result.transaction, result.updatedAccounts).catch(() => {});
+    return result;
   }
 
   /**
@@ -307,10 +349,223 @@ export class FinanceService {
     }
 
     const deletedTx = await this.store.softDeleteTransaction(id);
-    return {
+    const result = {
       success: true,
       transaction: this.attachAliases(deletedTx),
       updatedAccounts,
+    };
+    mirrorTransactionToCloud(result.transaction, result.updatedAccounts).catch(() => {});
+    return result;
+  }
+
+  /**
+   * Updates an existing transaction and adjusts account balances if amount or accounts changed.
+   */
+  public async updateTransaction(
+    id: string,
+    updates: {
+      type?: TransactionType;
+      amount?: number;
+      fromAccountId?: string | null;
+      toAccountId?: string | null;
+      categoryId?: string;
+      eventId?: string | null;
+      partnerId?: string | null;
+      partnerName?: string | null;
+      description?: string;
+      transactionDate?: string;
+      needsReview?: boolean;
+    }
+  ): Promise<{ transaction: TransactionWithAliases; updatedAccounts: Account[] }> {
+    const existing = await this.store.getTransactionById(id);
+    if (!existing || existing.isDeleted) {
+      throw new Error(`Транзакция ${id} не найдена`);
+    }
+
+    const updatedAccountsMap = new Map<string, Account>();
+
+    const targetType = updates.type ?? existing.type;
+    const targetAmount = updates.amount !== undefined ? round2(updates.amount) : existing.amount;
+    const targetFrom = updates.fromAccountId !== undefined ? updates.fromAccountId : existing.fromAccountId;
+    const targetTo = updates.toAccountId !== undefined ? updates.toAccountId : existing.toAccountId;
+
+    const financialChanges =
+      targetType !== existing.type ||
+      targetAmount !== existing.amount ||
+      targetFrom !== existing.fromAccountId ||
+      targetTo !== existing.toAccountId;
+
+    if (financialChanges) {
+      // 1. Revert old financial impact
+      if (existing.type === 'expense' && existing.fromAccountId) {
+        const acc = await this.store.getAccountById(existing.fromAccountId);
+        if (acc) {
+          const res = await this.store.updateAccountBalance(acc.id, round2(acc.currentBalance + existing.amount));
+          updatedAccountsMap.set(res.id, res);
+        }
+      } else if (existing.type === 'income' && existing.toAccountId) {
+        const acc = await this.store.getAccountById(existing.toAccountId);
+        if (acc) {
+          const res = await this.store.updateAccountBalance(acc.id, round2(acc.currentBalance - existing.amount));
+          updatedAccountsMap.set(res.id, res);
+        }
+      } else if (existing.type === 'transfer') {
+        if (existing.fromAccountId) {
+          const src = await this.store.getAccountById(existing.fromAccountId);
+          if (src) {
+            const res = await this.store.updateAccountBalance(src.id, round2(src.currentBalance + existing.amount));
+            updatedAccountsMap.set(res.id, res);
+          }
+        }
+        if (existing.toAccountId) {
+          const dst = await this.store.getAccountById(existing.toAccountId);
+          if (dst) {
+            const currentBal = updatedAccountsMap.get(dst.id)?.currentBalance ?? dst.currentBalance;
+            const res = await this.store.updateAccountBalance(dst.id, round2(currentBal - existing.amount));
+            updatedAccountsMap.set(res.id, res);
+          }
+        }
+      }
+
+      // 2. Apply new financial impact
+      if (targetType === 'expense') {
+        if (!targetFrom) throw new Error('Для расхода необходим счёт списания');
+        const acc = await this.store.getAccountById(targetFrom);
+        if (!acc) throw new Error(`Счёт ${targetFrom} не найден`);
+        const currentBal = updatedAccountsMap.get(acc.id)?.currentBalance ?? acc.currentBalance;
+        const res = await this.store.updateAccountBalance(acc.id, round2(currentBal - targetAmount));
+        updatedAccountsMap.set(res.id, res);
+      } else if (targetType === 'income') {
+        if (!targetTo) throw new Error('Для дохода необходим счёт зачисления');
+        const acc = await this.store.getAccountById(targetTo);
+        if (!acc) throw new Error(`Счёт ${targetTo} не найден`);
+        const currentBal = updatedAccountsMap.get(acc.id)?.currentBalance ?? acc.currentBalance;
+        const res = await this.store.updateAccountBalance(acc.id, round2(currentBal + targetAmount));
+        updatedAccountsMap.set(res.id, res);
+      } else if (targetType === 'transfer') {
+        if (!targetFrom || !targetTo) throw new Error('Для перевода необходимы оба счёта');
+        if (targetFrom === targetTo) throw new Error('Счета списания и зачисления должны отличаться');
+        const src = await this.store.getAccountById(targetFrom);
+        const dst = await this.store.getAccountById(targetTo);
+        if (!src || !dst) throw new Error('Счёт не найден');
+        const srcBal = updatedAccountsMap.get(src.id)?.currentBalance ?? src.currentBalance;
+        const resSrc = await this.store.updateAccountBalance(src.id, round2(srcBal - targetAmount));
+        updatedAccountsMap.set(resSrc.id, resSrc);
+        const dstBal = updatedAccountsMap.get(dst.id)?.currentBalance ?? dst.currentBalance;
+        const resDst = await this.store.updateAccountBalance(dst.id, round2(dstBal + targetAmount));
+        updatedAccountsMap.set(resDst.id, resDst);
+      }
+    }
+
+    const updatedTx = await this.store.updateTransaction(id, {
+      ...updates,
+      type: targetType,
+      amount: targetAmount,
+      fromAccountId: targetType === 'income' ? null : targetFrom,
+      toAccountId: targetType === 'expense' ? null : targetTo,
+    });
+
+    return {
+      transaction: this.attachAliases(updatedTx),
+      updatedAccounts: Array.from(updatedAccountsMap.values()),
+    };
+  }
+
+  /**
+   * Batch creates multiple transactions in sequence.
+   */
+  public async createBatchTransactions(items: any[]): Promise<{ transactions: TransactionWithAliases[]; updatedAccounts: Account[] }> {
+    const created: TransactionWithAliases[] = [];
+    const accountsMap = new Map<string, Account>();
+
+    for (const item of items) {
+      const res = await this.createTransaction(item);
+      created.push(res.transaction);
+      for (const acc of res.updatedAccounts) {
+        accountsMap.set(acc.id, acc);
+      }
+    }
+
+    return {
+      transactions: created,
+      updatedAccounts: Array.from(accountsMap.values()),
+    };
+  }
+
+  /**
+   * Batch deletes multiple transactions in sequence and reverts their account balance impacts.
+   */
+  public async deleteBatchTransactions(ids: string[]): Promise<{ deletedIds: string[]; deletedCount: number; updatedAccounts: Account[] }> {
+    const deletedIds: string[] = [];
+    const accountsMap = new Map<string, Account>();
+
+    for (const id of ids) {
+      try {
+        const res = await this.deleteTransaction(id);
+        deletedIds.push(id);
+        for (const acc of res.updatedAccounts) {
+          accountsMap.set(acc.id, acc);
+        }
+      } catch {
+        // Skip already deleted or missing transactions
+        continue;
+      }
+    }
+
+    return {
+      deletedIds,
+      deletedCount: deletedIds.length,
+      updatedAccounts: Array.from(accountsMap.values()),
+    };
+  }
+
+  /**
+   * Batch updates multiple transactions (e.g. moving transactions to a different account, category, or event).
+   */
+  public async updateBatchTransactions(
+    ids: string[],
+    updates: {
+      accountId?: string;
+      fromAccountId?: string | null;
+      toAccountId?: string | null;
+      categoryId?: string;
+      eventId?: string | null;
+    }
+  ): Promise<{ updatedCount: number; updatedAccounts: Account[] }> {
+    let updatedCount = 0;
+    const accountsMap = new Map<string, Account>();
+
+    for (const id of ids) {
+      try {
+        const existing = await this.store.getTransactionById(id);
+        if (!existing || existing.isDeleted) continue;
+
+        const txUpdates: any = { ...updates };
+        delete txUpdates.accountId;
+
+        if (updates.accountId) {
+          if (existing.type === 'expense') {
+            txUpdates.fromAccountId = updates.accountId;
+          } else if (existing.type === 'income') {
+            txUpdates.toAccountId = updates.accountId;
+          } else if (existing.type === 'transfer') {
+            txUpdates.fromAccountId = updates.accountId;
+          }
+        }
+
+        const res = await this.updateTransaction(id, txUpdates);
+        updatedCount++;
+        for (const acc of res.updatedAccounts) {
+          accountsMap.set(acc.id, acc);
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    return {
+      updatedCount,
+      updatedAccounts: Array.from(accountsMap.values()),
     };
   }
 
@@ -328,6 +583,9 @@ export class FinanceService {
     direction?: TransactionDirection;
     description: string;
     transactionDate: string;
+    companyId?: string;
+    createdBy?: string;
+    updatedBy?: string;
   }): Promise<CreateTransactionResult> {
     if (!params.sourceAccountId) {
       throw new Error('Для расхода необходим счёт списания');
@@ -353,6 +611,9 @@ export class FinanceService {
       direction: params.direction,
       description: params.description,
       transactionDate: params.transactionDate,
+      companyId: params.companyId,
+      createdBy: params.createdBy,
+      updatedBy: params.updatedBy,
     });
 
     return {
@@ -371,6 +632,9 @@ export class FinanceService {
     direction?: TransactionDirection;
     description: string;
     transactionDate: string;
+    companyId?: string;
+    createdBy?: string;
+    updatedBy?: string;
   }): Promise<CreateTransactionResult> {
     if (!params.targetAccountId) {
       throw new Error('Для дохода необходим счёт зачисления');
@@ -396,6 +660,9 @@ export class FinanceService {
       direction: params.direction,
       description: params.description,
       transactionDate: params.transactionDate,
+      companyId: params.companyId,
+      createdBy: params.createdBy,
+      updatedBy: params.updatedBy,
     });
 
     return {
@@ -412,6 +679,9 @@ export class FinanceService {
     direction?: TransactionDirection;
     description: string;
     transactionDate: string;
+    companyId?: string;
+    createdBy?: string;
+    updatedBy?: string;
   }): Promise<CreateTransactionResult> {
     if (!params.sourceAccountId || !params.targetAccountId) {
       throw new Error('Для перевода необходимо указать оба счёта');
@@ -444,6 +714,9 @@ export class FinanceService {
       eventId: null,
       description: params.description,
       transactionDate: params.transactionDate,
+      companyId: params.companyId,
+      createdBy: params.createdBy,
+      updatedBy: params.updatedBy,
     });
 
     return {

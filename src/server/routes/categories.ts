@@ -15,9 +15,10 @@ export function createCategoriesRouter(store?: IFinanceStore): Router {
   const router = Router();
   const storage = store || getStorageInstance();
 
-  router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
+  router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const categories = await storage.getCategories();
+      const companyId = (req.headers['x-company-id'] as string) || (req.query.companyId as string) || undefined;
+      const categories = await storage.getCategories(companyId);
       res.json({ categories });
     } catch (err) {
       next(err);
@@ -73,6 +74,19 @@ export function createCategoriesRouter(store?: IFinanceStore): Router {
         isEventSpecific,
       });
       res.json({ category });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const success = await storage.deleteCategory(req.params.id);
+      if (!success) {
+        res.status(404).json({ error: `Категория ${req.params.id} не найдена`, statusCode: 404 });
+        return;
+      }
+      res.json({ success: true, message: `Категория ${req.params.id} удалена` });
     } catch (err) {
       next(err);
     }

@@ -5,7 +5,7 @@
  * Provides quick-selection chips for catering categories filtered by transaction type.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Snowflake,
   Wine,
@@ -18,9 +18,15 @@ import {
   CheckCircle2,
   FileCheck,
   BadgeCheck,
+  Plus,
+  Check,
+  X,
+  Loader2,
 } from 'lucide-react';
 import { TransactionType } from '../../../shared/types.js';
 import { useCategories } from '../../hooks/useCategories.js';
+import { useFinance } from '../../context/FinanceContext.js';
+import { api } from '../../api/apiClient.js';
 
 interface CategoryChipsProps {
   type: TransactionType;
@@ -36,6 +42,10 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
   isGeneralExpense = false,
 }) => {
   const { expenseCategories, incomeCategories } = useCategories();
+  const { refreshCategories, addToast } = useFinance();
+  const [isCreating, setIsCreating] = useState<boolean>(false);
+  const [newCategoryName, setNewCategoryName] = useState<string>('');
+  const [isSaving, setIsSaving] = useState<boolean>(false);
 
   if (type === 'transfer') {
     return (
@@ -83,6 +93,34 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
     }
   };
 
+  const handleQuickCreateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCategoryName.trim()) return;
+
+    setIsSaving(true);
+    try {
+      const res = await api.createCategory({
+        name: newCategoryName.trim(),
+        type,
+        direction: 'operational',
+        color: '#6B1D2F',
+        isEventSpecific: true,
+      });
+
+      if (res.category) {
+        await refreshCategories();
+        onSelectCategory(res.category.id);
+        addToast(`Статья «${res.category.name}» создана`, 'success');
+        setNewCategoryName('');
+        setIsCreating(false);
+      }
+    } catch (err: any) {
+      addToast(err.message || 'Не удалось создать статью', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="category-chips-wrapper" role="group" aria-label="Выбор статьи операции">
       <div className="category-chips-grid">
@@ -107,7 +145,52 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
             </button>
           );
         })}
+
+        {/* Inline Category Quick Add Button or Form */}
+        {isCreating ? (
+          <form onSubmit={handleQuickCreateCategory} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <input
+              type="text"
+              autoFocus
+              placeholder="Название..."
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              className="settings-text-input"
+              style={{ padding: '4px 8px', fontSize: '0.8rem', width: '130px' }}
+            />
+            <button
+              type="submit"
+              disabled={isSaving || !newCategoryName.trim()}
+              style={{ padding: '5px', backgroundColor: 'var(--color-accent)', color: '#fff', borderRadius: '4px', cursor: 'pointer' }}
+              title="Создать"
+            >
+              {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsCreating(false);
+                setNewCategoryName('');
+              }}
+              style={{ padding: '5px', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+              title="Отмена"
+            >
+              <X size={13} />
+            </button>
+          </form>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setIsCreating(true)}
+            className="btn-category-inline-add"
+            title="Создать новую статью расходов/доходов"
+          >
+            <Plus size={14} />
+            <span>Новая статья</span>
+          </button>
+        )}
       </div>
     </div>
   );
 };
+

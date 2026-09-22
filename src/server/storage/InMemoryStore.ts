@@ -12,7 +12,12 @@ import {
   Transaction,
   TransactionFilter,
   Partner,
+  Company,
+  UserProfile,
+  CompanyMembership,
+  UserRole,
 } from '../../shared/types.js';
+import { DEFAULT_COMPANY_ID } from '../../shared/constants.js';
 import { createInitialDatabaseState, DatabaseState } from '../data/seed.js';
 import { IFinanceStore, NewEventInput, NewTransactionInput } from './interfaces.js';
 
@@ -28,10 +33,106 @@ export class InMemoryStore implements IFinanceStore {
   }
 
   // =========================================================================
+  // COMPANIES (TENANTS)
+  // =========================================================================
+
+  public async getCompanies(): Promise<Company[]> {
+    return clone(this.state.companies || []);
+  }
+
+  public async getCompanyById(id: string): Promise<Company | null> {
+    const comp = (this.state.companies || []).find((c) => c.id === id);
+    return comp ? clone(comp) : null;
+  }
+
+  public async createCompany(companyInput: Partial<Company> & { name: string }): Promise<Company> {
+    if (!this.state.companies) this.state.companies = [];
+    const newCompany: Company = {
+      id: companyInput.id || `company_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      name: companyInput.name.trim(),
+      slug: companyInput.slug || companyInput.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+      plan: companyInput.plan || 'free',
+      isActive: companyInput.isActive ?? true,
+      ownerId: companyInput.ownerId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    this.state.companies.push(newCompany);
+    return clone(newCompany);
+  }
+
+  public async updateCompany(id: string, updates: Partial<Company>): Promise<Company> {
+    if (!this.state.companies) this.state.companies = [];
+    const comp = this.state.companies.find((c) => c.id === id);
+    if (!comp) throw new Error(`Компания не найдена: ${id}`);
+    Object.assign(comp, updates, { updatedAt: new Date().toISOString() });
+    return clone(comp);
+  }
+
+  // =========================================================================
+  // USERS & MEMBERSHIPS
+  // =========================================================================
+
+  public async getUsers(): Promise<UserProfile[]> {
+    return clone(this.state.users || []);
+  }
+
+  public async getUserById(id: string): Promise<UserProfile | null> {
+    const user = (this.state.users || []).find((u) => u.id === id);
+    return user ? clone(user) : null;
+  }
+
+  public async saveUserProfile(userInput: Partial<UserProfile> & { id: string; email: string }): Promise<UserProfile> {
+    if (!this.state.users) this.state.users = [];
+    const idx = this.state.users.findIndex((u) => u.id === userInput.id);
+    if (idx >= 0) {
+      Object.assign(this.state.users[idx], userInput, { updatedAt: new Date().toISOString() });
+      return clone(this.state.users[idx]);
+    } else {
+      const newUser: UserProfile = {
+        id: userInput.id,
+        email: userInput.email,
+        fullName: userInput.fullName || userInput.email.split('@')[0],
+        avatarUrl: userInput.avatarUrl,
+        isSuperAdmin: userInput.isSuperAdmin || false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      this.state.users.push(newUser);
+      return clone(newUser);
+    }
+  }
+
+  public async getCompanyMembers(companyId: string): Promise<{ membership: CompanyMembership; user?: UserProfile }[]> {
+    const memberships = (this.state.memberships || []).filter((m) => m.companyId === companyId);
+    return memberships.map((m) => ({
+      membership: clone(m),
+      user: (this.state.users || []).find((u) => u.id === m.userId),
+    }));
+  }
+
+  public async addCompanyMember(data: { companyId: string; userId: string; role: UserRole; invitedBy?: string }): Promise<CompanyMembership> {
+    if (!this.state.memberships) this.state.memberships = [];
+    const newMembership: CompanyMembership = {
+      id: `mem_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      companyId: data.companyId,
+      userId: data.userId,
+      role: data.role,
+      invitedBy: data.invitedBy,
+      createdAt: new Date().toISOString(),
+    };
+    this.state.memberships.push(newMembership);
+    return clone(newMembership);
+  }
+
+  // =========================================================================
   // ACCOUNTS
   // =========================================================================
 
-  public async getAccounts(): Promise<Account[]> {
+  public async getAccounts(companyId?: string): Promise<Account[]> {
+    if (companyId) {
+      return clone(this.state.accounts.filter((a) => !a.companyId || a.companyId === companyId));
+    }
     return clone(this.state.accounts);
   }
 
@@ -59,6 +160,14 @@ export class InMemoryStore implements IFinanceStore {
     if (accountInput.type !== undefined) acc.type = accountInput.type;
     if (accountInput.description !== undefined) acc.description = accountInput.description;
     if (accountInput.isActive !== undefined) acc.isActive = accountInput.isActive;
+    if (accountInput.color !== undefined) acc.color = accountInput.color;
+    if (accountInput.icon !== undefined) acc.icon = accountInput.icon;
+    if (accountInput.currentBalance !== undefined) {
+      acc.currentBalance = Math.round(accountInput.currentBalance * 100) / 100;
+    }
+    if (accountInput.initialBalance !== undefined) {
+      acc.initialBalance = Math.round(accountInput.initialBalance * 100) / 100;
+    }
     acc.updatedAt = new Date().toISOString();
     return clone(acc);
   }
@@ -74,6 +183,9 @@ export class InMemoryStore implements IFinanceStore {
       currentBalance: accountInput.initialBalance || 0,
       currency: 'RUB',
       description: accountInput.description || '',
+      color: accountInput.color,
+      icon: accountInput.icon,
+      companyId: accountInput.companyId || DEFAULT_COMPANY_ID,
       isActive: accountInput.isActive ?? true,
       createdAt: now,
       updatedAt: now,
@@ -82,12 +194,23 @@ export class InMemoryStore implements IFinanceStore {
     return clone(newAcc);
   }
 
+  public async deleteAccount(id: string): Promise<boolean> {
+    const idx = this.state.accounts.findIndex((a) => a.id === id);
+    if (idx === -1) return false;
+    this.state.accounts.splice(idx, 1);
+    return true;
+  }
+
   // =========================================================================
   // PARTNERS
   // =========================================================================
 
-  public async getPartners(): Promise<Partner[]> {
-    return clone(this.state.partners || []);
+  public async getPartners(companyId?: string): Promise<Partner[]> {
+    const partners = this.state.partners || [];
+    if (companyId) {
+      return clone(partners.filter((p) => !p.companyId || p.companyId === companyId));
+    }
+    return clone(partners);
   }
 
   public async getPartnerById(id: string): Promise<Partner | null> {
@@ -103,6 +226,8 @@ export class InMemoryStore implements IFinanceStore {
     const existing = partnerInput.id ? this.state.partners.find((p) => p.id === partnerInput.id) : null;
     if (existing) {
       existing.name = partnerInput.name;
+      if (partnerInput.role !== undefined) existing.role = partnerInput.role;
+      if (partnerInput.companyId !== undefined) existing.companyId = partnerInput.companyId;
       existing.isActive = partnerInput.isActive ?? existing.isActive;
       existing.updatedAt = now;
       return clone(existing);
@@ -111,6 +236,8 @@ export class InMemoryStore implements IFinanceStore {
       const newPartner: Partner = {
         id,
         name: partnerInput.name,
+        role: partnerInput.role,
+        companyId: partnerInput.companyId || DEFAULT_COMPANY_ID,
         isActive: partnerInput.isActive ?? true,
         createdAt: now,
         updatedAt: now,
@@ -120,11 +247,22 @@ export class InMemoryStore implements IFinanceStore {
     }
   }
 
+  public async deletePartner(id: string): Promise<boolean> {
+    if (!this.state.partners) return false;
+    const idx = this.state.partners.findIndex((p) => p.id === id);
+    if (idx === -1) return false;
+    this.state.partners.splice(idx, 1);
+    return true;
+  }
+
   // =========================================================================
   // EVENTS
   // =========================================================================
 
-  public async getEvents(): Promise<CateringEvent[]> {
+  public async getEvents(companyId?: string): Promise<CateringEvent[]> {
+    if (companyId) {
+      return clone(this.state.events.filter((e) => !e.companyId || e.companyId === companyId));
+    }
     return clone(this.state.events);
   }
 
@@ -142,12 +280,17 @@ export class InMemoryStore implements IFinanceStore {
     const newEvent: CateringEvent = {
       id: eventId,
       title: eventInput.title,
+      clientName: eventInput.clientName,
       eventDate: eventInput.eventDate,
       status: eventInput.status || 'planned',
       budget: eventInput.budget,
+      contractAmount: eventInput.contractAmount,
       guestCount: eventInput.guestCount,
       location: eventInput.location,
       notes: eventInput.notes,
+      companyId: (eventInput as any).companyId || DEFAULT_COMPANY_ID,
+      createdBy: (eventInput as any).createdBy,
+      updatedBy: (eventInput as any).updatedBy,
       createdAt: now,
       updatedAt: now,
     };
@@ -156,11 +299,31 @@ export class InMemoryStore implements IFinanceStore {
     return clone(newEvent);
   }
 
+  public async updateEvent(id: string, updates: Partial<CateringEvent>): Promise<CateringEvent> {
+    const existing = this.state.events.find((e) => e.id === id);
+    if (!existing) {
+      throw new Error(`Мероприятие с id "${id}" не найдено`);
+    }
+    const now = new Date().toISOString();
+    Object.assign(existing, updates, { id: existing.id, updatedAt: now });
+    return clone(existing);
+  }
+
+  public async deleteEvent(id: string): Promise<boolean> {
+    const index = this.state.events.findIndex((e) => e.id === id);
+    if (index === -1) return false;
+    this.state.events.splice(index, 1);
+    return true;
+  }
+
   // =========================================================================
   // CATEGORIES
   // =========================================================================
 
-  public async getCategories(): Promise<Category[]> {
+  public async getCategories(companyId?: string): Promise<Category[]> {
+    if (companyId) {
+      return clone(this.state.categories.filter((c) => !c.companyId || c.companyId === companyId));
+    }
     return clone(this.state.categories);
   }
 
@@ -178,15 +341,24 @@ export class InMemoryStore implements IFinanceStore {
       existing.icon = catInput.icon || existing.icon;
       existing.direction = catInput.direction || existing.direction;
       existing.isEventSpecific = catInput.isEventSpecific ?? existing.isEventSpecific;
+      if (catInput.companyId !== undefined) existing.companyId = catInput.companyId;
       return clone(existing);
     } else {
       const newCat: Category = {
         ...catInput,
+        companyId: catInput.companyId || DEFAULT_COMPANY_ID,
         createdAt: catInput.createdAt || new Date().toISOString(),
       };
       this.state.categories.push(newCat);
       return clone(newCat);
     }
+  }
+
+  public async deleteCategory(id: string): Promise<boolean> {
+    const idx = this.state.categories.findIndex((c) => c.id === id);
+    if (idx === -1) return false;
+    this.state.categories.splice(idx, 1);
+    return true;
   }
 
   // =========================================================================
@@ -199,6 +371,9 @@ export class InMemoryStore implements IFinanceStore {
     if (filter) {
       if (!filter.includeDeleted) {
         result = result.filter((tx) => !tx.isDeleted);
+      }
+      if (filter.companyId) {
+        result = result.filter((tx) => !tx.companyId || tx.companyId === filter.companyId);
       }
       if (filter.accountId) {
         result = result.filter(
@@ -264,13 +439,41 @@ export class InMemoryStore implements IFinanceStore {
       partnerName: (txInput as any).partnerName ?? null,
       description: txInput.description ?? '',
       transactionDate: txInput.transactionDate || now,
+      companyId: (txInput as any).companyId || DEFAULT_COMPANY_ID,
+      createdBy: (txInput as any).createdBy,
+      updatedBy: (txInput as any).updatedBy,
       isDeleted: false,
+      needsReview: (txInput as any).needsReview ?? false,
       createdAt: now,
       updatedAt: now,
     };
 
     this.state.transactions.push(newTx);
     return clone(newTx);
+  }
+
+  public async updateTransaction(id: string, updates: Partial<Transaction>): Promise<Transaction> {
+    const tx = this.state.transactions.find((t) => t.id === id);
+    if (!tx) {
+      throw new Error(`Транзакция с ID ${id} не найдена`);
+    }
+
+    if (updates.type !== undefined) tx.type = updates.type;
+    if (updates.direction !== undefined) tx.direction = updates.direction;
+    if (updates.amount !== undefined) tx.amount = Math.round(updates.amount * 100) / 100;
+    if (updates.fromAccountId !== undefined) tx.fromAccountId = updates.fromAccountId;
+    if (updates.toAccountId !== undefined) tx.toAccountId = updates.toAccountId;
+    if (updates.categoryId !== undefined) tx.categoryId = updates.categoryId;
+    if (updates.eventId !== undefined) tx.eventId = updates.eventId;
+    if (updates.partnerId !== undefined) tx.partnerId = updates.partnerId;
+    if (updates.partnerName !== undefined) tx.partnerName = updates.partnerName;
+    if (updates.description !== undefined) tx.description = updates.description;
+    if (updates.transactionDate !== undefined) tx.transactionDate = updates.transactionDate;
+    if (updates.needsReview !== undefined) tx.needsReview = updates.needsReview;
+    if (updates.updatedBy !== undefined) tx.updatedBy = updates.updatedBy;
+    tx.updatedAt = new Date().toISOString();
+
+    return clone(tx);
   }
 
   public async softDeleteTransaction(id: string): Promise<Transaction> {
@@ -289,5 +492,16 @@ export class InMemoryStore implements IFinanceStore {
 
   public async resetToSeed(): Promise<void> {
     this.state = createInitialDatabaseState();
+  }
+
+  public async importState(newState: Partial<DatabaseState>): Promise<void> {
+    if (newState.accounts) this.state.accounts = clone(newState.accounts);
+    if (newState.categories) this.state.categories = clone(newState.categories);
+    if (newState.events) this.state.events = clone(newState.events);
+    if (newState.transactions) this.state.transactions = clone(newState.transactions);
+    if (newState.partners) this.state.partners = clone(newState.partners);
+    if (newState.companies) this.state.companies = clone(newState.companies);
+    if (newState.users) this.state.users = clone(newState.users);
+    if (newState.memberships) this.state.memberships = clone(newState.memberships);
   }
 }

@@ -11,10 +11,11 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { X, ArrowDownRight, ArrowUpRight, ArrowLeftRight, Check, Loader2, AlertCircle } from 'lucide-react';
-import { TransactionType } from '../../../shared/types.js';
+import { X, ArrowDownRight, ArrowUpRight, ArrowLeftRight, Check, Loader2, AlertCircle, Users, Briefcase, Calendar, FileText } from 'lucide-react';
+import { TransactionType, TransactionDirection } from '../../../shared/types.js';
 import { DEFAULT_ACCOUNT_ID, DEFAULT_EXPENSE_CATEGORY_ID, DEFAULT_INCOME_CATEGORY_ID, CATEGORY_IDS, EVENT_IDS } from '../../../shared/constants.js';
 import { useFinance } from '../../context/FinanceContext.js';
+import { useAuth } from '../../context/AuthContext.js';
 import { formatRubles } from '../../utils/formatters.js';
 import { NumericPad } from './NumericPad.js';
 import { CategoryChips } from './CategoryChips.js';
@@ -34,16 +35,18 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
   initialAccountId,
   initialType = 'expense',
 }) => {
-  const { createTransaction } = useFinance();
+  const { createTransaction, partners } = useFinance();
+  const { currentUser, currentCompany } = useAuth();
 
   // Form State
   const [type, setType] = useState<TransactionType>(initialType);
+  const [direction, setDirection] = useState<TransactionDirection>('operational');
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
   const [amount, setAmount] = useState<number>(0);
   const [fromAccountId, setFromAccountId] = useState<string>(initialAccountId || DEFAULT_ACCOUNT_ID);
   const [toAccountId, setToAccountId] = useState<string>('cash_2');
   const [categoryId, setCategoryId] = useState<string>(DEFAULT_EXPENSE_CATEGORY_ID);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(EVENT_IDS.WEDDING);
-  const [isGeneralExpense, setIsGeneralExpense] = useState<boolean>(false);
   const [description, setDescription] = useState<string>('');
 
   // UI state
@@ -71,18 +74,35 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
 
     if (newType === 'expense') {
       setCategoryId(DEFAULT_EXPENSE_CATEGORY_ID);
+      setDirection('operational');
       if (!fromAccountId) setFromAccountId(DEFAULT_ACCOUNT_ID);
     } else if (newType === 'income') {
       setCategoryId(DEFAULT_INCOME_CATEGORY_ID);
+      setDirection('operational');
       if (!toAccountId) setToAccountId(DEFAULT_ACCOUNT_ID);
     } else if (newType === 'transfer') {
       setCategoryId(CATEGORY_IDS.TRANSFER_INTERNAL);
+      setDirection('transfer');
       setSelectedEventId(null);
-      setIsGeneralExpense(false);
       // Ensure from and to accounts are distinct
       if (fromAccountId === toAccountId) {
         setToAccountId(fromAccountId === 'cash_1' ? 'cash_2' : 'cash_1');
       }
+    }
+  };
+
+  const handleDirectionChange = (newDir: TransactionDirection) => {
+    setDirection(newDir);
+    setValidationError(null);
+    if (newDir === 'dividends') {
+      setCategoryId(CATEGORY_IDS.DIVIDENDS || 'dividends');
+      if (!selectedPartnerId && partners.length > 0) {
+        setSelectedPartnerId(partners[0].id);
+      }
+    } else if (newDir === 'business') {
+      setCategoryId(CATEGORY_IDS.TAXES || DEFAULT_EXPENSE_CATEGORY_ID);
+    } else {
+      setCategoryId(DEFAULT_EXPENSE_CATEGORY_ID);
     }
   };
 
@@ -96,6 +116,19 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
+
+  // Safe backdrop click handler preventing accidental close
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      if (amount > 0) {
+        if (window.confirm('Вы уже указали сумму. Закрыть окно ввода без сохранения?')) {
+          onClose();
+        }
+      } else {
+        onClose();
+      }
+    }
+  };
 
   // Form submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -118,6 +151,11 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
       return;
     }
 
+    if (type === 'expense' && direction === 'dividends' && !selectedPartnerId) {
+      setValidationError('Пожалуйста, выберите партнёра для выплаты дивидендов.');
+      return;
+    }
+
     if (type === 'transfer') {
       if (!fromAccountId || !toAccountId) {
         setValidationError('Выберите счёт списания и счёт зачисления.');
@@ -132,14 +170,20 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
     setIsSubmitting(true);
 
     try {
+      const selectedPartner = partners.find((p) => p.id === selectedPartnerId);
       const result = await createTransaction({
         type,
+        direction: type === 'transfer' ? 'transfer' : direction,
         amount,
         fromAccountId: type === 'income' ? null : fromAccountId,
         toAccountId: type === 'expense' ? null : toAccountId,
         categoryId: type === 'transfer' ? CATEGORY_IDS.TRANSFER_INTERNAL : categoryId,
-        eventId: type === 'transfer' || isGeneralExpense ? null : selectedEventId,
+        eventId: type === 'transfer' || direction !== 'operational' ? null : selectedEventId,
+        partnerId: direction === 'dividends' ? selectedPartnerId : null,
+        partnerName: direction === 'dividends' && selectedPartner ? selectedPartner.name : null,
         description: description.trim(),
+        createdBy: currentUser?.fullName || currentUser?.email || 'Никита',
+        companyId: currentCompany?.id,
       });
 
       if (result.success) {
@@ -166,7 +210,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
       : `Перевести: ${formatRubles(amount)}`;
 
   return (
-    <div className="modal-backdrop animate-fade-in" onClick={onClose} role="presentation">
+    <div className="modal-backdrop animate-fade-in" onClick={handleBackdropClick} role="presentation">
       <div
         className="quick-entry-bottom-sheet animate-slide-up"
         onClick={(e) => e.stopPropagation()}
@@ -288,43 +332,140 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
               </div>
             )}
 
+            {/* Expense Direction Selector */}
+            {type === 'expense' && (
+              <div className="direction-selection-container">
+                <div className="field-block-label-row">
+                  <span className="field-block-label">Направление расхода:</span>
+                  <span className="field-block-hint">Категория затрат</span>
+                </div>
+                <div className="direction-pills-row" role="radiogroup" aria-label="Направление расхода">
+                  <button
+                    type="button"
+                    onClick={() => handleDirectionChange('operational')}
+                    className={`direction-pill ${direction === 'operational' ? 'pill-active' : ''}`}
+                    role="radio"
+                    aria-checked={direction === 'operational'}
+                  >
+                    <Calendar size={14} aria-hidden="true" />
+                    <span>Мероприятие</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDirectionChange('business')}
+                    className={`direction-pill ${direction === 'business' ? 'pill-active' : ''}`}
+                    role="radio"
+                    aria-checked={direction === 'business'}
+                  >
+                    <Briefcase size={14} aria-hidden="true" />
+                    <span>Бизнес / Склад</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDirectionChange('dividends')}
+                    className={`direction-pill ${direction === 'dividends' ? 'pill-active' : ''}`}
+                    role="radio"
+                    aria-checked={direction === 'dividends'}
+                  >
+                    <Users size={14} aria-hidden="true" />
+                    <span>Дивиденды</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Partner Selection (for Dividends) */}
+            {type === 'expense' && direction === 'dividends' && (
+              <div className="partner-chips-container animate-fade-in">
+                <div className="field-block-label-row">
+                  <span className="field-block-label" style={{ color: 'var(--color-accent-strong)' }}>
+                    Партнёр (кому выплата):
+                  </span>
+                </div>
+                {partners.length === 0 ? (
+                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                    Нет активных партнёров. Добавьте их во вкладке «Настройки».
+                  </p>
+                ) : (
+                  <div className="partner-chips-grid">
+                    {partners.map((p) => {
+                      const isSelected = selectedPartnerId === p.id;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => setSelectedPartnerId(p.id)}
+                          className={`partner-chip ${isSelected ? 'partner-chip-selected' : ''}`}
+                        >
+                          <Users size={13} aria-hidden="true" />
+                          <span>{p.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Categories (Expense and Income only) */}
             {type !== 'transfer' && (
               <div className="category-selection-container">
-                <span className="field-block-label">Статья операции:</span>
+                <div className="field-block-label-row">
+                  <span className="field-block-label">Статья операции:</span>
+                  <span className="field-block-hint">
+                    {type === 'expense' ? 'Куда потрачено' : 'Источник дохода'}
+                  </span>
+                </div>
                 <CategoryChips
                   type={type}
                   selectedCategoryId={categoryId}
                   onSelectCategory={setCategoryId}
-                  isGeneralExpense={isGeneralExpense}
+                  isGeneralExpense={direction !== 'operational'}
                 />
               </div>
             )}
 
-            {/* Event selector (Expense and Income only) */}
-            {type !== 'transfer' && (
+            {/* Event selector (Operational Expense and Income only) */}
+            {type !== 'transfer' && direction === 'operational' && (
               <EventSelector
                 selectedEventId={selectedEventId}
                 onSelectEventId={setSelectedEventId}
-                isGeneralExpense={isGeneralExpense}
-                onToggleGeneralExpense={setIsGeneralExpense}
               />
             )}
 
-            {/* Optional memo description */}
+            {/* Memo / comment description */}
             <div className="memo-field-wrapper">
-              <label htmlFor="tx-memo-input" className="field-block-label">
-                Заметка / комментарий (необязательно):
-              </label>
-              <input
-                id="tx-memo-input"
-                type="text"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Например: 10 мешков льда, такси двум барменам..."
-                className="memo-input"
-                maxLength={100}
-              />
+              <div className="field-block-label-row">
+                <label htmlFor="tx-memo-input" className="field-block-label">
+                  Заметка / комментарий:
+                </label>
+                <span className="field-block-hint">Необязательно</span>
+              </div>
+              <div className="memo-input-container">
+                <FileText size={16} className="memo-input-icon" aria-hidden="true" />
+                <input
+                  id="tx-memo-input"
+                  type="text"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Например: 10 мешков льда, такси двум барменам..."
+                  className="memo-input"
+                  maxLength={100}
+                />
+                {description && (
+                  <button
+                    type="button"
+                    onClick={() => setDescription('')}
+                    className="btn-memo-clear"
+                    title="Очистить заметку"
+                    aria-label="Очистить"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -361,3 +502,4 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
     </div>
   );
 };
+

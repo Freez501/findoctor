@@ -7,7 +7,17 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { Account, CateringEvent, Transaction, Category, Partner } from '../../shared/types.js';
+import {
+  Account,
+  CateringEvent,
+  Transaction,
+  Category,
+  Partner,
+  Company,
+  UserProfile,
+  CompanyMembership,
+  UserRole,
+} from '../../shared/types.js';
 import { createInitialDatabaseState, DatabaseState } from '../data/seed.js';
 import { InMemoryStore } from './InMemoryStore.js';
 import { IFinanceStore, NewEventInput, NewTransactionInput } from './interfaces.js';
@@ -38,8 +48,18 @@ export class JsonFileStore extends InMemoryStore implements IFinanceStore {
             Array.isArray(parsed.categories) &&
             Array.isArray(parsed.transactions)
           ) {
+            const seed = createInitialDatabaseState();
             if (!Array.isArray(parsed.partners)) {
-              parsed.partners = createInitialDatabaseState().partners;
+              parsed.partners = seed.partners;
+            }
+            if (!Array.isArray(parsed.companies)) {
+              parsed.companies = seed.companies;
+            }
+            if (!Array.isArray(parsed.users)) {
+              parsed.users = seed.users;
+            }
+            if (!Array.isArray(parsed.memberships)) {
+              parsed.memberships = seed.memberships;
             }
             return parsed;
           }
@@ -69,6 +89,30 @@ export class JsonFileStore extends InMemoryStore implements IFinanceStore {
     }
   }
 
+  public override async createCompany(companyInput: Omit<Company, 'createdAt' | 'updatedAt'> & { id?: string }): Promise<Company> {
+    const result = await super.createCompany(companyInput);
+    this.persist();
+    return result;
+  }
+
+  public override async updateCompany(id: string, updates: Partial<Company>): Promise<Company> {
+    const result = await super.updateCompany(id, updates);
+    this.persist();
+    return result;
+  }
+
+  public override async saveUserProfile(userInput: Partial<UserProfile> & { id: string; email: string }): Promise<UserProfile> {
+    const result = await super.saveUserProfile(userInput);
+    this.persist();
+    return result;
+  }
+
+  public override async addCompanyMember(data: { companyId: string; userId: string; role: UserRole; invitedBy?: string }): Promise<CompanyMembership> {
+    const result = await super.addCompanyMember(data);
+    this.persist();
+    return result;
+  }
+
   public override async updateAccountBalance(id: string, newBalance: number): Promise<Account> {
     const result = await super.updateAccountBalance(id, newBalance);
     this.persist();
@@ -81,8 +125,28 @@ export class JsonFileStore extends InMemoryStore implements IFinanceStore {
     return result;
   }
 
+  public override async updateEvent(id: string, updates: Partial<CateringEvent>): Promise<CateringEvent> {
+    const result = await super.updateEvent(id, updates);
+    this.persist();
+    return result;
+  }
+
+  public override async deleteEvent(id: string): Promise<boolean> {
+    const result = await super.deleteEvent(id);
+    if (result) {
+      this.persist();
+    }
+    return result;
+  }
+
   public override async createTransaction(txInput: NewTransactionInput): Promise<Transaction> {
     const result = await super.createTransaction(txInput);
+    this.persist();
+    return result;
+  }
+
+  public override async updateTransaction(id: string, updates: Partial<Transaction>): Promise<Transaction> {
+    const result = await super.updateTransaction(id, updates);
     this.persist();
     return result;
   }
@@ -117,8 +181,31 @@ export class JsonFileStore extends InMemoryStore implements IFinanceStore {
     return result;
   }
 
+  public override async deleteAccount(id: string): Promise<boolean> {
+    const result = await super.deleteAccount(id);
+    if (result) this.persist();
+    return result;
+  }
+
+  public override async deletePartner(id: string): Promise<boolean> {
+    const result = await super.deletePartner(id);
+    if (result) this.persist();
+    return result;
+  }
+
+  public override async deleteCategory(id: string): Promise<boolean> {
+    const result = await super.deleteCategory(id);
+    if (result) this.persist();
+    return result;
+  }
+
   public override async resetToSeed(): Promise<void> {
     await super.resetToSeed();
+    this.persist();
+  }
+
+  public override async importState(newState: any): Promise<void> {
+    await super.importState(newState);
     this.persist();
   }
 }

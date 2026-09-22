@@ -119,3 +119,37 @@ export function formatPercent(value: number | null | undefined, decimals: number
 
   return `${formatted}%`;
 }
+
+/**
+ * Declension helper for account count in Nominative / Genitive case.
+ * Examples:
+ *   1 -> "1 счёт"
+ *   2 -> "2 счёта"
+ *   4 -> "4 счёта"
+ *   5 -> "5 счетов"
+ */
+export function getAccountsWord(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod100 >= 11 && mod100 <= 19) return `${count} счетов`;
+  if (mod10 === 1) return `${count} счёт`;
+  if (mod10 >= 2 && mod10 <= 4) return `${count} счёта`;
+  return `${count} счетов`;
+}
+
+/**
+ * Declension helper for account count in Dative case ("по N счетам").
+ * Examples:
+ *   1 -> "1 счёту"
+ *   2 -> "2 счетам"
+ *   4 -> "4 счетам"
+ *   5 -> "5 счетам"
+ */
+export function getAccountsDativeWord(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod100 >= 11 && mod100 <= 19) return `${count} счетам`;
+  if (mod10 === 1) return `${count} счёту`;
+  return `${count} счетам`;
+}
+

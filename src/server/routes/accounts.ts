@@ -15,9 +15,10 @@ export function createAccountsRouter(financeService?: FinanceService): Router {
   const router = Router();
   const service = financeService || new FinanceService(getStorageInstance());
 
-  router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
+  router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const data = await service.getAccounts();
+      const companyId = (req.headers['x-company-id'] as string) || (req.query.companyId as string) || undefined;
+      const data = await service.getAccounts(companyId);
       res.json(data);
     } catch (err) {
       next(err);
@@ -39,7 +40,7 @@ export function createAccountsRouter(financeService?: FinanceService): Router {
 
   router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { name, type, initialBalance, description } = req.body;
+      const { name, type, initialBalance, description, color, icon } = req.body;
       if (!name || typeof name !== 'string' || !name.trim()) {
         res.status(400).json({ error: 'Название счёта обязательно', statusCode: 400 });
         return;
@@ -49,8 +50,19 @@ export function createAccountsRouter(financeService?: FinanceService): Router {
         type: type || 'checking',
         initialBalance: typeof initialBalance === 'number' ? initialBalance : 0,
         description: typeof description === 'string' ? description.trim() : '',
+        color: typeof color === 'string' ? color.trim() : undefined,
+        icon: typeof icon === 'string' ? icon.trim() : undefined,
       });
       res.status(201).json({ account });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/reset-balances', async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const accounts = await service.resetAllAccountBalances();
+      res.json({ success: true, accounts, message: 'Остатки всех счетов успешно обнулены' });
     } catch (err) {
       next(err);
     }
@@ -59,14 +71,32 @@ export function createAccountsRouter(financeService?: FinanceService): Router {
   router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const { name, description, isActive } = req.body;
+      const { name, description, isActive, type, currentBalance, initialBalance, color, icon } = req.body;
       const account = await service.saveAccount({
         id,
         name: typeof name === 'string' ? name.trim() : undefined,
+        type: typeof type === 'string' ? (type as any) : undefined,
         description: typeof description === 'string' ? description.trim() : undefined,
         isActive: typeof isActive === 'boolean' ? isActive : undefined,
+        color: typeof color === 'string' ? color.trim() : undefined,
+        icon: typeof icon === 'string' ? icon.trim() : undefined,
+        currentBalance: typeof currentBalance === 'number' && !isNaN(currentBalance) ? currentBalance : undefined,
+        initialBalance: typeof initialBalance === 'number' && !isNaN(initialBalance) ? initialBalance : undefined,
       });
       res.json({ account });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const success = await service.deleteAccount(req.params.id);
+      if (!success) {
+        res.status(404).json({ error: `Счёт ${req.params.id} не найден`, statusCode: 404 });
+        return;
+      }
+      res.json({ success: true, message: `Счёт ${req.params.id} удалён` });
     } catch (err) {
       next(err);
     }

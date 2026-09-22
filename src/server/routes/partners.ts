@@ -27,7 +27,7 @@ export function createPartnersRouter(financeService?: FinanceService): Router {
 
   router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { name, id } = req.body;
+      const { name, role, id } = req.body;
       if (!name || typeof name !== 'string' || !name.trim()) {
         res.status(400).json({ error: 'Имя партнера обязательно', statusCode: 400 });
         return;
@@ -36,6 +36,7 @@ export function createPartnersRouter(financeService?: FinanceService): Router {
       const partner = await service.savePartner({
         id: id || `partner_${Date.now()}`,
         name: name.trim(),
+        role: typeof role === 'string' ? role.trim() : undefined,
         isActive: true,
       });
 
@@ -48,15 +49,29 @@ export function createPartnersRouter(financeService?: FinanceService): Router {
   router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const { name, isActive } = req.body;
+      const { name, role, isActive } = req.body;
 
       const partner = await service.savePartner({
         id,
         name: typeof name === 'string' ? name.trim() : undefined as any,
+        role: typeof role === 'string' ? role.trim() : undefined,
         isActive: typeof isActive === 'boolean' ? isActive : undefined as any,
       });
 
       res.json({ partner });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const success = await service.deletePartner(req.params.id);
+      if (!success) {
+        res.status(404).json({ error: `Партнёр ${req.params.id} не найден`, statusCode: 404 });
+        return;
+      }
+      res.json({ success: true, message: `Партнёр ${req.params.id} удалён` });
     } catch (err) {
       next(err);
     }

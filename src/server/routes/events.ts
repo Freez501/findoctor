@@ -17,9 +17,10 @@ export function createEventsRouter(store?: IFinanceStore): Router {
   const router = Router();
   const storage = store || getStorageInstance();
 
-  router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
+  router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const events = await storage.getEvents();
+      const companyId = (req.headers['x-company-id'] as string) || (req.query.companyId as string) || undefined;
+      const events = await storage.getEvents(companyId);
       res.json({ events });
     } catch (err) {
       next(err);
@@ -47,8 +48,37 @@ export function createEventsRouter(store?: IFinanceStore): Router {
         return;
       }
 
-      const newEvent = await storage.createEvent(validation.data!);
+      const companyId = req.body.companyId || (req.headers['x-company-id'] as string) || undefined;
+      const newEvent = await storage.createEvent({ ...validation.data!, companyId });
       res.status(201).json({ event: newEvent });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const existing = await storage.getEventById(req.params.id);
+      if (!existing) {
+        res.status(404).json({ error: `Мероприятие ${req.params.id} не найдено`, statusCode: 404 });
+        return;
+      }
+      const updates = req.body;
+      const updated = await storage.updateEvent(req.params.id, updates);
+      res.json({ event: updated });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const success = await storage.deleteEvent(req.params.id);
+      if (!success) {
+        res.status(404).json({ error: `Мероприятие ${req.params.id} не найдено`, statusCode: 404 });
+        return;
+      }
+      res.json({ success: true, deletedId: req.params.id });
     } catch (err) {
       next(err);
     }
