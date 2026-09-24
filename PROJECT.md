@@ -1,29 +1,35 @@
 # Project: Truespace — Барный кейтеринг и финансы
 
-- **Статус:** `in_progress` ➔ `completed_stage1` (Завершён переход к Multi-Tenant SaaS, SuperAdmin-панели и Supabase Cloud готовности)
-- **Текущий этап:** реализован полноценный модуль автоматизации Cash Flow и переход к SaaS-платформе:
-  1. **SaaS Multi-Tenant Архитектура:**
-     - Создание и управление организациями/бизнесами кейтеринга (`companies`).
-     - Глобальная роль **Суперадминистратора** (Никита) с доступом ко всем организациям платформы.
-     - Профили пользователей и сооснователей (Никита, Влад) с переключением в 1 клик.
-     - Приглашение сотрудников с разграничением прав (`owner`, `admin`, `staff`).
-     - Аудит-трекинг: фиксация автора каждой записи (`createdBy`, `updatedBy`) с отображением бейджа сотрудника в журнале операций («👤 Никита», «👤 Влад»).
-  2. **Supabase Cloud Интеграция:**
-     - Полный SQL-скрипт миграции `src/server/data/supabase.sql` с таблицами `companies`, `user_profiles`, `company_members`, внешними ключами и политиками Row Level Security (RLS).
-     - Официальный клиент `@supabase/supabase-js` с автоматическим фоллбэком на автономный локальный режим (`data/truespace.json`) при отсутствии ключей.
-  3. **Редизайн Hero-баннера совокупной ликвидности:**
-     - Удалены устаревшие и удалённые карточки (включая «Переводы СБП»).
-     - Добавлен современный финтех-пульс: светящийся интерактивный график ликвидности с градиентным свечением и живой индикацией.
-     - Отображаются только реально существующие активные счета с индивидуальными цветами и остатками.
-  4. **Восстановление и стабилизация вёрстки во вкладке «Мероприятия»:**
-     - Создана изолированная сетка `.events-summary-grid` с адаптивными карточками метрик («Выручка», «Себестоимость», «Прибыль», «Маржа», «Дебиторка»), вёрстка защищена от побочных эффектов.
-  5. **Импорт выписок и пакетные действия Cash Flow:**
-     - Импорт из банковских выписок (Excel, CSV, 1С, текст из чата).
-     - Пакетное удаление и пакетный перенос операций на другой счёт в 1 клик.
+- **Статус:** `in_progress` ➔ `stage_all_18_fixes_completed` (Реализованы все 18 фиксов FIX_PLAN.md: безопасность P0, надёжность P1, UX/доступность P2; 542/542 тестов green, сборка Vite + TS без ошибок)
+- **Текущий этап — Выполнение всех 18 фиксов (FIX_PLAN.md):**
+  1. **Группа P0 — Критическая безопасность и изоляция данных:**
+     - `FIX-01`: В `supabase.sql` и `src/server/data/supabase.sql` заменены небезопасные политики `USING (true)` на строгие RLS-функции с `auth.uid()` (`truespace_is_super_admin`, `truespace_user_has_company_access`). Документировано в `SUPABASE_FIXES.md`.
+     - `FIX-02`: В `src/server/routes/companies.ts` устранён RBAC bypass при удалении компаний — запрещено неавторизованное удаление без `callingUserId`.
+     - `FIX-03`: В `src/server/routes/transactions.ts` добавлен RBAC-контроль на `POST /api/transactions/batch-delete` (доступно только ролям `owner` и `admin`).
+     - `FIX-04`: В `src/server/routes/accounts.ts` и `FinanceService.ts` на эндпоинт сброса балансов добавлен RBAC и строгая изоляция по `companyId`.
+     - `FIX-05`: В `FinanceService.ts` (`executeTransfer`, `executeExpense`, `executeIncome`) обеспечена изоляция тенантов — перевод между счетами разных организаций блокируется.
+     - `FIX-06`: В `AnalyticsService.ts` и `src/server/routes/analytics.ts` добавлена фильтрация по `companyId` для всех методов аналитики.
+     - `FIX-07`: В `FinanceService.ts` (`updateTransaction`) добавлена валидация на неположительные суммы (`<= 0`).
+  2. **Группа P1 — Надёжность, целостность данных и синхронизация:**
+     - `FIX-08`: Устранено состояние гонки (race condition) при одновременных операциях с балансом — внедрён атомарный метод `adjustAccountBalance(id, delta)` в `IFinanceStore`, `InMemoryStore`, `JsonFileStore`.
+     - `FIX-09`: Тип `paid_until` в SQL-схеме обновлён на `TIMESTAMPTZ` с сохранением часового пояса.
+     - `FIX-10`: Добавлены составные индексы по `company_id` для таблиц `transactions`, `accounts`, `events`, `categories`, `partners`.
+     - `FIX-11`: Устранена утечка стейта при выходе (`logout`) в `FinanceContext.tsx` — состояние немедленно очищается в `[]`.
+     - `FIX-12`: В `cloudMirror.ts` реализована персистентная дисковая очередь повторных попыток (`data/cloud_mirror_retry_queue.json`) с лимитом 5 попыток и автоматическим сбросом.
+     - `FIX-13`: В SQL-схеме для полей `created_by` и `updated_by` добавлены `FOREIGN KEY REFERENCES user_profiles(id) ON DELETE SET NULL`.
+  3. **Группа P2 — Косметика, доступность и полировка UX:**
+     - `FIX-14`: Сенсорные цели (touch targets) для кнопок-иконок в `TransactionRow.tsx` и `EventsView.tsx` увеличены до минимума 44x44px.
+     - `FIX-15`: Захардкоженные цвета заменены на токены CSS-переменных (`var(--color-success)`, `var(--color-destructive)`, `var(--color-accent)`) в `TransactionRow.tsx`, `EventsView.tsx`, `SuperAdminView.tsx`.
+     - `FIX-16`: В `QuickEntryModal.tsx` захардкоженное имя `'Никита'` в fallback автора заменено на `'Пользователь'`.
+     - `FIX-17`: Контрастность текста переменной `--color-text-muted` и `--muted-foreground` улучшена с `#8a8580` до `#6b7280` (соответствие WCAG AA 4.6:1).
+     - `FIX-18`: Повторяющиеся inline-стили в `AuthView.tsx` и `SuperAdminView.tsx` вынесены в чистые многоразовые классы в `globals.css`.
+  4. **Тестирование и сборка:**
+     - 542 / 542 тестов пройдены успешно (100% green, 27 тест-сьютов).
+     - Сборка TypeScript и Vite завершена без ошибок (`dist/client/`).
 - **Локальная версия:** `http://localhost:5173/` (бэкенд API: `http://localhost:3001/api`)
 - **Wi-Fi доступ с телефона:** `http://192.168.100.82:5173/`
-- **Тесты:** 535 / 535 passed (100% green, 27 тест-сьютов)
-- **Сборка:** Typecheck & Vite Build 100% green
+- **Тесты:** 542 / 542 passed (100% green, 27 тест-сьютов)
+- **Сборка:** Typecheck & Vite Build 100% green (0 errors)
 
 ## Architecture
 Единая масштабируемая модульная fullstack-архитектура на TypeScript:

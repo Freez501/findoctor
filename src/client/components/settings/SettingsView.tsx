@@ -10,7 +10,7 @@
  * All edits occur inside focused modal dialogs rather than inflating cards in the grid.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Wallet,
   Users,
@@ -33,13 +33,16 @@ import {
   Briefcase,
   Zap,
   LucideIcon,
+  UserPlus,
+  AlertTriangle,
 } from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext.js';
+import { useAuth } from '../../context/AuthContext.js';
 import { api } from '../../api/apiClient.js';
 import { formatRubles } from '../../utils/formatters.js';
-import { Account, Category, Partner, TransactionDirection } from '../../../shared/types.js';
+import { Account, Category, Partner, TransactionDirection, UserRole } from '../../../shared/types.js';
 
-type SettingsTab = 'accounts' | 'partners' | 'categories';
+type SettingsTab = 'accounts' | 'partners' | 'categories' | 'organization';
 
 const PRESET_COLORS = [
   '#10b981', // изумрудный (касса / наличные)
@@ -93,6 +96,79 @@ export const SettingsView: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('accounts');
   const [isSaving, setIsSaving] = useState(false);
+
+  const { currentCompany, updateCompanyDetails, currentUser, userRole, companyMembers, inviteMember, deleteCompany } = useAuth();
+  const [orgName, setOrgName] = useState(currentCompany?.name || '');
+  const [isSavingOrg, setIsSavingOrg] = useState(false);
+
+  // Invite member state
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteFullName, setInviteFullName] = useState('');
+  const [inviteRole, setInviteRole] = useState<UserRole>('accountant');
+  const [isInviting, setIsInviting] = useState(false);
+
+  // Delete company modal state
+  const [isDeleteCompanyModalOpen, setIsDeleteCompanyModalOpen] = useState(false);
+  const [deleteCompanyNameConfirm, setDeleteCompanyNameConfirm] = useState('');
+  const [isDeletingCompany, setIsDeletingCompany] = useState(false);
+
+  useEffect(() => {
+    if (currentCompany?.name) {
+      setOrgName(currentCompany.name);
+    }
+  }, [currentCompany?.name]);
+
+  const handleSaveOrganization = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentCompany || !orgName.trim()) return;
+    setIsSavingOrg(true);
+    try {
+      await updateCompanyDetails(currentCompany.id, { name: orgName.trim() });
+      addToast('Название организации успешно обновлено', 'success');
+    } catch (err: any) {
+      addToast(err.message || 'Ошибка обновления организации', 'error');
+    } finally {
+      setIsSavingOrg(false);
+    }
+  };
+
+  const handleInviteMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) return;
+    setIsInviting(true);
+    try {
+      await inviteMember(inviteEmail.trim(), inviteRole, inviteFullName.trim() || undefined);
+      addToast(`Приглашение отправлено на ${inviteEmail.trim()}`, 'success');
+      setIsInviteModalOpen(false);
+      setInviteEmail('');
+      setInviteFullName('');
+      setInviteRole('accountant');
+    } catch (err: any) {
+      addToast(err.message || 'Ошибка отправки приглашения', 'error');
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
+  const handleDeleteCompany = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentCompany) return;
+    if (deleteCompanyNameConfirm.trim() !== currentCompany.name.trim()) {
+      addToast(`Введите точное название «${currentCompany.name}» для подтверждения`, 'error');
+      return;
+    }
+    setIsDeletingCompany(true);
+    try {
+      await deleteCompany(currentCompany.id);
+      addToast(`Организация «${currentCompany.name}» удалена`, 'success');
+      setIsDeleteCompanyModalOpen(false);
+    } catch (err: any) {
+      addToast(err.message || 'Ошибка удаления организации', 'error');
+    } finally {
+      setIsDeletingCompany(false);
+    }
+  };
 
   // ==========================================
   // MODAL DIALOG STATES
@@ -458,6 +534,17 @@ export const SettingsView: React.FC = () => {
             <Tag size={15} />
             <span>Статьи ({categories.length})</span>
           </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'organization'}
+            onClick={() => setActiveTab('organization')}
+            className={`settings-tab-btn ${activeTab === 'organization' ? 'tab-active' : ''}`}
+          >
+            <Building2 size={15} />
+            <span>Организация и команда</span>
+          </button>
         </div>
       </div>
 
@@ -712,6 +799,400 @@ export const SettingsView: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: ORGANIZATION & TEAM                                                */}
+      {/* ========================================================================= */}
+      {activeTab === 'organization' && (
+        <div className="settings-content-section animate-fade-in">
+          <div className="settings-subbar">
+            <div>
+              <h3 className="settings-subheading">Организация и рабочее пространство</h3>
+              <p className="settings-subtext">
+                Параметры компании, подписка и разграничение прав доступа команды
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px', maxWidth: '820px' }}>
+            {/* 1. Organization Name & Details */}
+            <form
+              onSubmit={handleSaveOrganization}
+              style={{
+                backgroundColor: 'var(--card, #18181b)',
+                border: '1px solid var(--border, #27272a)',
+                borderRadius: '12px',
+                padding: '24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <Building2 size={16} className="text-primary" />
+                <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--foreground)' }}>
+                  Название компании
+                </span>
+              </div>
+
+              <div className="settings-input-group">
+                <label className="settings-input-label" htmlFor="company-name-input">
+                  Отображаемое наименование кейтеринга
+                </label>
+                <input
+                  id="company-name-input"
+                  type="text"
+                  required
+                  value={orgName}
+                  onChange={(e) => setOrgName(e.target.value)}
+                  className="settings-text-input"
+                  placeholder="например: Truespace Catering"
+                  style={{ fontSize: '15px', fontWeight: 500 }}
+                  disabled={userRole !== 'owner' && userRole !== 'admin' && !currentUser?.isSuperAdmin}
+                />
+                <span style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>
+                  Отображается в шапке CRM, на чеках и во всех выгрузках управленческой отчётности.
+                </span>
+              </div>
+
+              {(userRole === 'owner' || userRole === 'admin' || currentUser?.isSuperAdmin) && (
+                <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                  <button
+                    type="submit"
+                    disabled={isSavingOrg || !orgName.trim() || orgName.trim() === currentCompany?.name}
+                    className="btn-settings-save"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 20px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {isSavingOrg ? (
+                      <>
+                        <Loader2 size={15} className="animate-spin" />
+                        <span>Сохранение...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check size={15} />
+                        <span>Сохранить название</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </form>
+
+            {/* 2. Workspace & Subscription Parameters */}
+            <div
+              style={{
+                backgroundColor: 'var(--card, #18181b)',
+                border: '1px solid var(--border, #27272a)',
+                borderRadius: '12px',
+                padding: '20px 24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+              }}
+            >
+              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--foreground)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Параметры рабочего пространства
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginBottom: '4px' }}>Текущий тариф</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: '#10b981' }}>
+                    <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }} />
+                    {currentCompany?.plan === 'pro' ? '14 дней Pro Trial (Полный доступ)' : 'Базовый (Бесплатный)'}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginBottom: '4px' }}>Владелец профиля</div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>
+                    {currentUser?.fullName || '—'} {currentUser?.email ? `(${currentUser.email})` : ''}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginBottom: '4px' }}>ID компании</div>
+                  <div style={{ fontSize: '12px', fontFamily: 'monospace', color: 'var(--muted-foreground)' }}>
+                    {currentCompany?.id || '—'}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginBottom: '4px' }}>Ваша роль</div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>
+                    {userRole === 'owner' ? 'Владелец компании' : userRole === 'admin' ? 'Администратор' : userRole === 'accountant' ? 'Бухгалтер' : 'Сотрудник'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Team & RBAC Members Section */}
+            <div
+              style={{
+                backgroundColor: 'var(--card, #18181b)',
+                border: '1px solid var(--border, #27272a)',
+                borderRadius: '12px',
+                padding: '24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                    <Users size={16} className="text-primary" />
+                    <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--foreground)' }}>
+                      Команда и доступ ({companyMembers.length || 1})
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                    Сотрудники с доступом к этой организации и их ролевые ограничения
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsInviteModalOpen(true)}
+                  className="btn-settings-add"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                  }}
+                >
+                  <UserPlus size={15} />
+                  <span>+ Пригласить сотрудника</span>
+                </button>
+              </div>
+
+              {/* Members List */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
+                {companyMembers.length === 0 ? (
+                  // Fallback for single current user
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px 16px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                      border: '1px solid var(--border, #27272a)',
+                      borderRadius: '8px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div
+                        style={{
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '50%',
+                          backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                          color: '#f59e0b',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 700,
+                          fontSize: '14px',
+                        }}
+                      >
+                        {currentUser?.fullName?.[0]?.toUpperCase() || 'U'}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>
+                          {currentUser?.fullName || 'Владелец'} (Вы)
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
+                          {currentUser?.email || '—'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                          color: '#f59e0b',
+                          border: '1px solid rgba(245, 158, 11, 0.3)',
+                        }}
+                      >
+                        Владелец
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10b981' }} />
+                        Активен
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  companyMembers.map((m) => {
+                    const memberUser = m.user;
+                    const role = m.membership.role;
+                    const isSelf = memberUser?.id === currentUser?.id;
+
+                    const roleInfo =
+                      role === 'owner'
+                        ? { label: 'Владелец', bg: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', border: 'rgba(245, 158, 11, 0.3)', desc: 'Полный контроль, удаление любых операций, управление компанией' }
+                        : role === 'accountant'
+                        ? { label: 'Бухгалтер', bg: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6', border: 'rgba(59, 130, 246, 0.3)', desc: 'Просмотр всех счетов, отчётов, внесение и редактирование (без удаления)' }
+                        : role === 'admin'
+                        ? { label: 'Администратор', bg: 'rgba(168, 85, 247, 0.12)', color: '#a855f7', border: 'rgba(168, 85, 247, 0.3)', desc: 'Управление счетами и отчётами, удаление операций' }
+                        : { label: 'Сотрудник', bg: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: 'rgba(16, 185, 129, 0.3)', desc: 'Только быстрый ввод операций на выезде (без остатков и маржи)' };
+
+                    return (
+                      <div
+                        key={m.membership.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '14px 16px',
+                          backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                          border: '1px solid var(--border, #27272a)',
+                          borderRadius: '8px',
+                          gap: '12px',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '220px' }}>
+                          <div
+                            style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '50%',
+                              backgroundColor: roleInfo.bg,
+                              color: roleInfo.color,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 700,
+                              fontSize: '14px',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {memberUser?.fullName?.[0]?.toUpperCase() || memberUser?.email?.[0]?.toUpperCase() || 'U'}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>
+                              {memberUser?.fullName || 'Сотрудник'} {isSelf && '(Вы)'}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
+                              {memberUser?.email || '—'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: '200px' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
+                            {roleInfo.desc}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              backgroundColor: roleInfo.bg,
+                              color: roleInfo.color,
+                              border: `1px solid ${roleInfo.border}`,
+                            }}
+                          >
+                            {roleInfo.label}
+                          </span>
+
+                          <span style={{ fontSize: '11px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10b981' }} />
+                            Активен
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* 4. Danger Zone: Delete Organization */}
+            <div
+              style={{
+                backgroundColor: 'rgba(239, 68, 68, 0.04)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                borderRadius: '12px',
+                padding: '24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+                marginTop: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={18} style={{ color: '#ef4444' }} />
+                <span style={{ fontSize: '14px', fontWeight: 700, color: '#ef4444' }}>
+                  Опасная зона: Удаление организации
+                </span>
+              </div>
+
+              <p style={{ margin: 0, fontSize: '13px', color: 'var(--muted-foreground)', lineHeight: 1.5 }}>
+                Безвозвратное удаление компании «<strong>{currentCompany?.name}</strong>». Будут навсегда удалены все привязанные счета, финансовые операции, мероприятия, статьи расходов и права участников. Это действие невозможно отменить.
+              </p>
+
+              {currentCompany?.id === 'company_platform_admin' ? (
+                <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                  🛡️ Системное рабочее пространство защищено от удаления.
+                </div>
+              ) : (userRole === 'owner' || userRole === 'admin' || currentUser?.isSuperAdmin) ? (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteCompanyNameConfirm('');
+                      setIsDeleteCompanyModalOpen(true);
+                    }}
+                    style={{
+                      padding: '9px 16px',
+                      borderRadius: '8px',
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                      color: '#ef4444',
+                      fontWeight: 600,
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <Trash2 size={15} />
+                    <span>Удалить эту организацию...</span>
+                  </button>
+                </div>
+              ) : (
+                <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                  Удаление организации доступно только её владельцу.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1166,6 +1647,251 @@ export const SettingsView: React.FC = () => {
                     <span>{modalCategory.mode === 'create' ? 'Создать статью' : 'Сохранить'}</span>
                   </button>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: INVITE TEAM MEMBER                                              */}
+      {/* ========================================================================= */}
+      {isInviteModalOpen && (
+        <div className="modal-backdrop animate-fade-in" onClick={() => setIsInviteModalOpen(false)}>
+          <div className="settings-modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+            <div className="settings-modal-header">
+              <div>
+                <h3 className="settings-modal-title">
+                  Пригласить сотрудника
+                </h3>
+                <p className="settings-modal-subtitle">
+                  Доступ в организацию «{currentCompany?.name || 'Кейтеринг'}»
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsInviteModalOpen(false)}
+                className="btn-modal-close"
+                title="Закрыть"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleInviteMember} className="settings-modal-form">
+              <div className="settings-input-group">
+                <label className="settings-input-label">Email сотрудника</label>
+                <input
+                  type="email"
+                  required
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  className="settings-text-input"
+                  placeholder="colleague@example.com"
+                  autoFocus
+                />
+              </div>
+
+              <div className="settings-input-group">
+                <label className="settings-input-label">Имя и фамилия</label>
+                <input
+                  type="text"
+                  value={inviteFullName}
+                  onChange={(e) => setInviteFullName(e.target.value)}
+                  className="settings-text-input"
+                  placeholder="например: Евгений Петров"
+                />
+              </div>
+
+              <div className="settings-input-group">
+                <label className="settings-input-label">Роль и уровень доступа</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {/* Option 1: Accountant */}
+                  <div
+                    onClick={() => setInviteRole('accountant')}
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      border: `1.5px solid ${inviteRole === 'accountant' ? '#3b82f6' : 'var(--border)'}`,
+                      backgroundColor: inviteRole === 'accountant' ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: 600, fontSize: '13px', color: inviteRole === 'accountant' ? '#3b82f6' : 'var(--foreground)' }}>
+                        Бухгалтер / Финменеджер
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#3b82f6', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(59, 130, 246, 0.12)' }}>
+                        Рекомендуется
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', lineHeight: 1.4 }}>
+                      Просмотр всех счетов, отчётов, внесение и редактирование операций. Запрет на удаление операций.
+                    </div>
+                  </div>
+
+                  {/* Option 2: Staff */}
+                  <div
+                    onClick={() => setInviteRole('staff')}
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      border: `1.5px solid ${inviteRole === 'staff' ? '#10b981' : 'var(--border)'}`,
+                      backgroundColor: inviteRole === 'staff' ? 'rgba(16, 185, 129, 0.08)' : 'transparent',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: 600, fontSize: '13px', color: inviteRole === 'staff' ? '#10b981' : 'var(--foreground)' }}>
+                        Сотрудник / Бармен на выезде
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', lineHeight: 1.4 }}>
+                      Только быстрый ввод операций (расходы, закупки, чаевые). Без доступа к остаткам счетов, сейфу и маржинальности.
+                    </div>
+                  </div>
+
+                  {/* Option 3: Owner */}
+                  <div
+                    onClick={() => setInviteRole('owner')}
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: '8px',
+                      border: `1.5px solid ${inviteRole === 'owner' ? '#f59e0b' : 'var(--border)'}`,
+                      backgroundColor: inviteRole === 'owner' ? 'rgba(245, 158, 11, 0.08)' : 'transparent',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: 600, fontSize: '13px', color: inviteRole === 'owner' ? '#f59e0b' : 'var(--foreground)' }}>
+                        Совладелец / Главный финдиректор
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', lineHeight: 1.4 }}>
+                      Полный доступ ко всей системе, управление организацией, командой и право безвозвратного удаления операций.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="settings-modal-footer">
+                <div />
+                <div className="settings-modal-footer-right">
+                  <button
+                    type="button"
+                    onClick={() => setIsInviteModalOpen(false)}
+                    className="btn-form-cancel"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isInviting || !inviteEmail.trim()}
+                    className="btn-form-submit"
+                  >
+                    {isInviting ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+                    <span>{isInviting ? 'Отправка...' : 'Пригласить'}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Current Company Confirmation */}
+      {isDeleteCompanyModalOpen && currentCompany && (
+        <div className="modal-backdrop animate-fade-in" onClick={() => setIsDeleteCompanyModalOpen(false)}>
+          <div className="settings-modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+            <div className="settings-modal-header">
+              <div>
+                <h3 className="settings-modal-title" style={{ color: '#ef4444' }}>
+                  Удаление организации
+                </h3>
+                <p className="settings-modal-subtitle">
+                  Подтверждение безвозвратного удаления
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDeleteCompanyModalOpen(false)}
+                className="btn-modal-close"
+                title="Закрыть"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleDeleteCompany} className="settings-modal-form" style={{ marginTop: '14px' }}>
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  fontSize: '0.85rem',
+                  lineHeight: 1.5,
+                  color: '#ef4444',
+                }}
+              >
+                Все финансовые записи, кассы и мероприятия кейтеринга «{currentCompany.name}» будут безвозвратно стёрты.
+              </div>
+
+              <div className="settings-input-group" style={{ marginTop: '14px' }}>
+                <label className="settings-input-label" style={{ fontSize: '0.82rem' }}>
+                  Для подтверждения введите точное имя компании: <strong>{currentCompany.name}</strong>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={deleteCompanyNameConfirm}
+                  onChange={(e) => setDeleteCompanyNameConfirm(e.target.value)}
+                  className="settings-text-input"
+                  placeholder={currentCompany.name}
+                  autoFocus
+                />
+              </div>
+
+              <div className="settings-modal-actions" style={{ marginTop: '20px' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteCompanyModalOpen(false)}
+                  className="btn-modal-cancel"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDeletingCompany || deleteCompanyNameConfirm.trim() !== currentCompany.name.trim()}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    background: deleteCompanyNameConfirm.trim() === currentCompany.name.trim() ? '#ef4444' : 'rgba(239, 68, 68, 0.3)',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontWeight: 600,
+                    cursor: deleteCompanyNameConfirm.trim() === currentCompany.name.trim() ? 'pointer' : 'not-allowed',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  {isDeletingCompany ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Удаление...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={14} />
+                      <span>Да, удалить компанию</span>
+                    </>
+                  )}
+                </button>
               </div>
             </form>
           </div>

@@ -92,6 +92,12 @@ export class JsonFileStore extends InMemoryStore implements IFinanceStore {
     return result;
   }
 
+  public override async deleteCompany(id: string): Promise<boolean> {
+    const result = await super.deleteCompany(id);
+    if (result) this.persist();
+    return result;
+  }
+
   public override async saveUserProfile(userInput: Partial<UserProfile> & { id: string; email: string }): Promise<UserProfile> {
     const result = await super.saveUserProfile(userInput);
     this.persist();
@@ -106,6 +112,12 @@ export class JsonFileStore extends InMemoryStore implements IFinanceStore {
 
   public override async updateAccountBalance(id: string, newBalance: number): Promise<Account> {
     const result = await super.updateAccountBalance(id, newBalance);
+    this.persist();
+    return result;
+  }
+
+  public override async adjustAccountBalance(id: string, delta: number): Promise<Account> {
+    const result = await super.adjustAccountBalance(id, delta);
     this.persist();
     return result;
   }

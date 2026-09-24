@@ -7,6 +7,12 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { IFinanceStore } from '../storage/interfaces.js';
+import {
+  mirrorCompanyToCloud,
+  mirrorMembershipToCloud,
+  mirrorAccountToCloud,
+  deleteCompanyFromCloud,
+} from '../storage/cloudMirror.js';
 
 export function createCompaniesRouter(store: IFinanceStore): Router {
   const router = Router();
@@ -52,11 +58,36 @@ export function createCompaniesRouter(store: IFinanceStore): Router {
       });
 
       // Add owner membership
-      await store.addCompanyMember({
+      const membership = await store.addCompanyMember({
         companyId: newCompany.id,
         userId: newCompany.ownerId || 'user_nikita',
         role: 'owner',
       });
+
+      // Mirror company and membership to cloud in background
+      mirrorCompanyToCloud(newCompany).catch(() => {});
+      mirrorMembershipToCloud(membership).catch(() => {});
+
+      // Create clean 4 default accounts (0 balance) for new company
+      const defaultAccounts = [
+        { name: 'Нал 1 (Касса на площадке)', type: 'cash', color: '#10b981', icon: 'wallet', description: 'Разменная касса на выезде' },
+        { name: 'Нал 2 (Сейф / Владелец)', type: 'cash', color: '#059669', icon: 'vault', description: 'Сейф наличных средств' },
+        { name: 'Безнал 1 (Основной р/с)', type: 'bank', color: '#3b82f6', icon: 'landmark', description: 'Расчётный счёт в банке' },
+        { name: 'Безнал 2 (Резерв / Эквайринг)', type: 'bank', color: '#6366f1', icon: 'credit-card', description: 'Торговый эквайринг' },
+      ];
+
+      for (const acc of defaultAccounts) {
+        const createdAcc = await store.createAccount({
+          companyId: newCompany.id,
+          name: acc.name,
+          type: acc.type as any,
+          color: acc.color,
+          icon: acc.icon,
+          description: acc.description,
+          initialBalance: 0,
+        });
+        mirrorAccountToCloud(createdAcc).catch(() => {});
+      }
 
       res.status(201).json(newCompany);
     } catch (err) {
@@ -68,7 +99,53 @@ export function createCompaniesRouter(store: IFinanceStore): Router {
   router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const updated = await store.updateCompany(req.params.id, req.body);
+      mirrorCompanyToCloud(updated).catch(() => {});
       res.json(updated);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // DELETE /api/companies/:id
+  router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const companyId = req.params.id;
+      if (companyId === 'company_platform_admin') {
+        return res.status(400).json({ error: 'Системное пространство платформы защищено от удаления' });
+      }
+
+      const company = await store.getCompanyById(companyId);
+      if (!company) {
+        return res.status(404).json({ error: `Организация ${companyId} не найдена` });
+      }
+
+      const callingUserId = (req.headers['x-user-id'] as string) || '';
+      if (!callingUserId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      let isAllowed = false;
+      const callingUser = await store.getUserById(callingUserId);
+      if (callingUser?.isSuperAdmin) {
+        isAllowed = true;
+      } else if (company.ownerId === callingUserId) {
+        isAllowed = true;
+      } else {
+        const members = await store.getCompanyMembers(companyId);
+        const userMem = members.find((m) => m.membership.userId === callingUserId);
+        if (userMem && (userMem.membership.role === 'owner' || userMem.membership.role === 'admin')) {
+          isAllowed = true;
+        }
+      }
+
+      if (!isAllowed) {
+        return res.status(403).json({ error: 'Удаление организации разрешено только её владельцу или суперадминистратору' });
+      }
+
+      await store.deleteCompany(companyId);
+      deleteCompanyFromCloud(companyId).catch(() => {});
+
+      res.json({ success: true, message: `Организация "${company.name}" и все её данные успешно удалены` });
     } catch (err) {
       next(err);
     }
@@ -98,6 +175,8 @@ export function createCompaniesRouter(store: IFinanceStore): Router {
         role,
         invitedBy,
       });
+
+      mirrorMembershipToCloud(membership).catch(() => {});
 
       res.status(201).json(membership);
     } catch (err) {

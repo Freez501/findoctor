@@ -19,7 +19,7 @@ describe('Transaction Update & Batch Import API', () => {
     store = new InMemoryStore();
     await store.resetToSeed();
     service = new FinanceService(store);
-    app = createApp(service);
+    app = createApp({ store });
   });
 
   it('PUT /api/transactions/:id updates category, event, and memo without altering balances if amount unchanged', async () => {

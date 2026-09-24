@@ -11,14 +11,16 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { FinanceService } from '../services/FinanceService.js';
 import { getStorageInstance } from '../storage/factory.js';
+import { mirrorPartnerToCloud } from '../storage/cloudMirror.js';
 
 export function createPartnersRouter(financeService?: FinanceService): Router {
   const router = Router();
   const service = financeService || new FinanceService(getStorageInstance());
 
-  router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
+  router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const partners = await service.getPartners();
+      const companyId = (req.headers['x-company-id'] as string) || (req.query.companyId as string) || undefined;
+      const partners = await service.getPartners(companyId);
       res.json({ partners });
     } catch (err) {
       next(err);
@@ -27,6 +29,7 @@ export function createPartnersRouter(financeService?: FinanceService): Router {
 
   router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const companyId = (req.headers['x-company-id'] as string) || (req.body.companyId as string) || undefined;
       const { name, role, id } = req.body;
       if (!name || typeof name !== 'string' || !name.trim()) {
         res.status(400).json({ error: 'Имя партнера обязательно', statusCode: 400 });
@@ -37,9 +40,11 @@ export function createPartnersRouter(financeService?: FinanceService): Router {
         id: id || `partner_${Date.now()}`,
         name: name.trim(),
         role: typeof role === 'string' ? role.trim() : undefined,
+        companyId,
         isActive: true,
       });
 
+      mirrorPartnerToCloud(partner).catch(() => {});
       res.status(201).json({ partner });
     } catch (err) {
       next(err);
@@ -48,16 +53,19 @@ export function createPartnersRouter(financeService?: FinanceService): Router {
 
   router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const companyId = (req.headers['x-company-id'] as string) || (req.body.companyId as string) || undefined;
       const { id } = req.params;
       const { name, role, isActive } = req.body;
 
       const partner = await service.savePartner({
         id,
-        name: typeof name === 'string' ? name.trim() : undefined as any,
-        role: typeof role === 'string' ? role.trim() : undefined,
-        isActive: typeof isActive === 'boolean' ? isActive : undefined as any,
+        name: name !== undefined ? String(name).trim() : '',
+        role: role !== undefined ? String(role).trim() : undefined,
+        companyId,
+        isActive: isActive !== undefined ? Boolean(isActive) : true,
       });
 
+      mirrorPartnerToCloud(partner).catch(() => {});
       res.json({ partner });
     } catch (err) {
       next(err);

@@ -728,13 +728,9 @@ describe('Milestone M2: Empirical Challenge Suite — FinanceService & Analytics
 
       const finalCash1 = (await store.getAccountById(ACCOUNT_IDS.CASH_1))!.currentBalance;
       const expectedWithoutRace = round2(initialCash1 - CONCURRENT_OPS * 100);
-
-      // In un-synchronized asynchronous Read-Modify-Write execution,
-      // all 20 calls read the initial balance before any update completes.
-      // Therefore, finalCash1 is 6,200 ₽ (only 1 deduction of 100 ₽ took effect)
-      // instead of 4,300 ₽, resulting in 19 lost mutations.
-      // This is documented as Finding 3 in handoff.md.
-      expect(finalCash1).toBeGreaterThan(expectedWithoutRace);
+      // FIX-08: Atomic adjustAccountBalance eliminates lost updates under concurrency.
+      // All 20 concurrent transactions are accurately accounted for.
+      expect(finalCash1).toBe(expectedWithoutRace);
     });
 
     it('M2-CHALLENGE-19: verifies that sequential serialized balance mutations are 100% accurate and conserved', async () => {

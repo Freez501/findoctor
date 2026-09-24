@@ -12,6 +12,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { IFinanceStore } from '../storage/interfaces.js';
 import { getStorageInstance } from '../storage/factory.js';
 import { validateCreateEventDTO } from '../../shared/dto.js';
+import { mirrorEventToCloud } from '../storage/cloudMirror.js';
 
 export function createEventsRouter(store?: IFinanceStore): Router {
   const router = Router();
@@ -50,6 +51,7 @@ export function createEventsRouter(store?: IFinanceStore): Router {
 
       const companyId = req.body.companyId || (req.headers['x-company-id'] as string) || undefined;
       const newEvent = await storage.createEvent({ ...validation.data!, companyId });
+      mirrorEventToCloud(newEvent).catch(() => {});
       res.status(201).json({ event: newEvent });
     } catch (err) {
       next(err);
@@ -65,6 +67,7 @@ export function createEventsRouter(store?: IFinanceStore): Router {
       }
       const updates = req.body;
       const updated = await storage.updateEvent(req.params.id, updates);
+      mirrorEventToCloud(updated).catch(() => {});
       res.json({ event: updated });
     } catch (err) {
       next(err);

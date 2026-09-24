@@ -10,6 +10,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { IFinanceStore } from '../storage/interfaces.js';
 import { getStorageInstance } from '../storage/factory.js';
+import { mirrorCategoryToCloud } from '../storage/cloudMirror.js';
 
 export function createCategoriesRouter(store?: IFinanceStore): Router {
   const router = Router();
@@ -54,6 +55,7 @@ export function createCategoriesRouter(store?: IFinanceStore): Router {
         icon: icon || 'tag',
         isEventSpecific: typeof isEventSpecific === 'boolean' ? isEventSpecific : true,
       });
+      mirrorCategoryToCloud(category).catch(() => {});
       res.status(201).json({ category });
     } catch (err) {
       next(err);
@@ -73,6 +75,7 @@ export function createCategoriesRouter(store?: IFinanceStore): Router {
         icon,
         isEventSpecific,
       });
+      mirrorCategoryToCloud(category).catch(() => {});
       res.json({ category });
     } catch (err) {
       next(err);

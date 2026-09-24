@@ -11,6 +11,7 @@ import { useAccounts } from '../../hooks/useAccounts.js';
 import { useFinance } from '../../context/FinanceContext.js';
 import { getAccountsWord } from '../../utils/formatters.js';
 import { AccountCard } from './AccountCard.js';
+import { SyncStatusButton } from '../common/SyncStatusButton.js';
 
 interface AccountsGridProps {
   onOpenEntryWithAccount?: (accountId: string) => void;
@@ -49,17 +50,20 @@ export const AccountsGrid: React.FC<AccountsGridProps> = ({ onOpenEntryWithAccou
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleRefresh}
-          disabled={isLoading || isRefreshing}
-          className="btn-refresh-accounts"
-          title="Обновить остатки по счетам"
-          aria-label="Обновить остатки"
-        >
-          <RefreshCw size={14} className={isLoading || isRefreshing ? 'animate-spin' : ''} aria-hidden="true" />
-          <span className="btn-text">{isRefreshing ? 'Обновление...' : 'Обновить'}</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <SyncStatusButton variant="compact" />
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={isLoading || isRefreshing}
+            className="btn-refresh-accounts"
+            title="Обновить остатки по счетам"
+            aria-label="Обновить остатки"
+          >
+            <RefreshCw size={14} className={isLoading || isRefreshing ? 'animate-spin' : ''} aria-hidden="true" />
+            <span className="btn-text">{isRefreshing ? 'Обновление...' : 'Обновить'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Grid of 5 Accounts */}

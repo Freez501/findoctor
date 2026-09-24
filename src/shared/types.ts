@@ -52,10 +52,11 @@ export type TransactionDirection = 'operational' | 'business' | 'dividends' | 't
  * User roles in the SaaS platform:
  * - super_admin: Platform owner (has access to global admin panel, manage all companies/tenants)
  * - owner: Company owner / founder (full access to company finances, settings, invites)
- * - admin: Partner / Co-founder (full access to company finances, reports)
+ * - admin: Partner / Co-founder / FinDirector (full access to company finances, reports)
+ * - accountant: Accountant / Finance manager (view all, add operations, cannot delete, cannot rename company)
  * - staff: Employee (bartender, mover, warehouse) with restricted access (quick entry only, no dividends/total margin)
  */
-export type UserRole = 'super_admin' | 'owner' | 'admin' | 'staff';
+export type UserRole = 'super_admin' | 'owner' | 'admin' | 'accountant' | 'staff';
 
 /**
  * Company (Tenant / Organization) entity
@@ -67,6 +68,8 @@ export interface Company {
   plan: 'free' | 'starter' | 'pro' | 'enterprise';
   isActive: boolean;
   ownerId?: string;
+  trialEndsAt?: string | null;
+  paidUntil?: string | null;
   createdAt: string;
   updatedAt?: string;
 }
@@ -80,6 +83,7 @@ export interface UserProfile {
   fullName: string;
   avatarUrl?: string;
   isSuperAdmin: boolean;
+  isEmailVerified?: boolean;
   createdAt: string;
   updatedAt?: string;
 }

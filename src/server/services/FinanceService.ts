@@ -43,6 +43,10 @@ export interface DeleteTransactionResult {
 export class FinanceService {
   constructor(private store: IFinanceStore = getStorageInstance()) {}
 
+  public getStore(): IFinanceStore {
+    return this.store;
+  }
+
   /**
    * Retrieves all accounts along with the aggregated total liquidity.
    */
@@ -78,15 +82,15 @@ export class FinanceService {
     return tx ? this.attachAliases(tx) : null;
   }
 
-  public async getPartners(): Promise<Partner[]> {
-    return this.store.getPartners();
+  public async getPartners(companyId?: string): Promise<Partner[]> {
+    return this.store.getPartners(companyId);
   }
 
   public async getPartnerById(id: string): Promise<Partner | null> {
     return this.store.getPartnerById(id);
   }
 
-  public async savePartner(partner: Omit<Partner, 'createdAt' | 'updatedAt'> & { id?: string }): Promise<Partner> {
+  public async savePartner(partner: Omit<Partner, 'createdAt' | 'updatedAt'> & { id?: string; companyId?: string }): Promise<Partner> {
     return this.store.savePartner(partner);
   }
 
@@ -106,8 +110,8 @@ export class FinanceService {
     return this.store.deleteAccount(id);
   }
 
-  public async resetAllAccountBalances(): Promise<Account[]> {
-    const accounts = await this.store.getAccounts();
+  public async resetAllAccountBalances(companyId?: string): Promise<Account[]> {
+    const accounts = await this.store.getAccounts(companyId);
     const updated: Account[] = [];
     for (const acc of accounts) {
       const res = await this.store.saveAccount({
@@ -300,51 +304,27 @@ export class FinanceService {
     if (tx.type === 'expense') {
       const sourceId = tx.fromAccountId || (tx as any).sourceAccountId;
       if (sourceId) {
-        const src = await this.store.getAccountById(sourceId);
-        if (src) {
-          const updatedSrc = await this.store.updateAccountBalance(
-            src.id,
-            round2(src.currentBalance + tx.amount)
-          );
-          updatedAccounts.push(updatedSrc);
-        }
+        const updatedSrc = await this.store.adjustAccountBalance(sourceId, tx.amount);
+        updatedAccounts.push(updatedSrc);
       }
     } else if (tx.type === 'income') {
       const targetId = tx.toAccountId || (tx as any).targetAccountId;
       if (targetId) {
-        const dst = await this.store.getAccountById(targetId);
-        if (dst) {
-          const updatedDst = await this.store.updateAccountBalance(
-            dst.id,
-            round2(dst.currentBalance - tx.amount)
-          );
-          updatedAccounts.push(updatedDst);
-        }
+        const updatedDst = await this.store.adjustAccountBalance(targetId, -tx.amount);
+        updatedAccounts.push(updatedDst);
       }
     } else if (tx.type === 'transfer') {
       const sourceId = tx.fromAccountId || (tx as any).sourceAccountId;
       const targetId = tx.toAccountId || (tx as any).targetAccountId;
 
       if (sourceId) {
-        const src = await this.store.getAccountById(sourceId);
-        if (src) {
-          const updatedSrc = await this.store.updateAccountBalance(
-            src.id,
-            round2(src.currentBalance + tx.amount)
-          );
-          updatedAccounts.push(updatedSrc);
-        }
+        const updatedSrc = await this.store.adjustAccountBalance(sourceId, tx.amount);
+        updatedAccounts.push(updatedSrc);
       }
 
       if (targetId) {
-        const dst = await this.store.getAccountById(targetId);
-        if (dst) {
-          const updatedDst = await this.store.updateAccountBalance(
-            dst.id,
-            round2(dst.currentBalance - tx.amount)
-          );
-          updatedAccounts.push(updatedDst);
-        }
+        const updatedDst = await this.store.adjustAccountBalance(targetId, -tx.amount);
+        updatedAccounts.push(updatedDst);
       }
     }
 
@@ -383,6 +363,10 @@ export class FinanceService {
     }
 
     const updatedAccountsMap = new Map<string, Account>();
+
+    if (updates.amount !== undefined && (typeof updates.amount !== 'number' || isNaN(updates.amount) || updates.amount <= 0)) {
+      throw new Error('Сумма операции должна быть положительным числом больше нуля');
+    }
 
     const targetType = updates.type ?? existing.type;
     const targetAmount = updates.amount !== undefined ? round2(updates.amount) : existing.amount;
@@ -596,8 +580,11 @@ export class FinanceService {
       throw new Error(`Счёт ${params.sourceAccountId} не найден`);
     }
 
-    const newBalance = round2(source.currentBalance - params.amount);
-    const updatedSource = await this.store.updateAccountBalance(source.id, newBalance);
+    if (params.companyId && source.companyId && source.companyId !== params.companyId) {
+      throw new Error('Счёт списания принадлежит другой организации');
+    }
+
+    const updatedSource = await this.store.adjustAccountBalance(source.id, -params.amount);
 
     const tx = await this.store.createTransaction({
       type: 'expense',
@@ -645,8 +632,11 @@ export class FinanceService {
       throw new Error(`Счёт ${params.targetAccountId} не найден`);
     }
 
-    const newBalance = round2(target.currentBalance + params.amount);
-    const updatedTarget = await this.store.updateAccountBalance(target.id, newBalance);
+    if (params.companyId && target.companyId && target.companyId !== params.companyId) {
+      throw new Error('Счёт зачисления принадлежит другой организации');
+    }
+
+    const updatedTarget = await this.store.adjustAccountBalance(target.id, params.amount);
 
     const tx = await this.store.createTransaction({
       type: 'income',
@@ -698,11 +688,20 @@ export class FinanceService {
       throw new Error('Счёт списания или зачисления не найден');
     }
 
-    const newSourceBalance = round2(source.currentBalance - params.amount);
-    const newTargetBalance = round2(target.currentBalance + params.amount);
+    if (params.companyId) {
+      if (source.companyId && source.companyId !== params.companyId) {
+        throw new Error('Счёт списания принадлежит другой организации');
+      }
+      if (target.companyId && target.companyId !== params.companyId) {
+        throw new Error('Счёт зачисления принадлежит другой организации');
+      }
+    }
+    if (source.companyId && target.companyId && source.companyId !== target.companyId) {
+      throw new Error('Перевод между счетами разных организаций запрещен');
+    }
 
-    const updatedSource = await this.store.updateAccountBalance(source.id, newSourceBalance);
-    const updatedTarget = await this.store.updateAccountBalance(target.id, newTargetBalance);
+    const updatedSource = await this.store.adjustAccountBalance(source.id, -params.amount);
+    const updatedTarget = await this.store.adjustAccountBalance(target.id, params.amount);
 
     const tx = await this.store.createTransaction({
       type: 'transfer',

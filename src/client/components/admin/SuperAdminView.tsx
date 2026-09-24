@@ -10,30 +10,26 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Cloud,
   CheckCircle2,
   AlertTriangle,
-  RefreshCw,
   Building2,
   Users,
   UserPlus,
-  Key,
-  Database,
   ArrowRight,
-  ExternalLink,
   Crown,
-  Eye,
-  EyeOff,
   Copy,
   Check,
   Download,
   Upload,
+  Edit2,
+  X,
+  Trash2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
 import { api } from '../../api/apiClient.js';
-import { UserRole } from '../../../shared/types.js';
+import { UserRole, Company, UserProfile } from '../../../shared/types.js';
 
-type AdminTab = 'supabase' | 'team' | 'companies';
+type AdminTab = 'companies' | 'team';
 
 export const SuperAdminView: React.FC = () => {
   const {
@@ -42,33 +38,127 @@ export const SuperAdminView: React.FC = () => {
     currentCompany,
     companiesList,
     companyMembers,
-    isSuperAdmin,
-    switchUser,
     switchCompany,
     createCompany,
+    deleteCompany,
     inviteMember,
+    updateProfile,
+    updateCompanyDetails,
     refreshAuthData,
   } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<AdminTab>('supabase');
+  const [activeTab, setActiveTab] = useState<AdminTab>('companies');
 
-  // Supabase connection state
-  const [supabaseUrl, setSupabaseUrl] = useState<string>('');
-  const [supabaseKey, setSupabaseKey] = useState<string>('');
-  const [showKey, setShowKey] = useState<boolean>(false);
+  // Delete Company Modal
+  const [deletingCompany, setDeletingCompany] = useState<Company | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeletingCo, setIsDeletingCo] = useState(false);
+  const [deleteCoError, setDeleteCoError] = useState<string | null>(null);
+
+  const openDeleteCompanyModal = (co: Company) => {
+    setDeletingCompany(co);
+    setDeleteConfirmText('');
+    setDeleteCoError(null);
+  };
+
+  const handleConfirmDeleteCompany = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deletingCompany) return;
+    if (deleteConfirmText.trim() !== deletingCompany.name.trim()) {
+      setDeleteCoError(`Введите точное название «${deletingCompany.name}» для подтверждения`);
+      return;
+    }
+
+    setIsDeletingCo(true);
+    setDeleteCoError(null);
+    try {
+      await deleteCompany(deletingCompany.id);
+      setDeletingCompany(null);
+      await refreshAuthData();
+    } catch (err: any) {
+      setDeleteCoError(err.message || 'Ошибка при удалении организации');
+    } finally {
+      setIsDeletingCo(false);
+    }
+  };
+
+  // Edit Profile Modal
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [editUserName, setEditUserName] = useState('');
+  const [editUserEmail, setEditUserEmail] = useState('');
+  const [isSavingUser, setIsSavingUser] = useState(false);
+  const [editUserFeedback, setEditUserFeedback] = useState<string | null>(null);
+
+  // Edit Company Modal
+  const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+  const [editCompanyName, setEditCompanyName] = useState('');
+  const [isSavingCompany, setIsSavingCompany] = useState(false);
+  const [editCompanyFeedback, setEditCompanyFeedback] = useState<string | null>(null);
+
+  const openEditUser = (user: UserProfile) => {
+    setEditingUser(user);
+    setEditUserName(user.fullName || '');
+    setEditUserEmail(user.email || '');
+    setEditUserFeedback(null);
+  };
+
+  const handleSaveUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    setIsSavingUser(true);
+    setEditUserFeedback(null);
+    try {
+      await updateProfile(editingUser.id, {
+        fullName: editUserName.trim(),
+        email: editUserEmail.trim(),
+      });
+      setEditUserFeedback('✅ Профиль успешно обновлён');
+      setTimeout(() => {
+        setEditingUser(null);
+        setEditUserFeedback(null);
+      }, 600);
+    } catch (err: any) {
+      setEditUserFeedback(`Ошибка: ${err.message || 'Не удалось обновить профиль'}`);
+    } finally {
+      setIsSavingUser(false);
+    }
+  };
+
+  const openEditCompany = (company: Company) => {
+    setEditingCompany(company);
+    setEditCompanyName(company.name || '');
+    setEditCompanyFeedback(null);
+  };
+
+  const handleSaveCompany = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCompany || !editCompanyName.trim()) return;
+    setIsSavingCompany(true);
+    setEditCompanyFeedback(null);
+    try {
+      await updateCompanyDetails(editingCompany.id, {
+        name: editCompanyName.trim(),
+      });
+      setEditCompanyFeedback('✅ Название организации сохранено');
+      setTimeout(() => {
+        setEditingCompany(null);
+        setEditCompanyFeedback(null);
+      }, 600);
+    } catch (err: any) {
+      setEditCompanyFeedback(`Ошибка: ${err.message || 'Не удалось переименовать организацию'}`);
+    } finally {
+      setIsSavingCompany(false);
+    }
+  };
+
+  // Supabase compact status & pull state
   const [cloudStatus, setCloudStatus] = useState<{ isConfigured: boolean; mode: string; message: string }>({
     isConfigured: false,
     mode: 'local',
     message: 'Загрузка статуса подключения...',
   });
-
-  const [isTesting, setIsTesting] = useState<boolean>(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [syncResult, setSyncResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isPulling, setIsPulling] = useState<boolean>(false);
+  const [isPushing, setIsPushing] = useState<boolean>(false);
   const [pullResult, setPullResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isCopiedSql, setIsCopiedSql] = useState<boolean>(false);
   const [copyingSql, setCopyingSql] = useState<boolean>(false);
@@ -104,63 +194,6 @@ export const SuperAdminView: React.FC = () => {
     loadSupabaseStatus();
   }, []);
 
-  // Handle Supabase Connection Test
-  const handleTestConnection = async () => {
-    setIsTesting(true);
-    setTestResult(null);
-    try {
-      const res = await api.testSupabase({
-        url: supabaseUrl.trim() || undefined,
-        key: supabaseKey.trim() || undefined,
-      });
-
-      if (res.success) {
-        setTestResult({
-          success: true,
-          message: res.message || 'Связь с базой Supabase успешно установлена!',
-        });
-      } else {
-        setTestResult({
-          success: false,
-          message: res.error || 'Не удалось подключиться к Supabase',
-        });
-      }
-    } catch (err: any) {
-      setTestResult({
-        success: false,
-        message: err.message || 'Ошибка выполнения запроса к серверу',
-      });
-    } finally {
-      setIsTesting(false);
-    }
-  };
-
-  // Handle Save Supabase Config
-  const handleSaveConfig = async () => {
-    if (!supabaseUrl.trim() || !supabaseKey.trim()) {
-      alert('Пожалуйста, введите Project URL и Anon Key');
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const res = await api.saveSupabaseConfig({
-        url: supabaseUrl.trim(),
-        key: supabaseKey.trim(),
-      });
-      if (res.success) {
-        alert(res.message);
-        await loadSupabaseStatus();
-      } else {
-        alert(res.error || 'Ошибка сохранения конфигурации');
-      }
-    } catch (err: any) {
-      alert(err.message || 'Ошибка сети');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   // Handle Copy SQL
   const handleCopySql = async () => {
     setCopyingSql(true);
@@ -174,45 +207,40 @@ export const SuperAdminView: React.FC = () => {
         alert('Файл supabase.sql скопирован в корневую папку проекта.');
       }
     } catch (err: any) {
-      alert('Не удалось скопировать в буфер: ' + err.message);
+      alert(`Ошибка копирования: ${err.message}`);
     } finally {
       setCopyingSql(false);
     }
   };
 
-  // Handle Sync data to Supabase
-  const handleSyncToSupabase = async () => {
-    if (!window.confirm('Выгрузить все текущие счета, категории, мероприятия и операции из локального файла в базу Supabase?')) {
+  // Handle Push local data to Supabase
+  const handlePushToSupabase = async () => {
+    if (!window.confirm('Выгрузить все локальные данные (организации, сотрудники, счета, операции) в облако Supabase?')) {
       return;
     }
 
-    setIsSyncing(true);
-    setSyncResult(null);
+    setIsPushing(true);
+    setPullResult(null);
     try {
-      const res = await api.syncToSupabase({
-        url: supabaseUrl.trim() || undefined,
-        key: supabaseKey.trim() || undefined,
-      });
-
+      const res = await api.syncToSupabase();
       if (res.success) {
-        setSyncResult({
+        setPullResult({
           success: true,
-          message: `${res.message} (Счетов: ${res.counts?.accounts}, Операций: ${res.counts?.transactions}, Мероприятий: ${res.counts?.events})`,
+          message: `${res.message} (Организаций: ${res.counts?.companies || 0}, Счетов: ${res.counts?.accounts || 0}, Операций: ${res.counts?.transactions || 0})`,
         });
-        await loadSupabaseStatus();
       } else {
-        setSyncResult({
+        setPullResult({
           success: false,
-          message: res.error || 'Ошибка синхронизации данных',
+          message: res.error || 'Ошибка выгрузки в Supabase',
         });
       }
     } catch (err: any) {
-      setSyncResult({
+      setPullResult({
         success: false,
         message: err.message || 'Ошибка связи с сервером',
       });
     } finally {
-      setIsSyncing(false);
+      setIsPushing(false);
     }
   };
 
@@ -225,10 +253,7 @@ export const SuperAdminView: React.FC = () => {
     setIsPulling(true);
     setPullResult(null);
     try {
-      const res = await api.pullFromSupabase({
-        url: supabaseUrl.trim() || undefined,
-        key: supabaseKey.trim() || undefined,
-      });
+      const res = await api.pullFromSupabase();
 
       if (res.success) {
         setPullResult({
@@ -301,60 +326,136 @@ export const SuperAdminView: React.FC = () => {
             </div>
             <div>
               <div className="saas-title-row">
-                <h2 className="saas-title">Панель управления SaaS</h2>
-                <span className="saas-badge-pill">Платформа Truespace Multi-Tenant</span>
+                <h2 className="saas-title">Админ-панель платформы</h2>
+                <span className="saas-badge-pill">Управление платформой и биллингом</span>
               </div>
               <p className="saas-subtitle">
-                Управление базой данных Supabase, правами сооснователей и кейтеринговыми организациями
+                Управление организациями, продление триалов, контроль оплат и база данных Supabase
               </p>
             </div>
           </div>
 
-          {/* User Profile & Switcher Box */}
+          {/* User Profile Info Box */}
           <div className="saas-profile-box">
             <div className="saas-user-info">
-              <span className="saas-user-title">Текущий профиль:</span>
-              <div className="saas-user-name">
-                <strong>{currentUser?.fullName || 'Пользователь'}</strong>
-                {isSuperAdmin && <span className="saas-role-crown">👑 Суперадмин</span>}
-                {!isSuperAdmin && <span className="saas-role-partner">🍸 Сооснователь</span>}
+              <span className="saas-user-title">Администратор платформы:</span>
+              <div className="saas-user-name" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <strong>{currentUser?.fullName || 'Администратор'}</strong>
+                <span className="saas-role-crown">👑 Главный админ</span>
               </div>
-              <span className="saas-company-tag">Организация: {currentCompany?.name}</span>
-            </div>
-
-            {/* Quick Switcher Buttons */}
-            <div className="saas-switch-buttons">
-              <span className="saas-switch-label">Смотреть интерфейс как:</span>
-              <div className="saas-switch-group">
-                {usersList.map((u) => {
-                  const isActive = u.id === currentUser?.id;
-                  return (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => switchUser(u.id)}
-                      className={`saas-switch-btn ${isActive ? 'saas-switch-btn-active' : ''}`}
-                    >
-                      {u.isSuperAdmin ? '👑 ' : '🍸 '}
-                      {u.fullName || u.email.split('@')[0]}
-                    </button>
-                  );
-                })}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                <span className="saas-company-tag" style={{ color: 'var(--muted-foreground)' }}>
+                  Email: {currentUser?.email || 'admin@gmail.com'}
+                </span>
+                {currentUser && (
+                  <button
+                    type="button"
+                    onClick={() => openEditUser(currentUser)}
+                    className="btn-action-ghost"
+                    style={{ padding: '2px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                    title="Настроить имя и email"
+                  >
+                    <Edit2 size={11} />
+                    <span>Настроить профиль</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2. Sub Navigation Tabs */}
+      {/* Compact Cloud & SaaS Status Pill */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+          padding: '12px 18px',
+          background: 'var(--card-bg, #ffffff)',
+          borderRadius: '12px',
+          border: '1px solid var(--border-color, #e7e5e4)',
+          marginBottom: '16px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+          <span
+            style={{
+              width: '9px',
+              height: '9px',
+              borderRadius: '50%',
+              background: cloudStatus.isConfigured ? '#10b981' : '#f59e0b',
+              display: 'inline-block',
+            }}
+          />
+          <span style={{ fontWeight: 600 }}>
+            {cloudStatus.isConfigured ? '🟢 База Supabase Cloud активна' : '🟡 Автономный локальный режим'}
+          </span>
+          <span style={{ color: 'var(--muted-foreground, #78716c)', fontSize: '12px' }}>
+            {cloudStatus.isConfigured ? '• Синхронизируется автоматически' : '• data/truespace.json'}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={handlePushToSupabase}
+            disabled={isPushing}
+            className="btn-action-primary"
+            style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            title="Выгрузить все локальные компании, пользователей и счета в Supabase"
+          >
+            <Upload size={13} />
+            <span>{isPushing ? 'Выгрузка...' : '📤 Выгрузить в Supabase'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePullFromSupabase}
+            disabled={isPulling}
+            className="btn-action-outline"
+            style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            title="Загрузить свежие данные из Supabase в приложение"
+          >
+            <Download size={13} />
+            <span>{isPulling ? 'Загрузка...' : '📥 Загрузить из Supabase'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleCopySql}
+            disabled={copyingSql}
+            className="btn-action-ghost"
+            style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            title="Скопировать SQL код для Supabase"
+          >
+            {isCopiedSql ? <Check size={13} style={{ color: '#10b981' }} /> : <Copy size={13} />}
+            <span>{isCopiedSql ? 'Скопировано' : '📋 Скопировать SQL'}</span>
+          </button>
+        </div>
+      </div>
+
+      {pullResult && (
+        <div
+          className={`saas-alert ${pullResult.success ? 'saas-alert-success' : 'saas-alert-error'}`}
+          style={{ marginBottom: '16px' }}
+        >
+          {pullResult.success ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+          <span>{pullResult.message}</span>
+        </div>
+      )}
+
+      {/* 2. Sub Navigation Tabs: ONLY Companies & Team */}
       <div className="saas-nav-tabs">
         <button
           type="button"
-          onClick={() => setActiveTab('supabase')}
-          className={`saas-tab-item ${activeTab === 'supabase' ? 'saas-tab-item-active' : ''}`}
+          onClick={() => setActiveTab('companies')}
+          className={`saas-tab-item ${activeTab === 'companies' ? 'saas-tab-item-active' : ''}`}
         >
-          <Cloud size={17} />
-          <span>Подключение к Supabase Cloud</span>
+          <Building2 size={17} />
+          <span>Организации и компании ({companiesList.length})</span>
         </button>
 
         <button
@@ -363,288 +464,9 @@ export const SuperAdminView: React.FC = () => {
           className={`saas-tab-item ${activeTab === 'team' ? 'saas-tab-item-active' : ''}`}
         >
           <Users size={17} />
-          <span>Команда и сооснователи ({companyMembers.length || 2})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('companies')}
-          className={`saas-tab-item ${activeTab === 'companies' ? 'saas-tab-item-active' : ''}`}
-        >
-          <Building2 size={17} />
-          <span>Организации и бизнесы ({companiesList.length})</span>
+          <span>Команда и профили ({companyMembers.length || 2})</span>
         </button>
       </div>
-
-      {/* 3. Tab Contents */}
-
-      {/* TAB 1: SUPABASE CLOUD */}
-      {activeTab === 'supabase' && (
-        <div className="saas-section-grid">
-          {/* Status Overview Card */}
-          <div className="saas-card">
-            <div className="saas-card-header">
-              <div className="saas-card-title-group">
-                <Database size={18} className="text-accent" />
-                <h3 className="saas-card-title">Текущее состояние базы данных</h3>
-              </div>
-              <button
-                type="button"
-                onClick={loadSupabaseStatus}
-                className="btn-action-ghost"
-                title="Обновить статус"
-              >
-                <RefreshCw size={14} />
-                <span>Проверить статус</span>
-              </button>
-            </div>
-
-            <div className="saas-card-body">
-              <div
-                className={`saas-status-banner ${
-                  cloudStatus.isConfigured ? 'saas-status-cloud' : 'saas-status-local'
-                }`}
-              >
-                <div className="saas-status-indicator">
-                  <span className="saas-status-dot" />
-                  <span className="saas-status-headline">
-                    {cloudStatus.isConfigured
-                      ? '🟢 Облачная база Supabase активна (PostgreSQL)'
-                      : '🟡 Автономный режим (Локальный диск: data/truespace.json)'}
-                  </span>
-                </div>
-                <p className="saas-status-desc">
-                  {cloudStatus.isConfigured
-                    ? 'Ваше приложение автоматически синхронизирует операции, счета и банкеты с облачным PostgreSQL в Supabase.'
-                    : 'Все данные сохраняются автономно на вашем компьютере. Вы можете работать без интернета или в любой момент подключить бесплатный облачный Supabase для удалённого доступа.'}
-                </p>
-              </div>
-
-              {/* Actions: Export & Import Sync CTAs */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '16px' }}>
-                {/* 1. Pull / Import from Cloud */}
-                <div className="saas-sync-cta" style={{ borderLeft: '4px solid #10b981' }}>
-                  <div>
-                    <h4 className="saas-sync-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Download size={16} style={{ color: '#10b981' }} />
-                      <span>Загрузить базу из Supabase в приложение (Обратная синхронизация)</span>
-                    </h4>
-                    <p className="saas-sync-text">
-                      Нажмите, если открыли приложение на новом устройстве или хотите подтянуть самые свежие данные из облака.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handlePullFromSupabase}
-                    disabled={isPulling}
-                    className="btn-action-outline"
-                    style={{ minWidth: '220px', justifyContent: 'center', borderColor: '#10b981', color: '#059669' }}
-                  >
-                    <Download size={16} />
-                    <span>{isPulling ? 'Загрузка из облака...' : '📥 Загрузить базу из Supabase'}</span>
-                  </button>
-                </div>
-
-                {pullResult && (
-                  <div
-                    className={`saas-alert ${
-                      pullResult.success ? 'saas-alert-success' : 'saas-alert-error'
-                    }`}
-                  >
-                    {pullResult.success ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
-                    <span>{pullResult.message}</span>
-                  </div>
-                )}
-
-                {/* 2. Export / Push to Cloud */}
-                <div className="saas-sync-cta" style={{ borderLeft: '4px solid #f59e0b' }}>
-                  <div>
-                    <h4 className="saas-sync-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Upload size={16} style={{ color: '#f59e0b' }} />
-                      <span>Выгрузка локальных данных в Supabase</span>
-                    </h4>
-                    <p className="saas-sync-text">
-                      Перенесёт все текущие счета, остатки, мероприятия и операции в вашу облачную базу (перезапишет в облаке).
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleSyncToSupabase}
-                    disabled={isSyncing}
-                    className="btn-primary-gradient"
-                    style={{ minWidth: '220px', justifyContent: 'center' }}
-                  >
-                    <Upload size={16} />
-                    <span>{isSyncing ? 'Выполняется выгрузка...' : '⬆️ Выгрузить данные в Supabase'}</span>
-                  </button>
-                </div>
-
-                {syncResult && (
-                  <div
-                    className={`saas-alert ${
-                      syncResult.success ? 'saas-alert-success' : 'saas-alert-error'
-                    }`}
-                  >
-                    {syncResult.success ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
-                    <span>{syncResult.message}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Configuration Form Card */}
-          <div className="saas-card">
-            <div className="saas-card-header">
-              <div className="saas-card-title-group">
-                <Key size={18} className="text-accent" />
-                <h3 className="saas-card-title">Параметры подключения к Supabase</h3>
-              </div>
-            </div>
-
-            <div className="saas-card-body">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSaveConfig();
-                }}
-                className="saas-form"
-              >
-                <div className="saas-field-group">
-                  <label className="saas-label">
-                    <span>Supabase Project URL</span>
-                    <span className="saas-label-hint">из настроек Project Settings ➔ API</span>
-                  </label>
-                  <input
-                    type="url"
-                    placeholder="https://abcdefghijklmn.supabase.co"
-                    value={supabaseUrl}
-                    onChange={(e) => setSupabaseUrl(e.target.value)}
-                    className="saas-input"
-                  />
-                </div>
-
-                <div className="saas-field-group">
-                  <label className="saas-label">
-                    <span>Supabase Anon Key (Public Key)</span>
-                    <span className="saas-label-hint">публичный ключ проекта (anon / public)</span>
-                  </label>
-                  <div className="saas-input-with-action">
-                    <input
-                      type={showKey ? 'text' : 'password'}
-                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                      value={supabaseKey}
-                      onChange={(e) => setSupabaseKey(e.target.value)}
-                      className="saas-input font-mono"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowKey(!showKey)}
-                      className="saas-input-toggle-btn"
-                      title={showKey ? 'Скрыть ключ' : 'Показать ключ'}
-                    >
-                      {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="saas-form-actions">
-                  <button
-                    type="button"
-                    onClick={handleTestConnection}
-                    disabled={isTesting}
-                    className="btn-action-outline"
-                  >
-                    <RefreshCw size={15} className={isTesting ? 'animate-spin' : ''} />
-                    <span>{isTesting ? 'Проверка...' : 'Проверить соединение'}</span>
-                  </button>
-
-                  <button
-                    type="submit"
-                    disabled={isSaving}
-                    className="btn-primary-gradient"
-                  >
-                    <CheckCircle2 size={15} />
-                    <span>{isSaving ? 'Сохранение...' : 'Сохранить ключи в .env'}</span>
-                  </button>
-                </div>
-
-                {testResult && (
-                  <div
-                    className={`saas-alert ${
-                      testResult.success ? 'saas-alert-success' : 'saas-alert-error'
-                    }`}
-                  >
-                    {testResult.success ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
-                    <span>{testResult.message}</span>
-                  </div>
-                )}
-              </form>
-            </div>
-          </div>
-
-          {/* Step-by-Step Instructions Card */}
-          <div className="saas-card saas-guide-card">
-            <div className="saas-card-header">
-              <h3 className="saas-card-title">Как подключить Supabase за 3 шага</h3>
-            </div>
-            <div className="saas-card-body">
-              <div className="saas-steps-list">
-                <div className="saas-step-item">
-                  <div className="saas-step-number">1</div>
-                  <div className="saas-step-content">
-                    <h4 className="saas-step-title">Создайте бесплатный проект</h4>
-                    <p className="saas-step-desc">
-                      Зайдите на официальный сайт{' '}
-                      <a
-                        href="https://supabase.com"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="saas-link"
-                      >
-                        supabase.com <ExternalLink size={12} />
-                      </a>{' '}
-                      и нажмите «New Project». Задайте имя (например, <em>Truespace</em>) и надёжный пароль для базы данных.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="saas-step-item">
-                  <div className="saas-step-number">2</div>
-                  <div className="saas-step-content">
-                    <h4 className="saas-step-title">Выполните готовую миграцию (SQL-скрипт)</h4>
-                    <p className="saas-step-desc">
-                      В левом меню Supabase перейдите в <strong>SQL Editor</strong> ➔ <strong>New Query</strong>. Файл <code className="saas-code-badge">supabase.sql</code> лежит прямо в корне проекта Truespace. Либо просто нажмите кнопку ниже, чтобы скопировать весь код:
-                    </p>
-                    <div style={{ marginTop: '10px' }}>
-                      <button
-                        type="button"
-                        onClick={handleCopySql}
-                        disabled={copyingSql}
-                        className="btn-action-outline"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '6px 12px' }}
-                      >
-                        {isCopiedSql ? <Check size={15} style={{ color: '#10b981' }} /> : <Copy size={15} />}
-                        <span>{isCopiedSql ? '✅ SQL-код скопирован в буфер обмена!' : '📋 Скопировать весь SQL-код для Supabase'}</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="saas-step-item">
-                  <div className="saas-step-number">3</div>
-                  <div className="saas-step-content">
-                    <h4 className="saas-step-title">Скопируйте URL и Anon Key</h4>
-                    <p className="saas-step-desc">
-                      Перейдите в <strong>Project Settings ➔ API</strong>, скопируйте поля <em>Project URL</em> и <em>anon / public API Key</em>, вставьте в форму выше и нажмите «Сохранить ключи». Готово!
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* TAB 2: TEAM & CO-FOUNDERS */}
       {activeTab === 'team' && (
@@ -697,6 +519,22 @@ export const SuperAdminView: React.FC = () => {
                         <span className="saas-member-role-badge">
                           {roleTitle[m.membership.role] || m.membership.role}
                         </span>
+                      </div>
+
+                      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const u = m.user || usersList.find((usr) => usr.id === m.membership.userId);
+                            if (u) openEditUser(u);
+                          }}
+                          className="btn-action-ghost"
+                          style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                          title="Редактировать имя и email сотрудника"
+                        >
+                          <Edit2 size={13} />
+                          <span>Настроить</span>
+                        </button>
                       </div>
                     </div>
                   );
@@ -799,15 +637,40 @@ export const SuperAdminView: React.FC = () => {
               <div className="saas-companies-grid">
                 {companiesList.map((co) => {
                   const isCurrent = co.id === currentCompany?.id;
+                  const isSystem = Boolean((co as any).isSystem || co.id === 'company_platform_admin');
+
+                  const isPaid = Boolean(co.paidUntil && new Date(co.paidUntil).getTime() > Date.now());
+                  const isTrialActive = Boolean(co.trialEndsAt && new Date(co.trialEndsAt).getTime() > Date.now());
+                  const isTrialExpired = Boolean(co.trialEndsAt && new Date(co.trialEndsAt).getTime() <= Date.now());
+
+                  const trialDaysLeft = co.trialEndsAt && isTrialActive
+                    ? Math.max(1, Math.ceil((new Date(co.trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+                    : 0;
+
                   return (
                     <div
                       key={co.id}
                       className={`saas-company-card ${isCurrent ? 'saas-company-card-active' : ''}`}
                     >
                       <div className="saas-company-top">
-                        <div className="saas-company-title-group">
+                        <div className="saas-company-title-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           <span className="saas-company-name">{co.name}</span>
                           <span className="saas-plan-tag">{co.plan.toUpperCase()}</span>
+                          {isSystem && (
+                            <span className="saas-platform-badge">
+                              🛡️ Платформа
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => openEditCompany(co)}
+                            className="btn-action-ghost"
+                            style={{ padding: '3px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            title="Переименовать компанию"
+                          >
+                            <Edit2 size={11} />
+                            <span>Переименовать</span>
+                          </button>
                         </div>
                         {isCurrent && (
                           <span className="saas-badge-current">
@@ -816,21 +679,177 @@ export const SuperAdminView: React.FC = () => {
                         )}
                       </div>
 
-                      <div className="saas-company-meta">
+                      {/* Billing & Trial Status Banner */}
+                      <div
+                        style={{
+                          marginTop: '12px',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          background: isPaid
+                            ? 'rgba(16, 185, 129, 0.08)'
+                            : isTrialActive
+                            ? 'rgba(59, 130, 246, 0.08)'
+                            : 'rgba(239, 68, 68, 0.08)',
+                          border: `1px solid ${
+                            isPaid
+                              ? 'rgba(16, 185, 129, 0.25)'
+                              : isTrialActive
+                              ? 'rgba(59, 130, 246, 0.25)'
+                              : 'rgba(239, 68, 68, 0.25)'
+                          }`,
+                          fontSize: '0.82rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '4px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontWeight: 600 }}>
+                          <span>Биллинг & Тариф:</span>
+                          {isPaid ? (
+                            <span style={{ color: '#10b981' }}>
+                              🟢 Оплачено до {new Date(co.paidUntil!).toLocaleDateString('ru-RU')}
+                            </span>
+                          ) : isTrialActive ? (
+                            <span style={{ color: '#3b82f6' }}>
+                              🔵 Пробный период (ещё {trialDaysLeft} дн. до {new Date(co.trialEndsAt!).toLocaleDateString('ru-RU')})
+                            </span>
+                          ) : isTrialExpired ? (
+                            <span style={{ color: '#ef4444' }}>
+                              🔴 Пробный период истёк ({new Date(co.trialEndsAt!).toLocaleDateString('ru-RU')})
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--muted-foreground)' }}>⚪ Ожидает оплаты / Без триала</span>
+                          )}
+                        </div>
+
+                        {co.paidUntil && (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>
+                            Оплаченный доступ активен до: <strong>{new Date(co.paidUntil).toLocaleDateString('ru-RU')}</strong>
+                          </div>
+                        )}
+                        {co.trialEndsAt && (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>
+                            Дата окончания триала: <strong>{new Date(co.trialEndsAt).toLocaleDateString('ru-RU')}</strong>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Quick Trial & Billing Actions */}
+                      <div style={{ marginTop: '12px' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted-foreground)', marginBottom: '6px' }}>
+                          Действия администратора:
+                        </div>
+                        <div className="saas-actions-flex">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const newDate = new Date(Date.now() + 14 * 86400000).toISOString();
+                              await updateCompanyDetails(co.id, { trialEndsAt: newDate, plan: 'pro' });
+                              await refreshAuthData();
+                            }}
+                            className="btn-action-ghost saas-admin-action-btn"
+                            title="Установить 14 дней пробного периода с сегодняшнего дня"
+                          >
+                            +14 дней триала
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const newDate = new Date(Date.now() + 30 * 86400000).toISOString();
+                              await updateCompanyDetails(co.id, { trialEndsAt: newDate, plan: 'pro' });
+                              await refreshAuthData();
+                            }}
+                            className="btn-action-ghost saas-admin-action-btn"
+                            title="Установить 30 дней пробного периода"
+                          >
+                            +30 дней
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const newDate = new Date(Date.now() + 365 * 86400000).toISOString();
+                              await updateCompanyDetails(co.id, { paidUntil: newDate, trialEndsAt: null, plan: 'pro' });
+                              await refreshAuthData();
+                            }}
+                            className="btn-action-ghost saas-admin-action-btn-success"
+                            title="Отметить как оплаченную подписку на 1 год"
+                          >
+                            Оплачено (1 год)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const newDate = new Date(Date.now() + 100 * 365 * 86400000).toISOString();
+                              await updateCompanyDetails(co.id, { paidUntil: newDate, trialEndsAt: null, plan: 'pro' });
+                              await refreshAuthData();
+                            }}
+                            className="btn-action-ghost saas-admin-action-btn-warning"
+                            title="Бессрочный VIP-доступ для сооснователей или спецклиентов"
+                          >
+                            Бессрочно (VIP)
+                          </button>
+                          {(co.trialEndsAt || isTrialActive) && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await updateCompanyDetails(co.id, { trialEndsAt: null });
+                                await refreshAuthData();
+                              }}
+                              className="btn-action-ghost saas-admin-action-btn-danger"
+                              title="Снять пробный период прямо сейчас"
+                            >
+                              Снять триал
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="saas-company-meta" style={{ marginTop: '12px' }}>
                         <span>Идентификатор: <code>{co.slug}</code></span>
                         <span>Создана: {new Date(co.createdAt).toLocaleDateString('ru-RU')}</span>
                       </div>
 
-                      {!isCurrent && (
-                        <button
-                          type="button"
-                          onClick={() => switchCompany(co.id)}
-                          className="btn-action-outline saas-switch-company-btn"
-                        >
-                          <ArrowRight size={14} />
-                          <span>Переключиться на эту организацию</span>
-                        </button>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+                        {!isCurrent ? (
+                          <button
+                            type="button"
+                            onClick={() => switchCompany(co.id)}
+                            className="btn-action-outline saas-switch-company-btn"
+                            style={{ margin: 0 }}
+                          >
+                            <ArrowRight size={14} />
+                            <span>Войти в компанию</span>
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)' }}>
+                            Текущая организация
+                          </span>
+                        )}
+
+                        {!isSystem && (
+                          <button
+                            type="button"
+                            onClick={() => openDeleteCompanyModal(co)}
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.08)',
+                              border: '1px solid rgba(239, 68, 68, 0.25)',
+                              color: '#ef4444',
+                              fontSize: '0.8rem',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '6px 12px',
+                              borderRadius: '6px',
+                              fontWeight: 500,
+                            }}
+                            title="Безвозвратно удалить организацию и все её данные"
+                          >
+                            <Trash2 size={13} />
+                            <span>Удалить</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -901,6 +920,252 @@ export const SuperAdminView: React.FC = () => {
                 </div>
               </form>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit User Profile */}
+      {editingUser && (
+        <div className="modal-backdrop animate-fade-in" onClick={() => setEditingUser(null)} role="presentation">
+          <div
+            className="quick-entry-bottom-sheet animate-slide-up"
+            style={{ maxWidth: '440px', margin: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+          >
+            <div className="modal-header-row">
+              <div>
+                <h3 className="modal-title">Настройка профиля сотрудника</h3>
+                <p className="modal-subtitle">Изменение отображаемого имени и контактного email</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingUser(null)}
+                className="btn-modal-close"
+                aria-label="Закрыть"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {editUserFeedback && (
+              <div
+                className={`saas-alert ${editUserFeedback.startsWith('Ошибка') ? 'saas-alert-error' : 'saas-alert-success'}`}
+                style={{ marginTop: '12px' }}
+              >
+                <span>{editUserFeedback}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveUser} className="saas-form" style={{ marginTop: '16px' }}>
+              <div className="saas-field-group">
+                <label className="saas-label">Имя и фамилия / Должность</label>
+                <input
+                  type="text"
+                  required
+                  value={editUserName}
+                  onChange={(e) => setEditUserName(e.target.value)}
+                  className="saas-input"
+                  placeholder="Например, Никита или Влад"
+                />
+              </div>
+
+              <div className="saas-field-group">
+                <label className="saas-label">Рабочий Email</label>
+                <input
+                  type="email"
+                  required
+                  value={editUserEmail}
+                  onChange={(e) => setEditUserEmail(e.target.value)}
+                  className="saas-input"
+                  placeholder="user@truespace.ru"
+                />
+              </div>
+
+              <div className="saas-form-actions" style={{ marginTop: '20px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="btn-action-outline"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingUser}
+                  className="btn-primary-gradient"
+                >
+                  <Check size={14} />
+                  <span>{isSavingUser ? 'Сохранение...' : 'Сохранить изменения'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Company Details */}
+      {editingCompany && (
+        <div className="modal-backdrop animate-fade-in" onClick={() => setEditingCompany(null)} role="presentation">
+          <div
+            className="quick-entry-bottom-sheet animate-slide-up"
+            style={{ maxWidth: '440px', margin: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+          >
+            <div className="modal-header-row">
+              <div>
+                <h3 className="modal-title">Настройка организации</h3>
+                <p className="modal-subtitle">Изменение официального названия бизнеса в системе</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingCompany(null)}
+                className="btn-modal-close"
+                aria-label="Закрыть"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {editCompanyFeedback && (
+              <div
+                className={`saas-alert ${editCompanyFeedback.startsWith('Ошибка') ? 'saas-alert-error' : 'saas-alert-success'}`}
+                style={{ marginTop: '12px' }}
+              >
+                <span>{editCompanyFeedback}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveCompany} className="saas-form" style={{ marginTop: '16px' }}>
+              <div className="saas-field-group">
+                <label className="saas-label">Название организации / бизнеса</label>
+                <input
+                  type="text"
+                  required
+                  value={editCompanyName}
+                  onChange={(e) => setEditCompanyName(e.target.value)}
+                  className="saas-input"
+                  placeholder="Например, Brilliant Event"
+                />
+              </div>
+
+              <div className="saas-form-actions" style={{ marginTop: '20px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingCompany(null)}
+                  className="btn-action-outline"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingCompany}
+                  className="btn-primary-gradient"
+                >
+                  <Check size={14} />
+                  <span>{isSavingCompany ? 'Сохранение...' : 'Сохранить название'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Company Confirmation */}
+      {deletingCompany && (
+        <div className="modal-backdrop animate-fade-in" onClick={() => setDeletingCompany(null)} role="presentation">
+          <div
+            className="quick-entry-bottom-sheet animate-slide-up"
+            style={{ maxWidth: '460px', margin: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+          >
+            <div className="modal-header-row">
+              <div>
+                <h3 className="modal-title" style={{ color: '#ef4444' }}>Удаление организации</h3>
+                <p className="modal-subtitle">Безвозвратное удаление компании из базы данных</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeletingCompany(null)}
+                className="btn-modal-close"
+                aria-label="Закрыть"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div
+              style={{
+                marginTop: '14px',
+                padding: '12px 14px',
+                borderRadius: '8px',
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                fontSize: '0.85rem',
+                lineHeight: 1.5,
+                color: '#ef4444',
+              }}
+            >
+              ⚠️ Внимание! Будут безвозвратно удалены все связанные счета, финансовые операции, мероприятия, статьи расходов и состав команды для организации <strong>«{deletingCompany.name}»</strong>.
+            </div>
+
+            {deleteCoError && (
+              <div
+                className="saas-alert saas-alert-error"
+                style={{ marginTop: '12px' }}
+              >
+                <span>{deleteCoError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmDeleteCompany} className="saas-form" style={{ marginTop: '16px' }}>
+              <div className="saas-field-group">
+                <label className="saas-label" style={{ fontSize: '0.8rem' }}>
+                  Для подтверждения введите точное имя компании: <strong>{deletingCompany.name}</strong>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  className="saas-input"
+                  placeholder={deletingCompany.name}
+                  autoFocus
+                />
+              </div>
+
+              <div className="saas-form-actions" style={{ marginTop: '20px' }}>
+                <button
+                  type="button"
+                  onClick={() => setDeletingCompany(null)}
+                  className="btn-action-outline"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDeletingCo || deleteConfirmText.trim() !== deletingCompany.name.trim()}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    background: deleteConfirmText.trim() === deletingCompany.name.trim() ? '#ef4444' : 'rgba(239, 68, 68, 0.3)',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontWeight: 600,
+                    cursor: deleteConfirmText.trim() === deletingCompany.name.trim() ? 'pointer' : 'not-allowed',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  <Trash2 size={14} />
+                  <span>{isDeletingCo ? 'Удаление...' : 'Да, удалить навсегда'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

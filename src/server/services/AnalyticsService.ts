@@ -22,8 +22,8 @@ export class AnalyticsService {
   /**
    * Calculates profitability margin metrics for a single event.
    */
-  public async getEventMargin(eventId: string): Promise<EventMarginMetrics | null> {
-    const events = await this.store.getEvents();
+  public async getEventMargin(eventId: string, companyId?: string): Promise<EventMarginMetrics | null> {
+    const events = await this.store.getEvents(companyId);
     // Resolve event by exact ID or normalized ID (hyphen vs underscore)
     const event = events.find(
       (e) => e.id === eventId || e.id.replace(/-/g, '_') === eventId.replace(/-/g, '_')
@@ -33,7 +33,7 @@ export class AnalyticsService {
       return null;
     }
 
-    const allTxs = await this.store.getTransactions({ includeDeleted: false });
+    const allTxs = await this.store.getTransactions({ includeDeleted: false, companyId });
     const eventTxs = allTxs.filter(
       (tx) =>
         tx.eventId &&
@@ -43,7 +43,7 @@ export class AnalyticsService {
           tx.eventId.replace(/-/g, '_') === eventId.replace(/-/g, '_'))
     );
 
-    const categories = await this.store.getCategories();
+    const categories = await this.store.getCategories(companyId);
     const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
 
     const revenue = round2(
@@ -108,12 +108,12 @@ export class AnalyticsService {
   /**
    * Calculates profitability margin metrics for all registered events.
    */
-  public async getAllEventsMargin(): Promise<EventMarginMetrics[]> {
-    const events = await this.store.getEvents();
+  public async getAllEventsMargin(companyId?: string): Promise<EventMarginMetrics[]> {
+    const events = await this.store.getEvents(companyId);
     const metrics: EventMarginMetrics[] = [];
 
     for (const ev of events) {
-      const metric = await this.getEventMargin(ev.id);
+      const metric = await this.getEventMargin(ev.id, companyId);
       if (metric) {
         metrics.push(metric);
       }
@@ -125,8 +125,8 @@ export class AnalyticsService {
   /**
    * Sum of general overhead expenses (eventId is null/undefined).
    */
-  public async getGeneralExpensesTotal(): Promise<number> {
-    const transactions = await this.store.getTransactions({ includeDeleted: false });
+  public async getGeneralExpensesTotal(companyId?: string): Promise<number> {
+    const transactions = await this.store.getTransactions({ includeDeleted: false, companyId });
     const generalTxs = transactions.filter(
       (tx) => tx.type === 'expense' && (tx.eventId === null || tx.eventId === undefined)
     );
@@ -136,15 +136,15 @@ export class AnalyticsService {
   /**
    * Consolidated overview of the business.
    */
-  public async getOverview(): Promise<GetAnalyticsOverviewResponseDTO> {
-    const accounts = await this.store.getAccounts();
+  public async getOverview(companyId?: string): Promise<GetAnalyticsOverviewResponseDTO> {
+    const accounts = await this.store.getAccounts(companyId);
     const totalBalance = round2(accounts.reduce((sum, a) => sum + a.currentBalance, 0));
-    const generalExpensesTotal = await this.getGeneralExpensesTotal();
+    const generalExpensesTotal = await this.getGeneralExpensesTotal(companyId);
 
-    const events = await this.store.getEvents();
+    const events = await this.store.getEvents(companyId);
     const activeEventsCount = events.filter((e) => e.status === 'active').length;
 
-    const eventMetrics = await this.getAllEventsMargin();
+    const eventMetrics = await this.getAllEventsMargin(companyId);
     const eventsTotalRevenue = round2(eventMetrics.reduce((sum, m) => sum + m.revenue, 0));
     const eventsTotalExpenses = round2(eventMetrics.reduce((sum, m) => sum + m.directExpenses, 0));
     const eventsNetProfit = round2(eventsTotalRevenue - eventsTotalExpenses);
@@ -170,12 +170,12 @@ export class AnalyticsService {
   /**
    * Analytics on partner withdrawals, dividends, and cash distribution.
    */
-  public async getPartnersAnalytics(): Promise<PartnersAnalyticsSummary> {
-    const partners = await this.store.getPartners();
-    const accounts = await this.store.getAccounts();
+  public async getPartnersAnalytics(companyId?: string): Promise<PartnersAnalyticsSummary> {
+    const partners = await this.store.getPartners(companyId);
+    const accounts = await this.store.getAccounts(companyId);
     const accountMap = new Map(accounts.map((a) => [a.id, a.name]));
 
-    const transactions = await this.store.getTransactions({ includeDeleted: false });
+    const transactions = await this.store.getTransactions({ includeDeleted: false, companyId });
 
     // Group transactions by partner
     const partnerMetrics: PartnerMetricItem[] = partners.map((p) => {

@@ -10,6 +10,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../src/server/app.js';
 import { InMemoryStore } from '../../src/server/storage/InMemoryStore.js';
+import { FinanceService } from '../../src/server/services/FinanceService.js';
+import { AnalyticsService } from '../../src/server/services/AnalyticsService.js';
 import { DEFAULT_COMPANY_ID } from '../../src/shared/constants.js';
 
 describe('SaaS Multi-Tenant & SuperAdmin Suite', () => {
@@ -170,6 +172,171 @@ describe('SaaS Multi-Tenant & SuperAdmin Suite', () => {
       // Member should appear in company members list
       const membersRes = await request(app).get(`/api/companies/${DEFAULT_COMPANY_ID}/members`);
       expect(membersRes.body.some((m: any) => m.membership.userId === res.body.user.id)).toBe(true);
+    });
+
+    it('PATCH /api/companies/:id updates trialEndsAt and paidUntil', async () => {
+      const futureDate = new Date(Date.now() + 14 * 86400000).toISOString();
+      const patchRes = await request(app)
+        .patch(`/api/companies/${DEFAULT_COMPANY_ID}`)
+        .send({
+          trialEndsAt: futureDate,
+          plan: 'pro',
+        });
+
+      expect(patchRes.status).toBe(200);
+      expect(patchRes.body.trialEndsAt).toBe(futureDate);
+      expect(patchRes.body.plan).toBe('pro');
+    });
+
+    it('DELETE /api/companies/:id deletes company, enforces RBAC and rejects deletion of company_platform_admin', async () => {
+      // 1. Trying to delete platform admin company should fail with 400
+      const systemRes = await request(app)
+        .delete('/api/companies/company_platform_admin')
+        .set('x-user-id', 'user_admin_platform');
+      expect(systemRes.status).toBe(400);
+
+      // 2. Create a test company to delete
+      const coRes = await request(app)
+        .post('/api/companies')
+        .send({ name: 'Временная Компания Для Удаления' });
+      expect(coRes.status).toBe(201);
+      const tempId = coRes.body.id;
+
+      // 3. Unauthorized request without x-user-id must return 401
+      const unauthRes = await request(app).delete(`/api/companies/${tempId}`);
+      expect(unauthRes.status).toBe(401);
+
+      // 4. Delete this company with owner credentials (user_nikita is default owner)
+      const deleteRes = await request(app)
+        .delete(`/api/companies/${tempId}`)
+        .set('x-user-id', 'user_nikita');
+      expect(deleteRes.status).toBe(200);
+      expect(deleteRes.body.success).toBe(true);
+
+      // 4. Verify it is gone
+      const getRes = await request(app).get(`/api/companies/${tempId}`);
+      expect(getRes.status).toBe(404);
+    });
+
+    it('POST /api/auth/send-code and /api/auth/register with verification code', async () => {
+      // 1. Send verification code
+      const sendRes = await request(app)
+        .post('/api/auth/send-code')
+        .send({
+          email: 'founder@truespace.ru',
+          fullName: 'Основатель',
+          companyName: 'Бар Основателей',
+        });
+      expect(sendRes.status).toBe(200);
+      expect(sendRes.body.success).toBe(true);
+      const code = sendRes.body.previewCode;
+      expect(code).toBeDefined();
+
+      // 2. Register with verification code
+      const regRes = await request(app)
+        .post('/api/auth/register')
+        .send({
+          email: 'founder@truespace.ru',
+          password: 'Password123!',
+          fullName: 'Основатель',
+          companyName: 'Бар Основателей',
+          code,
+        });
+
+      expect(regRes.status).toBe(201);
+      expect(regRes.body.user.email).toBe('founder@truespace.ru');
+      expect(regRes.body.user.isEmailVerified).toBe(true);
+      expect(regRes.body.company.name).toBe('Бар Основателей');
+      expect(regRes.body.company.trialEndsAt).toBeDefined();
+    });
+
+    it('FIX-03 & FIX-04: RBAC protects batch-delete and reset-balances against unauthorized roles', async () => {
+      // 1. Create a staff member for DEFAULT_COMPANY_ID
+      const staffUser = await store.saveUserProfile({
+        id: 'user_staff_test',
+        email: 'staff@truespace.ru',
+        fullName: 'Бармен Тестовый',
+        isSuperAdmin: false,
+      });
+      await store.addCompanyMember({
+        companyId: DEFAULT_COMPANY_ID,
+        userId: staffUser.id,
+        role: 'staff',
+      });
+
+      // 2. Batch-delete attempt by staff member should be rejected with 403
+      const batchDelRes = await request(app)
+        .post('/api/transactions/batch-delete')
+        .set('x-user-id', staffUser.id)
+        .set('x-company-id', DEFAULT_COMPANY_ID)
+        .send({ ids: ['tx_1', 'tx_2'] });
+      expect(batchDelRes.status).toBe(403);
+
+      // 3. Reset-balances attempt by staff member should be rejected with 403
+      const resetRes = await request(app)
+        .post('/api/accounts/reset-balances')
+        .set('x-user-id', staffUser.id)
+        .set('x-company-id', DEFAULT_COMPANY_ID);
+      expect(resetRes.status).toBe(403);
+    });
+
+    it('FIX-05: Cross-tenant transfer between accounts of different companies is strictly forbidden', async () => {
+      // Create second company and its account
+      const co2 = await store.createCompany({ name: 'Другой Кейтеринг', slug: 'other-cat', plan: 'pro', isActive: true });
+      const acc2 = await store.createAccount({
+        name: 'Касса Другого Кейтеринга',
+        type: 'cash',
+        initialBalance: 10000,
+        currentBalance: 10000,
+        currency: 'RUB',
+        description: 'Чужой счёт',
+        companyId: co2.id,
+      });
+
+      // Try to transfer from default company account (cash_1) to co2 account with companyId = DEFAULT_COMPANY_ID
+      const financeService = new FinanceService(store);
+      await expect(
+        financeService.createTransaction({
+          type: 'transfer',
+          amount: 500,
+          sourceAccountId: 'cash_1',
+          targetAccountId: acc2.id,
+          companyId: DEFAULT_COMPANY_ID,
+        })
+      ).rejects.toThrow(/другой организации|разных организаций/);
+    });
+
+    it('FIX-06: AnalyticsService strictly isolates metrics by companyId', async () => {
+      const analyticsService = new AnalyticsService(store);
+
+      // Default company metrics
+      const defaultOverview = await analyticsService.getOverview(DEFAULT_COMPANY_ID);
+      expect(defaultOverview.accounts.length).toBeGreaterThan(0);
+
+      // New empty company metrics
+      const emptyCo = await store.createCompany({ name: 'Новый пустой бар', slug: 'empty-bar', plan: 'free', isActive: true });
+      const emptyOverview = await analyticsService.getOverview(emptyCo.id);
+      expect(emptyOverview.accounts.length).toBe(0);
+      expect(emptyOverview.totalBalance).toBe(0);
+      expect(emptyOverview.eventsTotalRevenue).toBe(0);
+    });
+
+    it('FIX-07: updateTransaction rejects non-positive amounts', async () => {
+      const financeService = new FinanceService(store);
+      const created = await financeService.createTransaction({
+        type: 'expense',
+        amount: 1500,
+        sourceAccountId: 'cash_1',
+        description: 'Расходники бара',
+      });
+
+      await expect(
+        financeService.updateTransaction(created.transaction.id, { amount: -500 })
+      ).rejects.toThrow(/положительным числом/);
+
+      await expect(
+        financeService.updateTransaction(created.transaction.id, { amount: 0 })
+      ).rejects.toThrow(/положительным числом/);
     });
   });
 });

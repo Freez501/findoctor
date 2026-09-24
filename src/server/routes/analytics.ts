@@ -16,9 +16,10 @@ export function createAnalyticsRouter(analyticsService?: AnalyticsService): Rout
   const router = Router();
   const service = analyticsService || new AnalyticsService(getStorageInstance());
 
-  router.get('/events', async (_req: Request, res: Response, next: NextFunction) => {
+  router.get('/events', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const analytics = await service.getAllEventsMargin();
+      const companyId = (req.headers['x-company-id'] as string) || (req.query.companyId as string) || undefined;
+      const analytics = await service.getAllEventsMargin(companyId);
       res.json({ analytics });
     } catch (err) {
       next(err);
@@ -27,7 +28,8 @@ export function createAnalyticsRouter(analyticsService?: AnalyticsService): Rout
 
   router.get('/events/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const metrics = await service.getEventMargin(req.params.id);
+      const companyId = (req.headers['x-company-id'] as string) || (req.query.companyId as string) || undefined;
+      const metrics = await service.getEventMargin(req.params.id, companyId);
       if (!metrics) {
         res.status(404).json({ error: `Мероприятие ${req.params.id} не найдено`, statusCode: 404 });
         return;
@@ -38,18 +40,20 @@ export function createAnalyticsRouter(analyticsService?: AnalyticsService): Rout
     }
   });
 
-  router.get('/overview', async (_req: Request, res: Response, next: NextFunction) => {
+  router.get('/overview', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const overview = await service.getOverview();
+      const companyId = (req.headers['x-company-id'] as string) || (req.query.companyId as string) || undefined;
+      const overview = await service.getOverview(companyId);
       res.json(overview);
     } catch (err) {
       next(err);
     }
   });
 
-  router.get('/partners', async (_req: Request, res: Response, next: NextFunction) => {
+  router.get('/partners', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const partnersAnalytics = await service.getPartnersAnalytics();
+      const companyId = (req.headers['x-company-id'] as string) || (req.query.companyId as string) || undefined;
+      const partnersAnalytics = await service.getPartnersAnalytics(companyId);
       res.json(partnersAnalytics);
     } catch (err) {
       next(err);

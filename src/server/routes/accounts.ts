@@ -59,9 +59,28 @@ export function createAccountsRouter(financeService?: FinanceService): Router {
     }
   });
 
-  router.post('/reset-balances', async (_req: Request, res: Response, next: NextFunction) => {
+  router.post('/reset-balances', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const accounts = await service.resetAllAccountBalances();
+      const userId = (req.headers['x-user-id'] as string) || '';
+      const companyId = (req.headers['x-company-id'] as string) || (req.query.companyId as string) || '';
+
+      if (userId && companyId) {
+        const store = service.getStore();
+        const user = await store.getUserById(userId);
+        if (user && !user.isSuperAdmin) {
+          const members = await store.getCompanyMembers(companyId);
+          const member = members.find((m) => m.membership.userId === userId);
+          const role = member?.membership.role;
+          if (!role || (role !== 'owner' && role !== 'admin')) {
+            return res.status(403).json({
+              error: 'Сброс остатков счетов разрешён только владельцу или администратору организации',
+              statusCode: 403,
+            });
+          }
+        }
+      }
+
+      const accounts = await service.resetAllAccountBalances(companyId || undefined);
       res.json({ success: true, accounts, message: 'Остатки всех счетов успешно обнулены' });
     } catch (err) {
       next(err);

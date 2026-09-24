@@ -20,13 +20,16 @@
   --secondary-foreground: #262422;
 
   --muted: #f4f3f1;
-  --muted-foreground: #8a8580;
+  --muted-foreground: #6b7280;
 
   --accent: #f4f3f1;
   --accent-foreground: #262422;
 
   --destructive: #dc2626;
   --destructive-foreground: #fbfbfa;
+
+  --color-success: #059669;
+  --color-destructive: #dc2626;
 
   --border: #e7e5e2;
   --input: #e7e5e2;
@@ -93,7 +96,7 @@
   --color-surface-strong: #ffffff;
   --color-border: #e7e5e2;
   --color-text: #262422;
-  --color-text-muted: #8a8580;
+  --color-text-muted: #6b7280;
   --color-accent: #363330;
   --color-accent-strong: #262422;
   --color-champagne: #e7e5e2;
@@ -4642,4 +4645,142 @@ textarea.modal-input {
   color: var(--color-mid-gray);
   border-top: 1px solid var(--color-hairline);
   padding-top: 14px;
+}
+
+/* ========================================================================= */
+/* FIX-14 & FIX-18: Accessible Touch Targets & Common UI Utility Classes     */
+/* ========================================================================= */
+.btn-touch-target {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-success-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #10b981;
+  font-size: 0.85rem;
+  margin-bottom: 16px;
+}
+
+.auth-info-card {
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--foreground);
+}
+
+.auth-code-input {
+  letter-spacing: 4px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.auth-text-link {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.auth-text-link-muted {
+  background: none;
+  border: none;
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.auth-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 10px 0;
+}
+
+.auth-checkbox-label {
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.auth-switch-prompt {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--muted-foreground);
+}
+
+.auth-switch-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--primary);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.saas-platform-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--color-accent);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.saas-admin-action-btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+}
+
+.saas-admin-action-btn-success {
+  padding: 4px 8px;
+  font-size: 11px;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #10b981;
+}
+
+.saas-admin-action-btn-warning {
+  padding: 4px 8px;
+  font-size: 11px;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #f59e0b;
+}
+
+.saas-admin-action-btn-danger {
+  padding: 4px 8px;
+  font-size: 11px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.saas-actions-flex {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.saas-muted-subtext {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
 }

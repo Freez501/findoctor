@@ -15,6 +15,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Trash2, AlertCircle } from 'lucide-react';
 import { Transaction, TransactionType } from '../../../shared/types.js';
 import { useFinance } from '../../context/FinanceContext.js';
+import { useAuth } from '../../context/AuthContext.js';
 
 interface Props {
   transaction: Transaction | null;
@@ -24,6 +25,8 @@ interface Props {
 
 export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onClose }) => {
   const { accounts, categories, events, partners, updateTransaction, deleteTransaction } = useFinance();
+  const { userRole, isSuperAdmin } = useAuth();
+  const canDelete = isSuperAdmin || userRole === 'owner' || userRole === 'admin';
 
   const [type, setType] = useState<TransactionType>('expense');
   const [amount, setAmount] = useState<number>(0);
@@ -349,40 +352,42 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
 
           {/* Action Buttons */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', paddingTop: '12px', borderTop: '1px solid var(--border)', marginTop: '4px' }}>
-            {isConfirmDelete ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--destructive)', fontWeight: 600 }}>
-                  Точно удалить?
-                </span>
+            {canDelete ? (
+              isConfirmDelete ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--destructive)', fontWeight: 600 }}>
+                    Точно удалить?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={isDeleting}
+                    className="btn-confirm-yes"
+                    style={{ padding: '6px 12px' }}
+                  >
+                    {isDeleting ? '...' : 'Да, удалить'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmDelete(false)}
+                    className="btn-confirm-no"
+                    style={{ padding: '6px 12px' }}
+                  >
+                    Отмена
+                  </button>
+                </div>
+              ) : (
                 <button
                   type="button"
-                  onClick={handleDelete}
-                  disabled={isDeleting}
-                  className="btn-confirm-yes"
-                  style={{ padding: '6px 12px' }}
+                  onClick={() => setIsConfirmDelete(true)}
+                  className="btn-modal-danger"
+                  title="Удалить / отменить операцию с пересчётом баланса"
                 >
-                  {isDeleting ? '...' : 'Да, удалить'}
+                  <Trash2 size={14} />
+                  <span>Удалить</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setIsConfirmDelete(false)}
-                  className="btn-confirm-no"
-                  style={{ padding: '6px 12px' }}
-                >
-                  Отмена
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setIsConfirmDelete(true)}
-                className="btn-modal-danger"
-                title="Удалить / отменить операцию с пересчётом баланса"
-              >
-                <Trash2 size={14} />
-                <span>Удалить</span>
-              </button>
-            )}
+              )
+            ) : <div />}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <button

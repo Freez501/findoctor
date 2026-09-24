@@ -233,9 +233,9 @@ export const EventsView: React.FC = () => {
         <div className="events-summary-card">
           <div className="events-summary-header">
             <span>Оплачено клиентами</span>
-            <CheckCircle size={14} style={{ color: '#059669' }} />
+            <CheckCircle size={14} style={{ color: 'var(--color-success)' }} />
           </div>
-          <div className="events-summary-amount" style={{ color: '#059669' }}>
+          <div className="events-summary-amount" style={{ color: 'var(--color-success)' }}>
             {formatRubles(totals.totalReceived)}
           </div>
         </div>
@@ -253,9 +253,9 @@ export const EventsView: React.FC = () => {
         <div className="events-summary-card">
           <div className="events-summary-header">
             <span>Прямые расходы</span>
-            <AlertCircle size={14} style={{ color: '#dc2626' }} />
+            <AlertCircle size={14} style={{ color: 'var(--color-destructive)' }} />
           </div>
-          <div className="events-summary-amount" style={{ color: '#dc2626' }}>
+          <div className="events-summary-amount" style={{ color: 'var(--color-destructive)' }}>
             {formatRubles(totals.totalCosts)}
           </div>
         </div>
@@ -263,9 +263,9 @@ export const EventsView: React.FC = () => {
         <div className="events-summary-card">
           <div className="events-summary-header">
             <span>Чистая прибыль</span>
-            <TrendingUp size={14} style={{ color: totals.totalProfit >= 0 ? '#059669' : '#dc2626' }} />
+            <TrendingUp size={14} style={{ color: totals.totalProfit >= 0 ? 'var(--color-success)' : 'var(--color-destructive)' }} />
           </div>
-          <div className="events-summary-amount" style={{ color: totals.totalProfit >= 0 ? '#059669' : '#dc2626' }}>
+          <div className="events-summary-amount" style={{ color: totals.totalProfit >= 0 ? 'var(--color-success)' : 'var(--color-destructive)' }}>
             {formatRubles(totals.totalProfit)}
           </div>
         </div>
@@ -424,7 +424,8 @@ export const EventsView: React.FC = () => {
                     type="button"
                     onClick={() => handleOpenEdit(ev)}
                     title="Редактировать мероприятие"
-                    style={{ padding: '6px', color: 'var(--color-text-muted)', borderRadius: '4px', cursor: 'pointer' }}
+                    className="btn-touch-target"
+                    style={{ minWidth: '44px', minHeight: '44px', color: 'var(--color-text-muted)', borderRadius: '4px', cursor: 'pointer' }}
                   >
                     <Edit2 size={15} />
                   </button>
@@ -452,7 +453,8 @@ export const EventsView: React.FC = () => {
                       type="button"
                       onClick={() => setDeletingId(ev.id)}
                       title="Удалить мероприятие"
-                      style={{ padding: '6px', color: 'var(--color-text-muted)', borderRadius: '4px', cursor: 'pointer' }}
+                      className="btn-touch-target"
+                      style={{ minWidth: '44px', minHeight: '44px', color: 'var(--color-text-muted)', borderRadius: '4px', cursor: 'pointer' }}
                     >
                       <Trash2 size={15} />
                     </button>

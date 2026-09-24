@@ -119,6 +119,25 @@ export function createTransactionsRouter(financeService?: FinanceService): Route
         return;
       }
 
+      const userId = (req.headers['x-user-id'] as string) || '';
+      const companyId = (req.headers['x-company-id'] as string) || '';
+
+      if (userId && companyId) {
+        const store = service.getStore();
+        const user = await store.getUserById(userId);
+        if (user && !user.isSuperAdmin) {
+          const members = await store.getCompanyMembers(companyId);
+          const member = members.find((m) => m.membership.userId === userId);
+          const role = member?.membership.role;
+          if (role && role !== 'owner' && role !== 'admin') {
+            return res.status(403).json({
+              error: 'Пакетное удаление финансовых операций разрешено только администраторам или владельцу организации',
+              statusCode: 403,
+            });
+          }
+        }
+      }
+
       const result = await service.deleteBatchTransactions(ids);
       res.json({
         success: true,
@@ -207,6 +226,27 @@ export function createTransactionsRouter(financeService?: FinanceService): Route
 
   router.delete('/:id', async (req: Request, res: Response) => {
     try {
+      const userId = (req.headers['x-user-id'] as string) || '';
+      const companyId = (req.headers['x-company-id'] as string) || '';
+
+      if (userId && companyId) {
+        const store = service.getStore();
+        const user = await store.getUserById(userId);
+        if (user && !user.isSuperAdmin) {
+          const members = await store.getCompanyMembers(companyId);
+          const member = members.find((m) => m.membership.userId === userId);
+          const role = member?.membership.role;
+          // Only owner and admin (partner/co-founder) can delete transactions!
+          // Accountant and staff are strictly forbidden from deleting transactions.
+          if (role && role !== 'owner' && role !== 'admin') {
+            return res.status(403).json({
+              error: 'Удалять финансовые операции имеет право только главный финдиректор или владелец организации',
+              statusCode: 403,
+            });
+          }
+        }
+      }
+
       const result = await service.deleteTransaction(req.params.id);
       res.json({
         success: true,

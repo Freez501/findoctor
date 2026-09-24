@@ -184,14 +184,34 @@ export function createSystemRouter(store?: IFinanceStore): Router {
       });
 
       // Gather current local data
+      const users = await storage.getUsers();
+      const companies = await storage.getCompanies();
+      const memberships: any[] = [];
+      for (const co of companies) {
+        const members = await storage.getCompanyMembers(co.id);
+        memberships.push(...members.map((m) => m.membership));
+      }
       const accounts = await storage.getAccounts();
       const events = await storage.getEvents();
       const categories = await storage.getCategories();
       const transactions = await storage.getTransactions({ includeDeleted: true });
       const partners = await storage.getPartners();
-      const companies = await storage.getCompanies();
 
-      // 1. Sync Companies
+      // 1. Sync User Profiles (must be first for foreign keys)
+      if (users.length > 0) {
+        await client.from('user_profiles').upsert(
+          users.map((u) => ({
+            id: u.id,
+            email: u.email,
+            full_name: u.fullName || null,
+            avatar_url: u.avatarUrl || null,
+            is_super_admin: u.isSuperAdmin || false,
+            is_email_verified: u.isEmailVerified || false,
+          }))
+        );
+      }
+
+      // 2. Sync Companies
       if (companies.length > 0) {
         await client.from('companies').upsert(
           companies.map((c) => ({
@@ -201,6 +221,21 @@ export function createSystemRouter(store?: IFinanceStore): Router {
             plan: c.plan,
             is_active: c.isActive,
             owner_id: c.ownerId,
+            trial_ends_at: c.trialEndsAt || null,
+            paid_until: c.paidUntil || null,
+          }))
+        );
+      }
+
+      // 3. Sync Company Members
+      if (memberships.length > 0) {
+        await client.from('company_members').upsert(
+          memberships.map((m) => ({
+            id: m.id,
+            company_id: m.companyId,
+            user_id: m.userId,
+            role: m.role,
+            invited_by: m.invitedBy || null,
           }))
         );
       }
@@ -348,8 +383,10 @@ export function createSystemRouter(store?: IFinanceStore): Router {
       if (accRes.error) throw new Error(`Счета: ${accRes.error.message}`);
       if (txRes.error) throw new Error(`Транзакции: ${txRes.error.message}`);
 
-      // Map Supabase rows to Truespace internal types
-      const importedAccounts = (accRes.data || []).map((a: any) => ({
+      // Map Supabase rows to Truespace internal types (excluding deprecated card_sbp)
+      const importedAccounts = (accRes.data || [])
+        .filter((a: any) => a.id !== 'card_sbp')
+        .map((a: any) => ({
         id: a.id,
         companyId: a.company_id,
         name: a.name,

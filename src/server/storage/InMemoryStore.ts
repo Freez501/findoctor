@@ -21,6 +21,8 @@ import { DEFAULT_COMPANY_ID } from '../../shared/constants.js';
 import { createInitialDatabaseState, DatabaseState } from '../data/seed.js';
 import { IFinanceStore, NewEventInput, NewTransactionInput } from './interfaces.js';
 
+let globalTxCounter = 0;
+
 function clone<T>(val: T): T {
   return JSON.parse(JSON.stringify(val));
 }
@@ -52,6 +54,8 @@ export class InMemoryStore implements IFinanceStore {
       name: companyInput.name.trim(),
       slug: companyInput.slug || companyInput.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
       plan: companyInput.plan || 'free',
+      trialEndsAt: companyInput.trialEndsAt,
+      paidUntil: companyInput.paidUntil,
       isActive: companyInput.isActive ?? true,
       ownerId: companyInput.ownerId,
       createdAt: new Date().toISOString(),
@@ -67,6 +71,35 @@ export class InMemoryStore implements IFinanceStore {
     if (!comp) throw new Error(`Компания не найдена: ${id}`);
     Object.assign(comp, updates, { updatedAt: new Date().toISOString() });
     return clone(comp);
+  }
+
+  public async deleteCompany(id: string): Promise<boolean> {
+    if (!this.state.companies) return false;
+    const initialLen = this.state.companies.length;
+    this.state.companies = this.state.companies.filter((c) => c.id !== id);
+    if (this.state.companies.length === initialLen) return false;
+
+    // Cascade delete accounts, transactions, events, categories, partners, memberships
+    if (this.state.accounts) {
+      this.state.accounts = this.state.accounts.filter((a) => a.companyId !== id);
+    }
+    if (this.state.transactions) {
+      this.state.transactions = this.state.transactions.filter((t) => t.companyId !== id);
+    }
+    if (this.state.events) {
+      this.state.events = this.state.events.filter((e) => e.companyId !== id);
+    }
+    if (this.state.categories) {
+      this.state.categories = this.state.categories.filter((c) => c.companyId !== id);
+    }
+    if (this.state.partners) {
+      this.state.partners = this.state.partners.filter((p) => p.companyId !== id);
+    }
+    if (this.state.memberships) {
+      this.state.memberships = this.state.memberships.filter((m) => m.companyId !== id);
+    }
+
+    return true;
   }
 
   // =========================================================================
@@ -95,6 +128,7 @@ export class InMemoryStore implements IFinanceStore {
         fullName: userInput.fullName || userInput.email.split('@')[0],
         avatarUrl: userInput.avatarUrl,
         isSuperAdmin: userInput.isSuperAdmin || false,
+        isEmailVerified: userInput.isEmailVerified ?? false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -130,10 +164,8 @@ export class InMemoryStore implements IFinanceStore {
   // =========================================================================
 
   public async getAccounts(companyId?: string): Promise<Account[]> {
-    if (companyId) {
-      return clone(this.state.accounts.filter((a) => !a.companyId || a.companyId === companyId));
-    }
-    return clone(this.state.accounts);
+    const targetCompanyId = companyId || DEFAULT_COMPANY_ID;
+    return clone(this.state.accounts.filter((a) => (a.companyId || DEFAULT_COMPANY_ID) === targetCompanyId));
   }
 
   public async getAccountById(id: string): Promise<Account | null> {
@@ -147,6 +179,16 @@ export class InMemoryStore implements IFinanceStore {
       throw new Error(`Счёт не найден: ${id}`);
     }
     acc.currentBalance = Math.round(newBalance * 100) / 100;
+    acc.updatedAt = new Date().toISOString();
+    return clone(acc);
+  }
+
+  public async adjustAccountBalance(id: string, delta: number): Promise<Account> {
+    const acc = this.state.accounts.find((a) => a.id === id);
+    if (!acc) {
+      throw new Error(`Счёт не найден: ${id}`);
+    }
+    acc.currentBalance = Math.round((acc.currentBalance + delta) * 100) / 100;
     acc.updatedAt = new Date().toISOString();
     return clone(acc);
   }
@@ -174,7 +216,7 @@ export class InMemoryStore implements IFinanceStore {
 
   public async createAccount(accountInput: Omit<Account, 'currentBalance' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<Account> {
     const now = new Date().toISOString();
-    const id = accountInput.id || `acc_${Date.now()}`;
+    const id = accountInput.id || `acc_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const newAcc: Account = {
       id,
       name: accountInput.name,
@@ -206,11 +248,9 @@ export class InMemoryStore implements IFinanceStore {
   // =========================================================================
 
   public async getPartners(companyId?: string): Promise<Partner[]> {
+    const target = companyId || DEFAULT_COMPANY_ID;
     const partners = this.state.partners || [];
-    if (companyId) {
-      return clone(partners.filter((p) => !p.companyId || p.companyId === companyId));
-    }
-    return clone(partners);
+    return clone(partners.filter((p) => (p.companyId || DEFAULT_COMPANY_ID) === target));
   }
 
   public async getPartnerById(id: string): Promise<Partner | null> {
@@ -260,10 +300,8 @@ export class InMemoryStore implements IFinanceStore {
   // =========================================================================
 
   public async getEvents(companyId?: string): Promise<CateringEvent[]> {
-    if (companyId) {
-      return clone(this.state.events.filter((e) => !e.companyId || e.companyId === companyId));
-    }
-    return clone(this.state.events);
+    const target = companyId || DEFAULT_COMPANY_ID;
+    return clone(this.state.events.filter((e) => (e.companyId || DEFAULT_COMPANY_ID) === target));
   }
 
   public async getEventById(id: string): Promise<CateringEvent | null> {
@@ -373,7 +411,7 @@ export class InMemoryStore implements IFinanceStore {
         result = result.filter((tx) => !tx.isDeleted);
       }
       if (filter.companyId) {
-        result = result.filter((tx) => !tx.companyId || tx.companyId === filter.companyId);
+        result = result.filter((tx) => (tx.companyId || DEFAULT_COMPANY_ID) === filter.companyId);
       }
       if (filter.accountId) {
         result = result.filter(
@@ -424,7 +462,7 @@ export class InMemoryStore implements IFinanceStore {
     const now = new Date().toISOString();
     const txId = ('id' in txInput && txInput.id)
       ? txInput.id
-      : `tx-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      : `tx-${Date.now()}-${++globalTxCounter}-${Math.random().toString(36).substring(2, 9)}`;
 
     const newTx: Transaction = {
       id: txId,

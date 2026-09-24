@@ -182,7 +182,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
         partnerId: direction === 'dividends' ? selectedPartnerId : null,
         partnerName: direction === 'dividends' && selectedPartner ? selectedPartner.name : null,
         description: description.trim(),
-        createdBy: currentUser?.fullName || currentUser?.email || 'Никита',
+        createdBy: currentUser?.fullName || currentUser?.email || 'Пользователь',
         companyId: currentCompany?.id,
       });
 

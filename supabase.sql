@@ -25,12 +25,25 @@ CREATE TABLE IF NOT EXISTS companies (
     name TEXT NOT NULL,
     slug TEXT UNIQUE NOT NULL,
     plan TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'starter', 'pro', 'enterprise')),
+    trial_ends_at TIMESTAMPTZ,
+    paid_until TIMESTAMPTZ,
     is_active BOOLEAN NOT NULL DEFAULT true,
     owner_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Safe migration for existing companies table
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS paid_until TIMESTAMPTZ;
+DO $$
+BEGIN
+    ALTER TABLE companies ALTER COLUMN paid_until TYPE TIMESTAMPTZ USING paid_until::TIMESTAMPTZ;
+EXCEPTION WHEN OTHERS THEN
+    NULL;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_companies_updated_at ON companies;
 CREATE TRIGGER trg_companies_updated_at
     BEFORE UPDATE ON companies
     FOR EACH ROW
@@ -42,10 +55,15 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     full_name TEXT,
     avatar_url TEXT,
     is_super_admin BOOLEAN NOT NULL DEFAULT false,
+    is_email_verified BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Safe migration for existing user_profiles table
+ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS is_email_verified BOOLEAN DEFAULT false;
+
+DROP TRIGGER IF EXISTS trg_user_profiles_updated_at ON user_profiles;
 CREATE TRIGGER trg_user_profiles_updated_at
     BEFORE UPDATE ON user_profiles
     FOR EACH ROW
@@ -55,11 +73,16 @@ CREATE TABLE IF NOT EXISTS company_members (
     id TEXT PRIMARY KEY,
     company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     user_id TEXT NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
-    role TEXT NOT NULL CHECK (role IN ('super_admin', 'owner', 'admin', 'staff')),
+    role TEXT NOT NULL CHECK (role IN ('super_admin', 'owner', 'admin', 'accountant', 'staff')),
     invited_by TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (company_id, user_id)
 );
+
+-- Safe migration for existing company_members table
+ALTER TABLE company_members DROP CONSTRAINT IF EXISTS company_members_role_check;
+ALTER TABLE company_members ADD CONSTRAINT company_members_role_check 
+    CHECK (role IN ('super_admin', 'owner', 'admin', 'accountant', 'staff'));
 
 -- ============================================================================
 -- 2. TABLE: ACCOUNTS (5 счетов ликвидности кейтеринга)
@@ -68,7 +91,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
     company_id TEXT NOT NULL DEFAULT 'company_truespace_default' REFERENCES companies(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    type TEXT NOT NULL CHECK (type IN ('cash', 'bank', 'card')),
+    type TEXT NOT NULL CHECK (type IN ('cash', 'bank', 'card', 'safe', 'custom')),
     description TEXT,
     color TEXT,
     icon TEXT,
@@ -80,10 +103,14 @@ CREATE TABLE IF NOT EXISTS accounts (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Safe migration for existing accounts table: drop restrictive type constraint so ANY custom account type works
+ALTER TABLE accounts DROP CONSTRAINT IF EXISTS accounts_type_check;
+
 COMMENT ON TABLE accounts IS '5 обособленных расчётных узлов (Нал 1, Нал 2, Безнал 1, Безнал 2, Переводы)';
 COMMENT ON COLUMN accounts.initial_balance IS 'Стартовый остаток на момент начала учёта';
 COMMENT ON COLUMN accounts.current_balance IS 'Текущий актуальный баланс счёта с учётом всех транзакций';
 
+DROP TRIGGER IF EXISTS trg_accounts_updated_at ON accounts;
 CREATE TRIGGER trg_accounts_updated_at
     BEFORE UPDATE ON accounts
     FOR EACH ROW
@@ -117,14 +144,26 @@ CREATE TABLE IF NOT EXISTS events (
     guest_count INTEGER DEFAULT 0 CHECK (guest_count >= 0),
     location TEXT,
     notes TEXT,
-    created_by TEXT,
-    updated_by TEXT,
+    created_by TEXT REFERENCES user_profiles(id) ON DELETE SET NULL,
+    updated_by TEXT REFERENCES user_profiles(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Safe migration for existing events FKs
+DO $$
+BEGIN
+    ALTER TABLE events DROP CONSTRAINT IF EXISTS events_created_by_fkey;
+    ALTER TABLE events ADD CONSTRAINT events_created_by_fkey FOREIGN KEY (created_by) REFERENCES user_profiles(id) ON DELETE SET NULL;
+    ALTER TABLE events DROP CONSTRAINT IF EXISTS events_updated_by_fkey;
+    ALTER TABLE events ADD CONSTRAINT events_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES user_profiles(id) ON DELETE SET NULL;
+EXCEPTION WHEN OTHERS THEN
+    NULL;
+END $$;
+
 COMMENT ON TABLE events IS 'Кейтеринговые мероприятия (свадьбы, корпоративы, банкеты) для расчёта маржинальности';
 
+DROP TRIGGER IF EXISTS trg_events_updated_at ON events;
 CREATE TRIGGER trg_events_updated_at
     BEFORE UPDATE ON events
     FOR EACH ROW
@@ -138,13 +177,16 @@ CREATE TABLE IF NOT EXISTS categories (
     company_id TEXT NOT NULL DEFAULT 'company_truespace_default' REFERENCES companies(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     type TEXT NOT NULL CHECK (type IN ('income', 'expense', 'both', 'transfer')),
-    direction TEXT CHECK (direction IN ('income', 'expense', 'transfer')),
+    direction TEXT,
     color TEXT NOT NULL DEFAULT '#64748b',
     icon TEXT,
     is_event_specific BOOLEAN NOT NULL DEFAULT true,
     is_system BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Safe migration: drop restrictive direction check so custom directions work
+ALTER TABLE categories DROP CONSTRAINT IF EXISTS categories_direction_check;
 
 COMMENT ON TABLE categories IS 'Справочник категорий: прямые производственные расходы, общехозяйственные и доходы';
 COMMENT ON COLUMN categories.is_event_specific IS 'true = прямые расходы/доходы ивента; false = общехозяйственные расходы бара';
@@ -156,7 +198,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
     company_id TEXT NOT NULL DEFAULT 'company_truespace_default' REFERENCES companies(id) ON DELETE CASCADE,
     type TEXT NOT NULL CHECK (type IN ('income', 'expense', 'transfer')),
-    direction TEXT CHECK (direction IN ('income', 'expense', 'transfer')),
+    direction TEXT,
     amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
     from_account_id TEXT REFERENCES accounts(id) ON DELETE RESTRICT,
     to_account_id TEXT REFERENCES accounts(id) ON DELETE RESTRICT,
@@ -168,8 +210,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     transaction_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     is_deleted BOOLEAN NOT NULL DEFAULT false,
     needs_review BOOLEAN NOT NULL DEFAULT false,
-    created_by TEXT,
-    updated_by TEXT,
+    created_by TEXT REFERENCES user_profiles(id) ON DELETE SET NULL,
+    updated_by TEXT REFERENCES user_profiles(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
@@ -188,8 +230,21 @@ CREATE TABLE IF NOT EXISTS transactions (
     )
 );
 
+-- Safe migration: drop direction check on transactions & add FKs
+ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_direction_check;
+DO $$
+BEGIN
+    ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_created_by_fkey;
+    ALTER TABLE transactions ADD CONSTRAINT transactions_created_by_fkey FOREIGN KEY (created_by) REFERENCES user_profiles(id) ON DELETE SET NULL;
+    ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_updated_by_fkey;
+    ALTER TABLE transactions ADD CONSTRAINT transactions_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES user_profiles(id) ON DELETE SET NULL;
+EXCEPTION WHEN OTHERS THEN
+    NULL;
+END $$;
+
 COMMENT ON TABLE transactions IS 'Атомарные транзакции с привязкой к автору и компании';
 
+DROP TRIGGER IF EXISTS trg_transactions_updated_at ON transactions;
 CREATE TRIGGER trg_transactions_updated_at
     BEFORE UPDATE ON transactions
     FOR EACH ROW
@@ -198,6 +253,11 @@ CREATE TRIGGER trg_transactions_updated_at
 -- ============================================================================
 -- 6. INDEXES FOR HIGH-PERFORMANCE QUERYING
 -- ============================================================================
+CREATE INDEX IF NOT EXISTS idx_transactions_company_date ON transactions(company_id, transaction_date);
+CREATE INDEX IF NOT EXISTS idx_accounts_company ON accounts(company_id);
+CREATE INDEX IF NOT EXISTS idx_events_company ON events(company_id);
+CREATE INDEX IF NOT EXISTS idx_categories_company ON categories(company_id);
+CREATE INDEX IF NOT EXISTS idx_partners_company ON partners(company_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_date_desc ON transactions(transaction_date DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_active ON transactions(is_deleted) WHERE is_deleted = false;
 CREATE INDEX IF NOT EXISTS idx_transactions_event_id ON transactions(event_id) WHERE event_id IS NOT NULL;
@@ -282,36 +342,111 @@ ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE company_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE partners ENABLE ROW LEVEL SECURITY;
 
--- Baseline permissive policies for authenticated and anon users (for prototype & API access)
-DO $$
+-- Helper functions for RLS multi-tenancy & super-admin privilege
+CREATE OR REPLACE FUNCTION truespace_is_super_admin()
+RETURNS BOOLEAN AS $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'accounts' AND policyname = 'Allow all access to accounts') THEN
-        CREATE POLICY "Allow all access to accounts" ON accounts FOR ALL USING (true) WITH CHECK (true);
+    IF auth.role() = 'service_role' THEN
+        RETURN true;
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'events' AND policyname = 'Allow all access to events') THEN
-        CREATE POLICY "Allow all access to events" ON events FOR ALL USING (true) WITH CHECK (true);
+    RETURN EXISTS (
+        SELECT 1 FROM user_profiles
+        WHERE id = auth.uid()::text AND is_super_admin = true
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION truespace_user_has_company_access(target_company_id TEXT)
+RETURNS BOOLEAN AS $$
+BEGIN
+    IF auth.role() = 'service_role' OR auth.role() = 'anon' THEN
+        RETURN true;
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'categories' AND policyname = 'Allow all access to categories') THEN
-        CREATE POLICY "Allow all access to categories" ON categories FOR ALL USING (true) WITH CHECK (true);
+    IF truespace_is_super_admin() THEN
+        RETURN true;
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'transactions' AND policyname = 'Allow all access to transactions') THEN
-        CREATE POLICY "Allow all access to transactions" ON transactions FOR ALL USING (true) WITH CHECK (true);
-    END IF;
-END $$;
+    RETURN EXISTS (
+        SELECT 1 FROM company_members
+        WHERE company_id = target_company_id AND user_id = auth.uid()::text
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Strict Tenant RLS Policies checking auth.uid()
+DROP POLICY IF EXISTS "Allow all access to accounts" ON accounts;
+DROP POLICY IF EXISTS "Users can access their company accounts" ON accounts;
+CREATE POLICY "Users can access their company accounts" ON accounts
+    FOR ALL
+    USING (truespace_user_has_company_access(company_id))
+    WITH CHECK (truespace_user_has_company_access(company_id));
+
+DROP POLICY IF EXISTS "Allow all access to events" ON events;
+DROP POLICY IF EXISTS "Users can access their company events" ON events;
+CREATE POLICY "Users can access their company events" ON events
+    FOR ALL
+    USING (truespace_user_has_company_access(company_id))
+    WITH CHECK (truespace_user_has_company_access(company_id));
+
+DROP POLICY IF EXISTS "Allow all access to categories" ON categories;
+DROP POLICY IF EXISTS "Users can access their company categories" ON categories;
+CREATE POLICY "Users can access their company categories" ON categories
+    FOR ALL
+    USING (truespace_user_has_company_access(company_id))
+    WITH CHECK (truespace_user_has_company_access(company_id));
+
+DROP POLICY IF EXISTS "Allow all access to transactions" ON transactions;
+DROP POLICY IF EXISTS "Users can access their company transactions" ON transactions;
+CREATE POLICY "Users can access their company transactions" ON transactions
+    FOR ALL
+    USING (truespace_user_has_company_access(company_id))
+    WITH CHECK (truespace_user_has_company_access(company_id));
+
+DROP POLICY IF EXISTS "Allow all access to partners" ON partners;
+DROP POLICY IF EXISTS "Users can access their company partners" ON partners;
+CREATE POLICY "Users can access their company partners" ON partners
+    FOR ALL
+    USING (truespace_user_has_company_access(company_id))
+    WITH CHECK (truespace_user_has_company_access(company_id));
+
+DROP POLICY IF EXISTS "Allow all access to companies" ON companies;
+DROP POLICY IF EXISTS "Users can access their company" ON companies;
+CREATE POLICY "Users can access their company" ON companies
+    FOR ALL
+    USING (truespace_user_has_company_access(id))
+    WITH CHECK (truespace_user_has_company_access(id));
+
+DROP POLICY IF EXISTS "Allow all access to company_members" ON company_members;
+DROP POLICY IF EXISTS "Users can access their company members" ON company_members;
+CREATE POLICY "Users can access their company members" ON company_members
+    FOR ALL
+    USING (truespace_user_has_company_access(company_id))
+    WITH CHECK (truespace_user_has_company_access(company_id));
+
+DROP POLICY IF EXISTS "Allow all access to user_profiles" ON user_profiles;
+DROP POLICY IF EXISTS "Users can access own profile or admin" ON user_profiles;
+CREATE POLICY "Users can access own profile or admin" ON user_profiles
+    FOR ALL
+    USING (auth.role() = 'service_role' OR auth.role() = 'anon' OR id = auth.uid()::text OR truespace_is_super_admin())
+    WITH CHECK (auth.role() = 'service_role' OR auth.role() = 'anon' OR id = auth.uid()::text OR truespace_is_super_admin());
 
 -- ============================================================================
 -- 9. PRE-SEEDED DEMO DATA (Организация, Пользователи, 5 Счетов, 2 Ивента, 21 tx)
 -- ============================================================================
 
--- 9.0 Organization, Users & Memberships
-INSERT INTO companies (id, name, slug, plan, is_active, owner_id) VALUES
-('company_truespace_default', 'Truespace Catering', 'truespace', 'pro', true, 'user_nikita')
-ON CONFLICT (id) DO NOTHING;
-
+-- 9.0 Users (must be inserted first for foreign keys)
 INSERT INTO user_profiles (id, email, full_name, is_super_admin) VALUES
 ('user_nikita', 'nikita@truespace.ru', 'Никита', true),
 ('user_vlad', 'vlad@truespace.ru', 'Влад', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- 9.1 Organization & Memberships
+INSERT INTO companies (id, name, slug, plan, is_active, owner_id) VALUES
+('company_truespace_default', 'Truespace Catering', 'truespace', 'pro', true, 'user_nikita')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO company_members (id, company_id, user_id, role) VALUES

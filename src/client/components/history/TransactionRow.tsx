@@ -8,6 +8,7 @@ import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Trash2 } from 'lucide-reac
 import { Transaction } from '../../../shared/types.js';
 import { formatRubles, formatDateTimeRu } from '../../utils/formatters.js';
 import { useFinance } from '../../context/FinanceContext.js';
+import { useAuth } from '../../context/AuthContext.js';
 
 interface Props {
   transaction: Transaction;
@@ -18,6 +19,8 @@ interface Props {
 
 export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelected, onToggleSelect }) => {
   const { accounts, categories, events, deleteTransaction } = useFinance();
+  const { userRole, isSuperAdmin } = useAuth();
+  const canDelete = isSuperAdmin || userRole === 'owner' || userRole === 'admin';
   const [isConfirming, setIsConfirming] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
@@ -39,7 +42,8 @@ export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelect
 
   const isIncome = transaction.type === 'income';
   const isExpense = transaction.type === 'expense';
-  const amountColor = isIncome ? '#059669' : isExpense ? '#dc2626' : '#2563eb';
+  const amountColor = isIncome ? 'var(--color-success)' : isExpense ? 'var(--color-destructive)' : 'var(--color-accent)';
+  const iconBgColor = isIncome ? 'rgba(5, 150, 105, 0.08)' : isExpense ? 'rgba(220, 38, 38, 0.08)' : 'rgba(37, 99, 235, 0.08)';
   const sign = isIncome ? '+' : isExpense ? '−' : '';
 
   const accountLabel = transaction.type === 'transfer'
@@ -89,7 +93,7 @@ export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelect
         )}
         <div
           className="compact-tx-icon"
-          style={{ backgroundColor: `${amountColor}14`, color: amountColor }}
+          style={{ backgroundColor: iconBgColor, color: amountColor }}
         >
           {isIncome ? <ArrowDownLeft size={16} /> : isExpense ? <ArrowUpRight size={16} /> : <ArrowLeftRight size={16} />}
         </div>
@@ -141,27 +145,39 @@ export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelect
           {sign}{formatRubles(transaction.amount)}
         </span>
 
-        {isConfirming ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-            <button type="button" onClick={handleDelete} disabled={isDeleting} className="btn-confirm-yes" style={{ fontSize: '0.7rem', padding: '2px 6px' }}>
-              {isDeleting ? '...' : 'Да'}
+        {canDelete && (
+          isConfirming ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <button type="button" onClick={handleDelete} disabled={isDeleting} className="btn-confirm-yes" style={{ fontSize: '0.7rem', padding: '6px 8px', minHeight: '36px' }}>
+                {isDeleting ? '...' : 'Да'}
+              </button>
+              <button type="button" onClick={(e) => { e.stopPropagation(); setIsConfirming(false); }} className="btn-confirm-no" style={{ fontSize: '0.7rem', padding: '6px 8px', minHeight: '36px' }}>
+                Нет
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsConfirming(true);
+              }}
+              title="Удалить операцию"
+              className="btn-touch-target"
+              style={{
+                color: 'var(--color-text-muted)',
+                minWidth: '44px',
+                minHeight: '44px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Trash2 size={16} />
             </button>
-            <button type="button" onClick={(e) => { e.stopPropagation(); setIsConfirming(false); }} className="btn-confirm-no" style={{ fontSize: '0.7rem', padding: '2px 6px' }}>
-              Нет
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsConfirming(true);
-            }}
-            title="Удалить операцию"
-            style={{ color: 'var(--color-text-muted)', padding: '4px', borderRadius: '4px', cursor: 'pointer' }}
-          >
-            <Trash2 size={14} />
-          </button>
+          )
         )}
       </div>
     </div>

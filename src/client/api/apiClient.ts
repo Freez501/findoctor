@@ -48,7 +48,23 @@ export class ApiClient {
   private baseUrl: string;
   private defaultTimeout: number;
 
-  public activeCompanyId: string = '';
+  public activeCompanyId: string =
+    typeof window !== 'undefined'
+      ? localStorage.getItem('truespace_company_id') || 'company_truespace_default'
+      : 'company_truespace_default';
+
+  public activeUserId: string =
+    typeof window !== 'undefined'
+      ? localStorage.getItem('truespace_user_id') ||
+        (() => {
+          try {
+            const raw = localStorage.getItem('truespace_current_user');
+            return raw ? JSON.parse(raw)?.id || '' : '';
+          } catch {
+            return '';
+          }
+        })()
+      : '';
 
   constructor(baseUrl: string = '', defaultTimeout: number = 10000) {
     this.baseUrl = baseUrl;
@@ -57,6 +73,16 @@ export class ApiClient {
 
   public setActiveCompanyId(id: string): void {
     this.activeCompanyId = id;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('truespace_company_id', id);
+    }
+  }
+
+  public setActiveUserId(id: string): void {
+    this.activeUserId = id;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('truespace_user_id', id);
+    }
   }
 
   private async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -87,6 +113,7 @@ export class ApiClient {
           'Content-Type': 'application/json',
           Accept: 'application/json',
           ...(this.activeCompanyId ? { 'x-company-id': this.activeCompanyId } : {}),
+          ...(this.activeUserId ? { 'x-user-id': this.activeUserId } : {}),
           ...(fetchOptions.headers || {}),
         },
       });
@@ -492,7 +519,7 @@ export class ApiClient {
     });
   }
 
-  public register(data: { email: string; password?: string; fullName?: string; companyName?: string }, options?: RequestOptions): Promise<{ success: boolean; user: UserProfile; company: Company }> {
+  public register(data: { email: string; password?: string; fullName?: string; companyName?: string; code?: string }, options?: RequestOptions): Promise<{ success: boolean; user: UserProfile; company: Company }> {
     return this.request<{ success: boolean; user: UserProfile; company: Company }>('/api/auth/register', {
       ...options,
       method: 'POST',
@@ -553,7 +580,60 @@ export class ApiClient {
     });
   }
 
+  public forgotPassword(email: string, options?: RequestOptions): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>('/api/auth/forgot-password', {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify({ email }),
+      priority: 'high',
+    });
+  }
+
+  public sendVerificationCode(data: { email: string; fullName?: string; companyName?: string }, options?: RequestOptions): Promise<{ success: boolean; message: string; previewCode?: string }> {
+    return this.request<{ success: boolean; message: string; previewCode?: string }>('/api/auth/send-code', {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(data),
+      priority: 'high',
+    });
+  }
+
+  public verifyEmailCode(data: { email: string; code: string }, options?: RequestOptions): Promise<{ success: boolean; verified: boolean }> {
+    return this.request<{ success: boolean; verified: boolean }>('/api/auth/verify-code', {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(data),
+      priority: 'high',
+    });
+  }
+
+  public deleteCompany(id: string, options?: RequestOptions): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(`/api/companies/${id}`, {
+      ...options,
+      method: 'DELETE',
+      priority: 'high',
+    });
+  }
+
+  public updateCompanyBilling(id: string, data: { plan?: string; trialEndsAt?: string | null; paidUntil?: string | null; isActive?: boolean; name?: string }, options?: RequestOptions): Promise<Company> {
+    return this.request<Company>(`/api/companies/${id}`, {
+      ...options,
+      method: 'PATCH',
+      body: JSON.stringify(data),
+      priority: 'high',
+    });
+  }
+
   // --- System & Supabase Cloud ---
+  public syncSupabase(options?: RequestOptions): Promise<{ success: boolean; message: string; syncedCounts?: any }> {
+    return this.request<{ success: boolean; message: string; syncedCounts?: any }>('/api/system/supabase/sync', {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify({}),
+      priority: 'high',
+    });
+  }
+
   public getSupabaseStatus(options?: RequestOptions): Promise<{ isConfigured: boolean; mode: string; url?: string; message: string }> {
     return this.request<{ isConfigured: boolean; mode: string; url?: string; message: string }>('/api/system/supabase/status', options);
   }

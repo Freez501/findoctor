@@ -21,7 +21,6 @@ import {
   Settings,
   Shield,
   ChevronDown,
-  Check,
   Building2,
   Crown,
   LucideIcon,
@@ -64,11 +63,9 @@ export const Header: React.FC<HeaderProps> = ({
   const { resetDemo, isResetting } = useResetDemo();
   const {
     currentUser,
-    usersList,
     currentCompany,
     isSuperAdmin,
     userRole,
-    switchUser,
     logout,
   } = useAuth();
 
@@ -92,8 +89,9 @@ export const Header: React.FC<HeaderProps> = ({
 
   const getRoleDisplayName = (role: string, isSuper?: boolean) => {
     if (isSuper) return 'Суперадмин платформы';
-    if (role === 'owner') return 'Владелец / Сооснователь';
+    if (role === 'owner') return 'Владелец / Главный финдиректор';
     if (role === 'admin') return 'Сооснователь / Партнёр';
+    if (role === 'accountant') return 'Бухгалтер / Финменеджер';
     if (role === 'staff') return 'Бармен / Сотрудник';
     return 'Сотрудник';
   };
@@ -107,13 +105,13 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={() => onSelectTab?.('accounts')}
           role="button"
           tabIndex={0}
-          title="Brilliant Event — Главный экран"
+          title={`${currentCompany?.name || 'Brilliant Event'} — Главный экран`}
         >
           <div className="brand-icon-brilliant" aria-hidden="true">
             <Sparkles size={17} className="brand-gem-sparkle" />
           </div>
           <div className="brand-text-block">
-            <div className="brand-title-brilliant">Brilliant Event</div>
+            <div className="brand-title-brilliant">{currentCompany?.name || 'Brilliant Event'}</div>
             <div className="brand-tagline">Catering & Bar Finance</div>
           </div>
         </div>
@@ -121,7 +119,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Center: Integrated Navigation Tabs */}
         {onSelectTab && (
           <nav className="header-nav-tabs" aria-label="Разделы системы">
-            {NAV_ITEMS.map(({ id, label, icon: Icon, badge }) => {
+            {NAV_ITEMS.filter((item) => item.id !== 'admin' || isSuperAdmin).map(({ id, label, icon: Icon, badge }) => {
               const active = currentTab === id;
               return (
                 <button
@@ -239,67 +237,101 @@ export const Header: React.FC<HeaderProps> = ({
                   )}
                 </div>
 
-                {/* Fast User Switcher */}
-                <div className="profile-section-title">
-                  Быстрое переключение профиля
-                </div>
-                <div className="profile-users-grid">
-                  {usersList.map((u) => {
-                    const active = u.id === currentUser?.id;
-                    return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => {
-                          switchUser(u.id);
-                        }}
-                        className={`profile-user-chip ${active ? 'profile-user-chip-active' : ''}`}
-                      >
-                        <span className="profile-chip-avatar">
-                          {u.fullName[0]}
-                        </span>
-                        <span className="profile-chip-name">{u.fullName}</span>
-                        {active && <Check size={12} className="profile-chip-check" />}
-                      </button>
-                    );
-                  })}
-                </div>
+                {/* Clean Navigation & Profile Actions */}
+                <div style={{ marginTop: '10px', marginBottom: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {(userRole === 'owner' || userRole === 'admin' || isSuperAdmin) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        onSelectTab?.('settings');
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border)',
+                        background: 'transparent',
+                        color: 'var(--foreground)',
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <Building2 size={14} color="var(--primary)" />
+                      <span>Управление организацией</span>
+                    </button>
+                  )}
 
+                  <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', padding: '4px 6px' }}>
+                    {currentUser?.email}
+                  </div>
+                </div>
                 <div className="profile-divider" />
 
-                {/* SaaS Admin Portal Button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowProfileMenu(false);
-                    if (onNavigateToAdmin) {
-                      onNavigateToAdmin();
-                    } else if (onSelectTab) {
-                      onSelectTab('admin');
-                    }
-                  }}
-                  className="profile-admin-button"
-                >
-                  <Shield size={14} />
-                  <span>Панель управления SaaS</span>
-                  <span className="profile-admin-tag">👑</span>
-                </button>
-
-                {/* Reset Demo Button */}
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (window.confirm('Сбросить демо-данные к начальному состоянию?')) {
-                      await resetDemo();
+                {/* SaaS Admin Portal Button (SUPERADMIN ONLY) */}
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
                       setShowProfileMenu(false);
-                    }
-                  }}
-                  disabled={isResetting}
-                  className="profile-reset-button"
-                >
-                  <RotateCcw size={13} className={isResetting ? 'animate-spin' : ''} />
-                  <span>{isResetting ? 'Сброс данных...' : 'Сбросить демо-данные'}</span>
-                </button>
+                      if (onNavigateToAdmin) {
+                        onNavigateToAdmin();
+                      } else if (onSelectTab) {
+                        onSelectTab('admin');
+                      }
+                    }}
+                    className="profile-admin-button"
+                  >
+                    <Shield size={14} />
+                    <span>Панель управления SaaS</span>
+                    <span className="profile-admin-tag">👑</span>
+                  </button>
+                )}
+
+                {/* Trial info for regular tenants */}
+                {!isSuperAdmin && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 10px',
+                      background: 'rgba(217, 119, 6, 0.08)',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(217, 119, 6, 0.18)',
+                      fontSize: '11px',
+                      color: '#b45309',
+                      fontWeight: 600,
+                      marginBottom: '4px',
+                    }}
+                  >
+                    <Sparkles size={13} />
+                    <span>Тариф: 14 дней Pro Trial</span>
+                  </div>
+                )}
+
+                {/* Reset Demo Button (SUPERADMIN ONLY) */}
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (window.confirm('Сбросить демо-данные к начальному состоянию?')) {
+                        await resetDemo();
+                        setShowProfileMenu(false);
+                      }
+                    }}
+                    disabled={isResetting}
+                    className="profile-reset-button"
+                  >
+                    <RotateCcw size={13} className={isResetting ? 'animate-spin' : ''} />
+                    <span>{isResetting ? 'Сброс данных...' : 'Сбросить демо-данные'}</span>
+                  </button>
+                )}
 
                 {/* Logout Button */}
                 <button

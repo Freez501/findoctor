@@ -31,6 +31,7 @@ export interface IFinanceStore {
   getCompanyById(id: string): Promise<Company | null>;
   createCompany(company: Partial<Company> & { name: string }): Promise<Company>;
   updateCompany(id: string, updates: Partial<Company>): Promise<Company>;
+  deleteCompany(id: string): Promise<boolean>;
 
   // Users & Memberships
   getUsers(): Promise<UserProfile[]>;
@@ -43,6 +44,7 @@ export interface IFinanceStore {
   getAccounts(companyId?: string): Promise<Account[]>;
   getAccountById(id: string): Promise<Account | null>;
   updateAccountBalance(id: string, newBalance: number): Promise<Account>;
+  adjustAccountBalance(id: string, delta: number): Promise<Account>;
   saveAccount(account: Partial<Account> & { id: string }): Promise<Account>;
   createAccount(account: Partial<Account> & { name: string }): Promise<Account>;
   deleteAccount(id: string): Promise<boolean>;

@@ -22,6 +22,7 @@ import {
 import { CreateTransactionDTO, CreateEventDTO, UpdateTransactionDTO } from '../../shared/dto.js';
 import { api } from '../api/apiClient.js';
 import { roundRubles } from '../utils/formatters.js';
+import { useAuth } from './AuthContext.js';
 
 export interface ToastItem {
   id: string;
@@ -63,6 +64,7 @@ export interface FinanceContextType {
   executeTelegramCommand: (text: string) => Promise<{ success: boolean; transaction?: Transaction; error?: string }>;
   resetDemoData: () => Promise<boolean>;
   resetAccountBalances: () => Promise<boolean>;
+  clearFinanceState: () => void;
 
   // Toasts
   toasts: ToastItem[];
@@ -90,6 +92,7 @@ function sortAccounts(accounts: Account[]): Account[] {
 }
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentCompany, isAuthenticated } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
@@ -228,10 +231,26 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, []);
 
-  // Initial mount load
+  const clearFinanceState = useCallback(() => {
+    setTransactions([]);
+    setAccounts([]);
+    setEvents([]);
+    setCategories([]);
+    setPartners([]);
+    setBotStatus(null);
+  }, []);
+
+  // Reload data when active company changes or on mount; wipe state cleanly on logout
   useEffect(() => {
+    if (!isAuthenticated) {
+      clearFinanceState();
+      return;
+    }
+    if (currentCompany?.id) {
+      api.setActiveCompanyId(currentCompany.id);
+    }
     refreshAll();
-  }, [refreshAll]);
+  }, [isAuthenticated, currentCompany?.id, refreshAll, clearFinanceState]);
 
   // Periodic bot status polling (every 30s)
   useEffect(() => {
@@ -618,6 +637,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       executeTelegramCommand,
       resetDemoData,
       resetAccountBalances,
+      clearFinanceState,
       toasts,
       addToast,
       removeToast,
@@ -652,6 +672,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       executeTelegramCommand,
       resetDemoData,
       resetAccountBalances,
+      clearFinanceState,
       toasts,
       addToast,
       removeToast,

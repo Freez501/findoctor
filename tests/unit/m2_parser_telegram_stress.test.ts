@@ -704,13 +704,9 @@ describe('Milestone M2 Adversarial Challenge: ParserService & TelegramBotService
       const telegramTxs = txs.filter((t) => t.description.includes('оператор'));
       expect(telegramTxs).toHaveLength(20); // 20 transactions were logged
 
-      // EMPIRICAL PROOF OF RACE CONDITION:
-      // In FinanceService.createTransaction(), balance read and update are separate async steps
-      // without locking/mutex. All 20 calls concurrently read initialCash1 (6300) before any write resolved.
-      // All 20 wrote (6300 - 100 = 6200).
-      // Final balance is 6200 instead of expected 4300!
-      expect(finalCash1).toBe(6200);
-      expect(finalCash1).not.toBe(4300);
+      // FIX-08: Atomic adjustAccountBalance eliminates lost updates under concurrency.
+      // All 20 concurrent operations are accurately deducted.
+      expect(finalCash1).toBe(4300);
     });
 
     it('should contrast with sequential execution which preserves 100% balance integrity', async () => {
