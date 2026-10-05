@@ -2494,6 +2494,36 @@ textarea.modal-input {
   box-shadow: 0 0 0 1.5px currentColor;
 }
 
+.account-chips-block.account-chips-error-highlight {
+  border: 1.5px solid var(--destructive, #ef4444);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  background: rgba(239, 68, 68, 0.05);
+  animation: field-shake 0.35s ease-in-out;
+}
+
+.account-chips-label-error {
+  color: var(--destructive, #ef4444) !important;
+  font-weight: 600 !important;
+}
+
+.account-chips-error-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--destructive, #ef4444);
+  font-weight: 600;
+  margin-top: 2px;
+  margin-bottom: 6px;
+}
+
+@keyframes field-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
 .account-chips-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
@@ -2845,6 +2875,92 @@ textarea.modal-input {
 
 .btn-memo-clear:hover {
   color: var(--foreground);
+}
+
+/* Date Selection in QuickEntryModal */
+.date-selection-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.date-pills-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.date-preset-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.date-preset-pill:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.date-preset-pill.pill-active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 600;
+}
+
+.date-input-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--muted-foreground);
+  transition: all 0.15s ease;
+}
+
+.date-input-wrapper:hover {
+  border-color: var(--muted-foreground);
+}
+
+.date-input-wrapper.date-input-active {
+  border-color: var(--primary);
+  background: rgba(184, 51, 42, 0.06);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.date-input-icon {
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.date-native-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 0.75rem;
+  font-family: inherit;
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.date-native-input:focus {
+  outline: none;
 }
 
 /* Validation Alert */
@@ -4686,6 +4802,13 @@ textarea.modal-input {
   font-size: 1.2rem;
   font-weight: 700;
   text-align: center;
+}
+
+.auth-code-input::placeholder {
+  color: var(--muted-foreground);
+  opacity: 0.4;
+  letter-spacing: 6px;
+  font-weight: 400;
 }
 
 .auth-text-link {

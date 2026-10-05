@@ -13,14 +13,39 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowDownRight, ArrowUpRight, ArrowLeftRight, Check, Loader2, AlertCircle, Users, Briefcase, Calendar, FileText } from 'lucide-react';
 import { TransactionType, TransactionDirection } from '../../../shared/types.js';
-import { DEFAULT_ACCOUNT_ID, DEFAULT_EXPENSE_CATEGORY_ID, DEFAULT_INCOME_CATEGORY_ID, CATEGORY_IDS, EVENT_IDS } from '../../../shared/constants.js';
+import { DEFAULT_EXPENSE_CATEGORY_ID, DEFAULT_INCOME_CATEGORY_ID, CATEGORY_IDS, EVENT_IDS } from '../../../shared/constants.js';
 import { useFinance } from '../../context/FinanceContext.js';
 import { useAuth } from '../../context/AuthContext.js';
-import { formatRubles } from '../../utils/formatters.js';
+import { formatRubles, formatDateRu } from '../../utils/formatters.js';
 import { NumericPad } from './NumericPad.js';
 import { CategoryChips } from './CategoryChips.js';
 import { AccountChips } from './AccountChips.js';
 import { EventSelector } from './EventSelector.js';
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+const getTodayDateStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+
+const getYesterdayDateStr = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+
+const getIsoDateForSelectedDay = (dateStr: string) => {
+  if (!dateStr) return new Date().toISOString();
+  const now = new Date();
+  const todayStr = getTodayDateStr();
+  if (dateStr === todayStr) {
+    return now.toISOString();
+  }
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const targetDate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
+  return targetDate.toISOString();
+};
 
 interface QuickEntryModalProps {
   isOpen: boolean;
@@ -35,7 +60,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
   initialAccountId,
   initialType = 'expense',
 }) => {
-  const { createTransaction, partners } = useFinance();
+  const { createTransaction, partners, accounts } = useFinance();
   const { currentUser, currentCompany } = useAuth();
 
   // Form State
@@ -43,22 +68,41 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
   const [direction, setDirection] = useState<TransactionDirection>('operational');
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
   const [amount, setAmount] = useState<number>(0);
-  const [fromAccountId, setFromAccountId] = useState<string>(initialAccountId || DEFAULT_ACCOUNT_ID);
-  const [toAccountId, setToAccountId] = useState<string>('cash_2');
+  const [fromAccountId, setFromAccountId] = useState<string | null>(() => {
+    if (initialAccountId && accounts.some((a) => a.id === initialAccountId)) {
+      return initialAccountId;
+    }
+    return null;
+  });
+  const [toAccountId, setToAccountId] = useState<string | null>(null);
   const [categoryId, setCategoryId] = useState<string>(DEFAULT_EXPENSE_CATEGORY_ID);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(EVENT_IDS.WEDDING);
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayDateStr());
   const [description, setDescription] = useState<string>('');
 
   // UI state
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [highlightedField, setHighlightedField] = useState<'fromAccount' | 'toAccount' | 'transferAccounts' | null>(null);
+
+  // Sync initial date and reset highlights when opened
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedDate(getTodayDateStr());
+      setHighlightedField(null);
+      setValidationError(null);
+      if (initialAccountId && accounts.some((a) => a.id === initialAccountId)) {
+        setFromAccountId(initialAccountId);
+      }
+    }
+  }, [isOpen, initialAccountId, accounts]);
 
   // Sync initial account when opened
   useEffect(() => {
-    if (initialAccountId) {
+    if (initialAccountId && accounts.some((a) => a.id === initialAccountId)) {
       setFromAccountId(initialAccountId);
     }
-  }, [initialAccountId]);
+  }, [initialAccountId, accounts]);
 
   // Sync initial type when opened
   useEffect(() => {
@@ -71,22 +115,24 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
   const handleTypeChange = (newType: TransactionType) => {
     setType(newType);
     setValidationError(null);
+    setHighlightedField(null);
 
     if (newType === 'expense') {
       setCategoryId(DEFAULT_EXPENSE_CATEGORY_ID);
       setDirection('operational');
-      if (!fromAccountId) setFromAccountId(DEFAULT_ACCOUNT_ID);
     } else if (newType === 'income') {
       setCategoryId(DEFAULT_INCOME_CATEGORY_ID);
       setDirection('operational');
-      if (!toAccountId) setToAccountId(DEFAULT_ACCOUNT_ID);
     } else if (newType === 'transfer') {
       setCategoryId(CATEGORY_IDS.TRANSFER_INTERNAL);
       setDirection('transfer');
       setSelectedEventId(null);
       // Ensure from and to accounts are distinct
-      if (fromAccountId === toAccountId) {
-        setToAccountId(fromAccountId === 'cash_1' ? 'cash_2' : 'cash_1');
+      if (fromAccountId && toAccountId && fromAccountId === toAccountId) {
+        const otherAccount = accounts.find((a) => a.id !== fromAccountId);
+        if (otherAccount) {
+          setToAccountId(otherAccount.id);
+        }
       }
     }
   };
@@ -106,22 +152,41 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
     }
   };
 
+  // Check whether user entered meaningful data
+  const isDirty = amount > 0 || selectedDate !== getTodayDateStr() || description.trim() !== '';
+
+  const handleRequestClose = () => {
+    if (isDirty) {
+      if (window.confirm('Вы уже указали данные операции. Закрыть окно ввода без сохранения?')) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  };
+
   // Keyboard escape listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
-        onClose();
+        if (isDirty) {
+          if (window.confirm('Вы уже указали данные операции. Закрыть окно ввода без сохранения?')) {
+            onClose();
+          }
+        } else {
+          onClose();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, isDirty, onClose]);
 
   // Safe backdrop click handler preventing accidental close
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
-      if (amount > 0) {
-        if (window.confirm('Вы уже указали сумму. Закрыть окно ввода без сохранения?')) {
+      if (isDirty) {
+        if (window.confirm('Вы уже указали данные операции. Закрыть окно ввода без сохранения?')) {
           onClose();
         }
       } else {
@@ -134,35 +199,62 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError(null);
+    setHighlightedField(null);
 
-    // Validation
+    // 1. Validation: Amount
     if (amount <= 0) {
       setValidationError('Введите сумму операции больше 0 ₽.');
+      const padEl = document.querySelector('.numeric-pad-container');
+      padEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
-    if (type === 'expense' && !fromAccountId) {
-      setValidationError('Пожалуйста, выберите счёт списания.');
-      return;
+    // 2. Validation: Expense Account
+    if (type === 'expense') {
+      const isFromValid = fromAccountId && accounts.some((a) => a.id === fromAccountId);
+      if (!isFromValid) {
+        setHighlightedField('fromAccount');
+        setValidationError('Пожалуйста, выберите счёт списания: укажите, откуда оплачено.');
+        const el = document.getElementById('account-chips-expense');
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
     }
 
-    if (type === 'income' && !toAccountId) {
-      setValidationError('Пожалуйста, выберите счёт зачисления.');
-      return;
+    // 3. Validation: Income Account
+    if (type === 'income') {
+      const isToValid = toAccountId && accounts.some((a) => a.id === toAccountId);
+      if (!isToValid) {
+        setHighlightedField('toAccount');
+        setValidationError('Пожалуйста, выберите счёт зачисления: укажите, куда поступили деньги.');
+        const el = document.getElementById('account-chips-income');
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
     }
 
+    // 4. Validation: Dividends Partner
     if (type === 'expense' && direction === 'dividends' && !selectedPartnerId) {
       setValidationError('Пожалуйста, выберите партнёра для выплаты дивидендов.');
       return;
     }
 
+    // 5. Validation: Transfer Accounts
     if (type === 'transfer') {
-      if (!fromAccountId || !toAccountId) {
-        setValidationError('Выберите счёт списания и счёт зачисления.');
+      const isFromValid = fromAccountId && accounts.some((a) => a.id === fromAccountId);
+      const isToValid = toAccountId && accounts.some((a) => a.id === toAccountId);
+      if (!isFromValid || !isToValid) {
+        setHighlightedField('transferAccounts');
+        setValidationError('Пожалуйста, выберите счёт списания и счёт зачисления для перевода.');
+        const el = document.getElementById('account-chips-transfer');
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
       if (fromAccountId === toAccountId) {
+        setHighlightedField('transferAccounts');
         setValidationError('Счёт списания и счёт зачисления не могут совпадать.');
+        const el = document.getElementById('account-chips-transfer');
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
     }
@@ -182,6 +274,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
         partnerId: direction === 'dividends' ? selectedPartnerId : null,
         partnerName: direction === 'dividends' && selectedPartner ? selectedPartner.name : null,
         description: description.trim(),
+        transactionDate: getIsoDateForSelectedDay(selectedDate),
         createdBy: currentUser?.fullName || currentUser?.email || 'Пользователь',
         companyId: currentCompany?.id,
       });
@@ -190,6 +283,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
         // Reset form and close
         setAmount(0);
         setDescription('');
+        setSelectedDate(getTodayDateStr());
         onClose();
       } else {
         setValidationError(result.error || 'Ошибка при сохранении операции');
@@ -230,7 +324,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleRequestClose}
             className="btn-modal-close"
             aria-label="Закрыть окно"
           >
@@ -294,40 +388,62 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
             {/* Expense: Source Account */}
             {type === 'expense' && (
               <AccountChips
+                id="account-chips-expense"
                 label="Счёт списания:"
                 selectedAccountId={fromAccountId}
-                onSelectAccount={setFromAccountId}
+                onSelectAccount={(accId) => {
+                  setFromAccountId(accId);
+                  setHighlightedField(null);
+                  setValidationError(null);
+                }}
                 helperText="Откуда оплачено"
+                hasError={highlightedField === 'fromAccount' || highlightedField === 'transferAccounts'}
               />
             )}
 
             {/* Income: Destination Account */}
             {type === 'income' && (
               <AccountChips
+                id="account-chips-income"
                 label="Счёт зачисления:"
                 selectedAccountId={toAccountId}
-                onSelectAccount={setToAccountId}
+                onSelectAccount={(accId) => {
+                  setToAccountId(accId);
+                  setHighlightedField(null);
+                  setValidationError(null);
+                }}
                 helperText="Куда поступили деньги"
+                hasError={highlightedField === 'toAccount' || highlightedField === 'transferAccounts'}
               />
             )}
 
             {/* Transfer: Both From & To Accounts with distinct validation */}
             {type === 'transfer' && (
-              <div className="transfer-accounts-group">
+              <div id="account-chips-transfer" className="transfer-accounts-group">
                 <AccountChips
                   label="Откуда списать:"
                   selectedAccountId={fromAccountId}
-                  onSelectAccount={setFromAccountId}
+                  onSelectAccount={(accId) => {
+                    setFromAccountId(accId);
+                    setHighlightedField(null);
+                    setValidationError(null);
+                  }}
                   disabledAccountId={toAccountId}
                   helperText="Исходный счёт"
+                  hasError={highlightedField === 'fromAccount' || highlightedField === 'transferAccounts'}
                 />
 
                 <AccountChips
                   label="Куда зачислить:"
                   selectedAccountId={toAccountId}
-                  onSelectAccount={setToAccountId}
+                  onSelectAccount={(accId) => {
+                    setToAccountId(accId);
+                    setHighlightedField(null);
+                    setValidationError(null);
+                  }}
                   disabledAccountId={fromAccountId}
                   helperText="Целевой счёт (не может совпадать)"
+                  hasError={highlightedField === 'toAccount' || highlightedField === 'transferAccounts'}
                 />
               </div>
             )}
@@ -434,6 +550,54 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                 onSelectEventId={setSelectedEventId}
               />
             )}
+
+            {/* Transaction Date Selector */}
+            <div className="date-selection-container">
+              <div className="field-block-label-row">
+                <span className="field-block-label">Дата операции:</span>
+                <span className="field-block-hint">
+                  {selectedDate === getTodayDateStr()
+                    ? 'Сегодня'
+                    : selectedDate === getYesterdayDateStr()
+                    ? 'Вчера'
+                    : formatDateRu(selectedDate)}
+                </span>
+              </div>
+              <div className="date-pills-row">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate(getTodayDateStr())}
+                  className={`date-preset-pill ${selectedDate === getTodayDateStr() ? 'pill-active' : ''}`}
+                >
+                  <span>Сегодня</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate(getYesterdayDateStr())}
+                  className={`date-preset-pill ${selectedDate === getYesterdayDateStr() ? 'pill-active' : ''}`}
+                >
+                  <span>Вчера</span>
+                </button>
+                <div
+                  className={`date-input-wrapper ${
+                    selectedDate !== getTodayDateStr() && selectedDate !== getYesterdayDateStr()
+                      ? 'date-input-active'
+                      : ''
+                  }`}
+                >
+                  <Calendar size={14} className="date-input-icon" aria-hidden="true" />
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => {
+                      if (e.target.value) setSelectedDate(e.target.value);
+                    }}
+                    className="date-native-input"
+                    aria-label="Выбрать произвольную дату"
+                  />
+                </div>
+              </div>
+            </div>
 
             {/* Memo / comment description */}
             <div className="memo-field-wrapper">

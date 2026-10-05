@@ -12,19 +12,23 @@ import { useAccounts } from '../../hooks/useAccounts.js';
 import { formatRubles } from '../../utils/formatters.js';
 
 interface AccountChipsProps {
+  id?: string;
   label: string;
   selectedAccountId: string | null | undefined;
   onSelectAccount: (accountId: string) => void;
   disabledAccountId?: string | null;
   helperText?: string;
+  hasError?: boolean;
 }
 
 export const AccountChips: React.FC<AccountChipsProps> = ({
+  id,
   label,
   selectedAccountId,
   onSelectAccount,
   disabledAccountId,
   helperText,
+  hasError = false,
 }) => {
   const { accounts } = useAccounts();
 
@@ -46,11 +50,19 @@ export const AccountChips: React.FC<AccountChipsProps> = ({
   };
 
   return (
-    <div className="account-chips-block">
+    <div id={id} className={`account-chips-block ${hasError ? 'account-chips-error-highlight' : ''}`}>
       <div className="account-chips-header">
-        <span className="account-chips-label">{label}</span>
+        <span className={`account-chips-label ${hasError ? 'account-chips-label-error' : ''}`}>
+          {label}
+        </span>
         {helperText && <span className="account-chips-helper">{helperText}</span>}
       </div>
+
+      {hasError && (
+        <div className="account-chips-error-badge animate-fade-in">
+          <span>👈 Пожалуйста, нажмите на один из счетов ниже</span>
+        </div>
+      )}
 
       <div className="account-chips-list" role="radiogroup" aria-label={label}>
         {accounts.map((acc) => {

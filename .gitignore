@@ -87,6 +87,7 @@ htmlcov/
 *.db
 dumps/
 backups/
+data/cloud_mirror_retry_queue.json
 
 # ============================================
 # ВРЕМЕННЫЕ ФАЙЛЫ

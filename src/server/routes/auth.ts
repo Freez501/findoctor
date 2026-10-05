@@ -205,7 +205,7 @@ export function createAuthRouter(store: IFinanceStore): Router {
   // POST /api/auth/send-code
   router.post('/send-code', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { email, fullName, companyName } = req.body;
+      const { email, password, fullName, companyName } = req.body;
       if (!email || typeof email !== 'string') {
         return res.status(400).json({ error: 'Поле email обязательно' });
       }
@@ -219,7 +219,7 @@ export function createAuthRouter(store: IFinanceStore): Router {
         });
       }
 
-      // Generate 6-digit confirmation code
+      // Generate 6-digit confirmation code for backup / store verification
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       verificationStore.set(trimmedEmail, {
         code,
@@ -228,12 +228,54 @@ export function createAuthRouter(store: IFinanceStore): Router {
         companyName,
       });
 
-      console.log(`[Auth] Verification code for ${trimmedEmail}: ${code}`);
+      // Try sending real verification email via Supabase Auth if credentials exist
+      let emailSentViaSupabase = false;
+      const isTestEnv = process.env.NODE_ENV === 'test';
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+      const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+
+      if (!isTestEnv && supabaseUrl && supabaseKey) {
+        try {
+          const { createClient } = await import('@supabase/supabase-js');
+          const supabase = createClient(supabaseUrl, supabaseKey, {
+            auth: { persistSession: false },
+          });
+
+          const { data, error } = await supabase.auth.signUp({
+            email: trimmedEmail,
+            password: password || 'SecurePass123!',
+            options: {
+              data: {
+                full_name: fullName,
+                company_name: companyName,
+              },
+            },
+          });
+
+          if (error) {
+            console.warn('[Auth] Supabase signUp note:', error.message);
+            if (error.status === 429) {
+              return res.status(429).json({
+                error: 'Письмо уже отправлено. В целях безопасности повторный запрос возможен через 1 минуту. Проверьте ваш почтовый ящик.',
+              });
+            }
+          } else if (data?.user) {
+            emailSentViaSupabase = true;
+            console.log(`[Auth] Real Supabase verification email dispatched to ${trimmedEmail}`);
+          }
+        } catch (e: any) {
+          console.warn('[Auth] Supabase dispatch exception:', e?.message || e);
+        }
+      }
+
+      console.log(`[Auth] Verification code registered for ${trimmedEmail}: ${code}`);
 
       res.json({
         success: true,
-        message: `Код подтверждения отправлен на ${email.trim()}`,
-        previewCode: code,
+        message: emailSentViaSupabase
+          ? `Проверочное письмо отправлено на ${email.trim()}`
+          : `Код подтверждения отправлен на ${email.trim()}`,
+        ...(isTestEnv ? { previewCode: code } : {}),
       });
     } catch (err) {
       next(err);
@@ -250,10 +292,31 @@ export function createAuthRouter(store: IFinanceStore): Router {
 
       const trimmedEmail = email.trim().toLowerCase();
       const stored = verificationStore.get(trimmedEmail);
-      const isValid = (stored && stored.code === String(code).trim()) || String(code).trim() === '777111';
+      let isValid = (stored && stored.code === String(code).trim()) || String(code).trim() === '777111';
 
       if (!isValid) {
-        return res.status(400).json({ error: 'Неверный код подтверждения. Проверьте цифры или запросите новый код.' });
+        const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+        const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+        if (supabaseUrl && supabaseKey) {
+          try {
+            const { createClient } = await import('@supabase/supabase-js');
+            const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
+            const { data, error } = await supabase.auth.verifyOtp({
+              email: trimmedEmail,
+              token: String(code).trim(),
+              type: 'signup',
+            });
+            if (!error && data?.user) {
+              isValid = true;
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      if (!isValid) {
+        return res.status(400).json({ error: 'Неверный код подтверждения. Проверьте цифры из письма или запросите новый код.' });
       }
 
       res.json({ success: true, verified: true });
@@ -291,9 +354,31 @@ export function createAuthRouter(store: IFinanceStore): Router {
       // If code was supplied, verify it
       if (code) {
         const stored = verificationStore.get(trimmedEmail);
-        const isValid = (stored && stored.code === String(code).trim()) || String(code).trim() === '777111';
+        let isValid = (stored && stored.code === String(code).trim()) || String(code).trim() === '777111';
+
         if (!isValid) {
-          return res.status(400).json({ error: 'Неверный код подтверждения email' });
+          const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+          const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+          if (supabaseUrl && supabaseKey) {
+            try {
+              const { createClient } = await import('@supabase/supabase-js');
+              const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
+              const { data, error } = await supabase.auth.verifyOtp({
+                email: trimmedEmail,
+                token: String(code).trim(),
+                type: 'signup',
+              });
+              if (!error && data?.user) {
+                isValid = true;
+              }
+            } catch {
+              // ignore
+            }
+          }
+        }
+
+        if (!isValid) {
+          return res.status(400).json({ error: 'Неверный код подтверждения email. Проверьте цифры из письма.' });
         }
       }
 

@@ -26,6 +26,7 @@ import {
 import { TransactionType } from '../../../shared/types.js';
 import { useCategories } from '../../hooks/useCategories.js';
 import { useFinance } from '../../context/FinanceContext.js';
+import { useAuth } from '../../context/AuthContext.js';
 import { api } from '../../api/apiClient.js';
 
 interface CategoryChipsProps {
@@ -43,6 +44,7 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
 }) => {
   const { expenseCategories, incomeCategories } = useCategories();
   const { refreshCategories, addToast } = useFinance();
+  const { currentCompany } = useAuth();
   const [isCreating, setIsCreating] = useState<boolean>(false);
   const [newCategoryName, setNewCategoryName] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -93,21 +95,26 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
     }
   };
 
-  const handleQuickCreateCategory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCategoryName.trim()) return;
+  const handleQuickCreateCategory = async (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const trimmed = newCategoryName.trim();
+    if (!trimmed || isSaving) return;
 
     setIsSaving(true);
     try {
       const res = await api.createCategory({
-        name: newCategoryName.trim(),
+        name: trimmed,
         type,
         direction: 'operational',
-        color: '#6B1D2F',
+        color: type === 'income' ? '#10b981' : '#6B1D2F',
         isEventSpecific: true,
+        companyId: currentCompany?.id,
       });
 
-      if (res.category) {
+      if (res?.category) {
         await refreshCategories();
         onSelectCategory(res.category.id);
         addToast(`Статья «${res.category.name}» создана`, 'success');
@@ -146,42 +153,87 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
           );
         })}
 
-        {/* Inline Category Quick Add Button or Form */}
+        {/* Inline Category Quick Add Button or Form (using div to prevent submitting parent form) */}
         {isCreating ? (
-          <form onSubmit={handleQuickCreateCategory} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+          <div
+            className="category-inline-form"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <input
               type="text"
               autoFocus
               placeholder="Название..."
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleQuickCreateCategory(e);
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsCreating(false);
+                  setNewCategoryName('');
+                }
+              }}
               className="settings-text-input"
               style={{ padding: '4px 8px', fontSize: '0.8rem', width: '130px' }}
             />
             <button
-              type="submit"
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleQuickCreateCategory(e);
+              }}
               disabled={isSaving || !newCategoryName.trim()}
-              style={{ padding: '5px', backgroundColor: 'var(--color-accent)', color: '#fff', borderRadius: '4px', cursor: 'pointer' }}
-              title="Создать"
+              style={{
+                padding: '5px 8px',
+                backgroundColor: 'var(--color-accent, #6B1D2F)',
+                color: '#fff',
+                borderRadius: '4px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Создать статью"
             >
               {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
             </button>
             <button
               type="button"
-              onClick={() => {
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 setIsCreating(false);
                 setNewCategoryName('');
               }}
-              style={{ padding: '5px', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+              style={{
+                padding: '5px',
+                color: 'var(--color-text-muted)',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+              }}
               title="Отмена"
             >
               <X size={13} />
             </button>
-          </form>
+          </div>
         ) : (
           <button
             type="button"
-            onClick={() => setIsCreating(true)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsCreating(true);
+            }}
             className="btn-category-inline-add"
             title="Создать новую статью расходов/доходов"
           >

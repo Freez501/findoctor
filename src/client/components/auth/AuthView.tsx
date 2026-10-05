@@ -20,7 +20,6 @@ export const AuthView: React.FC = () => {
   const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [registerStep, setRegisterStep] = useState<'details' | 'verify'>('details');
   const [verificationCode, setVerificationCode] = useState('');
-  const [previewTestCode, setPreviewTestCode] = useState('');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -60,14 +59,14 @@ export const AuthView: React.FC = () => {
             throw new Error('Пароль должен содержать минимум 6 символов');
           }
 
-          // Step 1: Send verification code to email
+          // Step 1: Send verification code to email via Supabase Auth / server
           const res = await api.sendVerificationCode({
             email: email.trim(),
+            password,
             fullName: fullName.trim(),
             companyName: companyName.trim(),
           });
-          setPreviewTestCode(res.previewCode || '');
-          setSuccessMessage(`Проверочный код отправлен на ${email.trim()}`);
+          setSuccessMessage(res.message || `Проверочный код отправлен на ${email.trim()}`);
           setRegisterStep('verify');
         } else {
           // Step 2: Confirm code and finalize registration
@@ -154,7 +153,7 @@ export const AuthView: React.FC = () => {
           {mode === 'register' && registerStep === 'verify' ? (
             <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="auth-info-card">
-                Мы направили 6-значный проверочный код на <strong>{email}</strong>. Введите его для подтверждения email и запуска 14 дней PRO.
+                Мы направили проверочное письмо на <strong>{email}</strong>. Введите 6-значный код из письма или перейдите по ссылке внутри письма для подтверждения email и запуска 14 дней PRO.
               </div>
 
               <div className="auth-field">
@@ -165,35 +164,17 @@ export const AuthView: React.FC = () => {
                     type="text"
                     required
                     maxLength={6}
-                    placeholder="123456"
+                    placeholder="· · · · · ·"
                     value={verificationCode}
                     onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     className="auth-input auth-code-input"
                     autoFocus
                   />
                 </div>
-              </div>
-
-              {(previewTestCode || true) && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--muted-foreground)' }}>
-                  <span>Код подтверждения:</span>
-                  <button
-                    type="button"
-                    onClick={() => setVerificationCode(previewTestCode || '777111')}
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px dashed var(--border)',
-                      borderRadius: '6px',
-                      padding: '2px 8px',
-                      color: 'var(--primary)',
-                      cursor: 'pointer',
-                      fontWeight: 600,
-                    }}
-                  >
-                    Вставить {previewTestCode || '777111'}
-                  </button>
+                <div style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)', marginTop: '4px', lineHeight: 1.4 }}>
+                  Письмо не пришло? Проверьте папку «Спам» или запросите повторную отправку через 1 минуту.
                 </div>
-              )}
+              </div>
 
               <button
                 type="submit"
@@ -224,11 +205,11 @@ export const AuthView: React.FC = () => {
                       setIsLoading(true);
                       const res = await api.sendVerificationCode({
                         email: email.trim(),
+                        password,
                         fullName: fullName.trim(),
                         companyName: companyName.trim(),
                       });
-                      setPreviewTestCode(res.previewCode || '');
-                      setSuccessMessage('Код отправлен повторно');
+                      setSuccessMessage(res.message || 'Проверочное письмо отправлено повторно');
                     } catch (e: any) {
                       setError(e.message || 'Не удалось отправить код');
                     } finally {

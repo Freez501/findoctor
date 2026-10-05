@@ -589,7 +589,7 @@ export class ApiClient {
     });
   }
 
-  public sendVerificationCode(data: { email: string; fullName?: string; companyName?: string }, options?: RequestOptions): Promise<{ success: boolean; message: string; previewCode?: string }> {
+  public sendVerificationCode(data: { email: string; password?: string; fullName?: string; companyName?: string }, options?: RequestOptions): Promise<{ success: boolean; message: string; previewCode?: string }> {
     return this.request<{ success: boolean; message: string; previewCode?: string }>('/api/auth/send-code', {
       ...options,
       method: 'POST',

@@ -392,6 +392,7 @@ export const SettingsView: React.FC = () => {
     try {
       if (modalCategory?.mode === 'create') {
         await api.createCategory({
+          companyId: currentCompany?.id,
           name: catName.trim(),
           type: catType,
           direction: catDirection,
@@ -401,6 +402,7 @@ export const SettingsView: React.FC = () => {
         addToast(`Статья «${catName}» создана`, 'success');
       } else if (modalCategory?.mode === 'edit') {
         await api.saveCategory(modalCategory.category.id, {
+          companyId: currentCompany?.id,
           name: catName.trim(),
           type: catType,
           direction: catDirection,

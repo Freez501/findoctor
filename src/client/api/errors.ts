@@ -44,6 +44,9 @@ export function translateApiError(statusCode: number, rawMessage?: string): stri
   if (msg.includes('пустая команда')) {
     return 'Введите текст операции для быстрого разбора.';
   }
+  if ((msg.includes('счёт') || msg.includes('счет') || msg.includes('account')) && (msg.includes('не найден') || msg.includes('не существует') || msg.includes('not found'))) {
+    return 'Счёт не выбран или не найден. Пожалуйста, нажмите на один из доступных счетов в списке выше.';
+  }
   if (msg.includes('не найдена') || msg.includes('не найден') || msg.includes('not found')) {
     return 'Запрошенная запись не найдена или уже была удалена.';
   }

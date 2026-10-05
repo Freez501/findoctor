@@ -37,6 +37,7 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
   const [partnerId, setPartnerId] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [dateTimeStr, setDateTimeStr] = useState<string>('');
+  const [initialDateTimeStr, setInitialDateTimeStr] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [isConfirmDelete, setIsConfirmDelete] = useState<boolean>(false);
@@ -53,19 +54,73 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
       setPartnerId(transaction.partnerId || '');
       setDescription(transaction.description || '');
 
+      let localIso = '';
       try {
         const d = new Date(transaction.transactionDate);
         const pad = (n: number) => String(n).padStart(2, '0');
-        const localIso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-        setDateTimeStr(localIso);
+        localIso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
       } catch {
-        setDateTimeStr(new Date().toISOString().slice(0, 16));
+        localIso = new Date().toISOString().slice(0, 16);
       }
+      setDateTimeStr(localIso);
+      setInitialDateTimeStr(localIso);
 
       setIsConfirmDelete(false);
       setError(null);
     }
   }, [transaction]);
+
+  const isDirty = Boolean(
+    transaction && (
+      type !== transaction.type ||
+      amount !== transaction.amount ||
+      fromAccountId !== (transaction.fromAccountId || '') ||
+      toAccountId !== (transaction.toAccountId || '') ||
+      categoryId !== (transaction.categoryId || '') ||
+      eventId !== (transaction.eventId || 'general') ||
+      partnerId !== (transaction.partnerId || '') ||
+      description !== (transaction.description || '') ||
+      dateTimeStr !== initialDateTimeStr
+    )
+  );
+
+  const handleRequestClose = () => {
+    if (isDirty) {
+      if (window.confirm('Внесены изменения. Закрыть окно редактирования без сохранения?')) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      if (isDirty) {
+        if (window.confirm('Внесены изменения. Закрыть окно редактирования без сохранения?')) {
+          onClose();
+        }
+      } else {
+        onClose();
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        if (isDirty) {
+          if (window.confirm('Внесены изменения. Закрыть окно редактирования без сохранения?')) {
+            onClose();
+          }
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isDirty, onClose]);
 
   if (!isOpen || !transaction) return null;
 
@@ -139,7 +194,7 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
   };
 
   return (
-    <div className="modal-backdrop-centered" onClick={onClose} role="dialog" aria-modal="true">
+    <div className="modal-backdrop-centered" onClick={handleBackdropClick} role="dialog" aria-modal="true">
       <div
         className="settings-modal-dialog"
         style={{ maxWidth: '520px', width: '92%' }}
@@ -157,7 +212,7 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleRequestClose}
             className="btn-modal-close"
             aria-label="Закрыть модальное окно"
           >
@@ -392,7 +447,7 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleRequestClose}
                 className="btn-modal-secondary"
               >
                 Отмена

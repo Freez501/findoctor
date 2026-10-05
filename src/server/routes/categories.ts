@@ -42,16 +42,18 @@ export function createCategoriesRouter(store?: IFinanceStore): Router {
   router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { name, type, direction, color, isEventSpecific, icon } = req.body;
+      const companyId = req.body.companyId || (req.headers['x-company-id'] as string) || undefined;
       if (!name || typeof name !== 'string' || !name.trim()) {
         res.status(400).json({ error: 'Название статьи обязательно', statusCode: 400 });
         return;
       }
       const category = await storage.saveCategory({
         id: `cat_${Date.now()}`,
+        companyId,
         name: name.trim(),
         type: type || 'expense',
         direction: direction || 'operational',
-        color: color || '#64748b',
+        color: color || (type === 'income' ? '#10b981' : '#64748b'),
         icon: icon || 'tag',
         isEventSpecific: typeof isEventSpecific === 'boolean' ? isEventSpecific : true,
       });
@@ -66,8 +68,10 @@ export function createCategoriesRouter(store?: IFinanceStore): Router {
     try {
       const { id } = req.params;
       const { name, type, direction, color, isEventSpecific, icon } = req.body;
+      const companyId = req.body.companyId || (req.headers['x-company-id'] as string) || undefined;
       const category = await storage.saveCategory({
         id,
+        companyId,
         name: typeof name === 'string' ? name.trim() : undefined as any,
         type,
         direction,

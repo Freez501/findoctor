@@ -10,6 +10,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { Company, UserProfile, CompanyMembership, UserRole } from '../../shared/types.js';
 import { INITIAL_COMPANIES_SEED, INITIAL_USERS_SEED } from '../../shared/constants.js';
 import { api } from '../api/apiClient.js';
+import { supabase } from '../lib/supabaseClient.js';
 
 export interface AuthContextType {
   currentUser: UserProfile | null;
@@ -121,6 +122,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       refreshAuthData();
     }
   }, [isAuthenticated, refreshAuthData]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
+        setIsAuthenticated(true);
+        localStorage.setItem('truespace_logged_in', 'true');
+        await refreshAuthData();
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [refreshAuthData]);
 
   const login = useCallback(async (email: string, password?: string) => {
     const res = await api.login({ email, password });
