@@ -7,6 +7,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { EventMarginMetrics } from '../../shared/types.js';
 import { GetAnalyticsOverviewResponseDTO } from '../../shared/dto.js';
 import { useFinance } from '../context/FinanceContext.js';
+import { useAuth } from '../context/AuthContext.js';
+import { api } from '../api/apiClient.js';
 
 export interface MarginClassification {
   level: 'green' | 'yellow' | 'red';
@@ -51,7 +53,8 @@ export function classifyMargin(percentage: number): MarginClassification {
 }
 
 export function useAnalytics() {
-  const { transactions } = useFinance();
+  const { transactions, events } = useFinance();
+  const { currentCompany, currentUser } = useAuth();
   const [metrics, setMetrics] = useState<EventMarginMetrics[]>([]);
   const [overview, setOverview] = useState<GetAnalyticsOverviewResponseDTO | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -61,9 +64,27 @@ export function useAnalytics() {
     setIsLoading(true);
     setError(null);
     try {
+      const companyId =
+        currentCompany?.id ||
+        api.activeCompanyId ||
+        (typeof window !== 'undefined' ? localStorage.getItem('truespace_company_id') : null) ||
+        'company_truespace_default';
+      const userId =
+        currentUser?.id ||
+        api.activeUserId ||
+        (typeof window !== 'undefined' ? localStorage.getItem('truespace_user_id') : null) ||
+        '';
+
+      const headers: Record<string, string> = {
+        'x-company-id': companyId,
+      };
+      if (userId) {
+        headers['x-user-id'] = userId;
+      }
+
       const [eventsRes, overviewRes] = await Promise.all([
-        fetch('/api/analytics/events'),
-        fetch('/api/analytics/overview'),
+        fetch('/api/analytics/events', { headers }),
+        fetch('/api/analytics/overview', { headers }),
       ]);
 
       if (!eventsRes.ok || !overviewRes.ok) {
@@ -80,12 +101,12 @@ export function useAnalytics() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentCompany?.id, currentUser?.id]);
 
-  // Automatically refresh analytics whenever active transactions state changes
+  // Automatically refresh analytics whenever active transactions, events, or company changes
   useEffect(() => {
     fetchAnalytics();
-  }, [fetchAnalytics, transactions]);
+  }, [fetchAnalytics, transactions, events]);
 
   return {
     metrics,
