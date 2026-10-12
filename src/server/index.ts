@@ -6,9 +6,7 @@
  * and configures graceful shutdown.
  */
 
-import dotenv from 'dotenv';
-dotenv.config();
-
+import 'dotenv/config';
 import { createApp } from './app.js';
 
 const PORT = Number(process.env.PORT) || 3001;

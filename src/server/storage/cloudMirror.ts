@@ -128,8 +128,12 @@ export async function flushRetryQueue(): Promise<{ processed: number; remaining:
   return { processed, remaining: remaining.length };
 }
 
+function shouldSkipCloudMirror(): boolean {
+  return process.env.NODE_ENV === 'test' || (process.env.STORAGE_MODE || '').toLowerCase() === 'supabase';
+}
+
 export async function mirrorTransactionToCloud(tx: Transaction, updatedAccounts: Account[]): Promise<void> {
-  if (process.env.NODE_ENV === 'test') return;
+  if (shouldSkipCloudMirror()) return;
   const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const key = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
   if (!url || !key) return;
@@ -179,7 +183,7 @@ export async function mirrorTransactionToCloud(tx: Transaction, updatedAccounts:
 }
 
 export async function mirrorAccountToCloud(acc: Account): Promise<void> {
-  if (process.env.NODE_ENV === 'test') return;
+  if (shouldSkipCloudMirror()) return;
   const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const key = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
   if (!url || !key) return;
@@ -213,7 +217,7 @@ export async function mirrorAccountToCloud(acc: Account): Promise<void> {
 }
 
 export async function mirrorUserProfileToCloud(user: UserProfile): Promise<void> {
-  if (process.env.NODE_ENV === 'test') return;
+  if (shouldSkipCloudMirror()) return;
   const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const key = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
   if (!url || !key) return;
@@ -242,7 +246,7 @@ export async function mirrorUserProfileToCloud(user: UserProfile): Promise<void>
 }
 
 export async function mirrorCompanyToCloud(company: Company): Promise<void> {
-  if (process.env.NODE_ENV === 'test') return;
+  if (shouldSkipCloudMirror()) return;
   const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const key = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
   if (!url || !key) return;
@@ -275,7 +279,7 @@ export async function mirrorCompanyToCloud(company: Company): Promise<void> {
 }
 
 export async function mirrorMembershipToCloud(membership: CompanyMembership): Promise<void> {
-  if (process.env.NODE_ENV === 'test') return;
+  if (shouldSkipCloudMirror()) return;
   const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const key = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
   if (!url || !key) return;
@@ -302,7 +306,7 @@ export async function mirrorMembershipToCloud(membership: CompanyMembership): Pr
 }
 
 export async function mirrorPartnerToCloud(partner: Partner): Promise<void> {
-  if (process.env.NODE_ENV === 'test') return;
+  if (shouldSkipCloudMirror()) return;
   const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const key = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
   if (!url || !key) return;
@@ -329,7 +333,7 @@ export async function mirrorPartnerToCloud(partner: Partner): Promise<void> {
 }
 
 export async function mirrorCategoryToCloud(cat: any): Promise<void> {
-  if (process.env.NODE_ENV === 'test') return;
+  if (shouldSkipCloudMirror()) return;
   const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const key = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
   if (!url || !key) return;
@@ -360,7 +364,7 @@ export async function mirrorCategoryToCloud(cat: any): Promise<void> {
 }
 
 export async function mirrorEventToCloud(ev: any): Promise<void> {
-  if (process.env.NODE_ENV === 'test') return;
+  if (shouldSkipCloudMirror()) return;
   const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const key = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
   if (!url || !key) return;
@@ -396,7 +400,7 @@ export async function mirrorEventToCloud(ev: any): Promise<void> {
 }
 
 export async function deleteCompanyFromCloud(companyId: string): Promise<void> {
-  if (process.env.NODE_ENV === 'test') return;
+  if (shouldSkipCloudMirror()) return;
   const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const key = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
   if (!url || !key) return;

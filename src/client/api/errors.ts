@@ -47,8 +47,11 @@ export function translateApiError(statusCode: number, rawMessage?: string): stri
   if ((msg.includes('счёт') || msg.includes('счет') || msg.includes('account')) && (msg.includes('не найден') || msg.includes('не существует') || msg.includes('not found'))) {
     return 'Счёт не выбран или не найден. Пожалуйста, нажмите на один из доступных счетов в списке выше.';
   }
+  if (statusCode === 401 || msg.includes('пользователь')) {
+    return rawMessage || 'Неверные учётные данные. Проверьте email и пароль.';
+  }
   if (msg.includes('не найдена') || msg.includes('не найден') || msg.includes('not found')) {
-    return 'Запрошенная запись не найдена или уже была удалена.';
+    return rawMessage || 'Запрошенная запись не найдена или уже была удалена.';
   }
   if (msg.includes('categoryid')) {
     return 'Пожалуйста, выберите статью/категорию операции.';

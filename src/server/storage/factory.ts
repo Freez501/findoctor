@@ -5,10 +5,15 @@
  * Pluggable repository instantiation based on environment configuration or programmatic overrides.
  */
 
+import dotenv from 'dotenv';
 import { IFinanceStore } from './interfaces.js';
 import { InMemoryStore } from './InMemoryStore.js';
 import { JsonFileStore } from './JsonFileStore.js';
 import { SupabaseStore } from './SupabaseStore.js';
+
+if (process.env.NODE_ENV !== 'test') {
+  dotenv.config();
+}
 
 export type StorageMode = 'memory' | 'json' | 'supabase';
 
@@ -23,7 +28,13 @@ let activeStoreInstance: IFinanceStore | null = null;
  * Creates a new instance of IFinanceStore according to the requested mode or env configuration.
  */
 export function createStorage(options?: StorageOptions): IFinanceStore {
-  const mode = (options?.mode || process.env.STORAGE_MODE || 'json').toLowerCase();
+  const defaultMode =
+    process.env.NODE_ENV === 'test'
+      ? options?.filePath
+        ? 'json'
+        : 'memory'
+      : process.env.STORAGE_MODE || 'json';
+  const mode = (options?.mode || defaultMode).toLowerCase();
 
   switch (mode) {
     case 'memory':

@@ -87,7 +87,9 @@ htmlcov/
 *.db
 dumps/
 backups/
+data/truespace.json
 data/cloud_mirror_retry_queue.json
+data/*.json
 
 # ============================================
 # ВРЕМЕННЫЕ ФАЙЛЫ

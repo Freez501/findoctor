@@ -327,6 +327,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     setCompaniesList((prev) => [...prev, created]);
     setCurrentCompany(created);
+    localStorage.setItem('truespace_current_company', JSON.stringify(created));
+    localStorage.setItem('truespace_company_id', created.id);
     api.setActiveCompanyId(created.id);
     return created;
   }, [currentUser?.id]);

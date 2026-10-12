@@ -198,16 +198,53 @@ export function createAuthRouter(store: IFinanceStore): Router {
 
       // Find company for this user
       const companies = await store.getCompanies();
-      let userCompany = companies[0];
-      for (const comp of companies) {
-        if (comp.ownerId === user.id) {
-          userCompany = comp;
-          break;
+      let userCompany = companies.find((c) => c.ownerId === user.id);
+      if (!userCompany) {
+        for (const comp of companies) {
+          const members = await store.getCompanyMembers(comp.id);
+          if (members.some((m) => m.membership.userId === user.id)) {
+            userCompany = comp;
+            break;
+          }
         }
-        const members = await store.getCompanyMembers(comp.id);
-        if (members.some((m) => m.membership.userId === user.id)) {
-          userCompany = comp;
-          break;
+      }
+      if (!userCompany) {
+        userCompany = companies[0];
+      }
+
+      // Ensure owner membership and default accounts exist for the user's company
+      if (userCompany) {
+        const existingMembers = await store.getCompanyMembers(userCompany.id);
+        if (
+          userCompany.ownerId === user.id &&
+          !existingMembers.some((m) => m.membership.userId === user.id)
+        ) {
+          await store.addCompanyMember({
+            companyId: userCompany.id,
+            userId: user.id,
+            role: 'owner',
+          });
+        }
+
+        const existingAccounts = await store.getAccounts(userCompany.id);
+        if (existingAccounts.length === 0) {
+          const defaultAccounts = [
+            { name: 'Нал 1 (Касса на площадке)', type: 'cash', color: '#10b981', icon: 'wallet', description: 'Разменная касса на выезде' },
+            { name: 'Нал 2 (Сейф / Владелец)', type: 'cash', color: '#059669', icon: 'vault', description: 'Сейф наличных средств' },
+            { name: 'Безнал 1 (Основной р/с)', type: 'bank', color: '#3b82f6', icon: 'landmark', description: 'Расчётный счёт в банке' },
+            { name: 'Безнал 2 (Резерв / Эквайринг)', type: 'bank', color: '#6366f1', icon: 'credit-card', description: 'Торговый эквайринг' },
+          ];
+          for (const acc of defaultAccounts) {
+            await store.createAccount({
+              companyId: userCompany.id,
+              name: acc.name,
+              type: acc.type as any,
+              color: acc.color,
+              icon: acc.icon,
+              description: acc.description,
+              initialBalance: 0,
+            });
+          }
         }
       }
 
