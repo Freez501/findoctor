@@ -31,8 +31,15 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  // Never cache live financial API calls
-  if (url.pathname.startsWith('/api/')) return;
+  // Never cache live financial API calls or Vite dev modules
+  if (
+    url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/node_modules/')
+  ) {
+    return;
+  }
 
   event.respondWith(
     fetch(request)

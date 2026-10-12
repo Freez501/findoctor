@@ -3,12 +3,16 @@
  * Root Application Component (`src/client/App.tsx`)
  */
 
-import React, { useState, Suspense, lazy } from 'react';
+import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Header, TabType } from './components/common/Header.js';
 import { TotalCapitalBanner } from './components/accounts/TotalCapitalBanner.js';
 import { AccountsGrid } from './components/accounts/AccountsGrid.js';
 import { AnalyticsDashboard } from './components/analytics/AnalyticsDashboard.js';
+import { EventsView } from './components/events/EventsView.js';
+import { TransactionHistory } from './components/history/TransactionHistory.js';
+import { SettingsView } from './components/settings/SettingsView.js';
+import { SuperAdminView } from './components/admin/SuperAdminView.js';
 import { QuickEntryModal } from './components/entry/QuickEntryModal.js';
 import { Toast } from './components/common/Toast.js';
 import { AuthView } from './components/auth/AuthView.js';
@@ -16,19 +20,6 @@ import { ProductLanding } from './components/landing/ProductLanding.js';
 import { OnboardingChecklist } from './components/onboarding/OnboardingChecklist.js';
 import { ErrorBoundary } from './components/common/ErrorBoundary.js';
 import { useAuth } from './context/AuthContext.js';
-
-const EventsView = lazy(() =>
-  import('./components/events/EventsView.js').then((m) => ({ default: m.EventsView }))
-);
-const TransactionHistory = lazy(() =>
-  import('./components/history/TransactionHistory.js').then((m) => ({ default: m.TransactionHistory }))
-);
-const SettingsView = lazy(() =>
-  import('./components/settings/SettingsView.js').then((m) => ({ default: m.SettingsView }))
-);
-const SuperAdminView = lazy(() =>
-  import('./components/admin/SuperAdminView.js').then((m) => ({ default: m.SuperAdminView }))
-);
 
 export const App: React.FC = () => {
   const { isAuthenticated, enterDemoMode } = useAuth();
@@ -86,26 +77,18 @@ export const App: React.FC = () => {
           onSelectTab={setCurrentTab}
           onOpenQuickEntry={() => handleOpenEntry()}
         />
-        <ErrorBoundary>
-          <Suspense
-            fallback={
-              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted-foreground)' }}>
-                Загрузка раздела...
-              </div>
-            }
-          >
-            {currentTab === 'accounts' && (
-              <>
-                <TotalCapitalBanner />
-                <AccountsGrid onOpenEntryWithAccount={(accId) => handleOpenEntry(accId)} />
-              </>
-            )}
-            {currentTab === 'events' && <EventsView />}
-            {currentTab === 'analytics' && <AnalyticsDashboard />}
-            {currentTab === 'history' && <TransactionHistory />}
-            {currentTab === 'settings' && <SettingsView />}
-            {currentTab === 'admin' && <SuperAdminView />}
-          </Suspense>
+        <ErrorBoundary key={currentTab}>
+          {currentTab === 'accounts' && (
+            <>
+              <TotalCapitalBanner />
+              <AccountsGrid onOpenEntryWithAccount={(accId) => handleOpenEntry(accId)} />
+            </>
+          )}
+          {currentTab === 'events' && <EventsView />}
+          {currentTab === 'analytics' && <AnalyticsDashboard />}
+          {currentTab === 'history' && <TransactionHistory />}
+          {currentTab === 'settings' && <SettingsView />}
+          {currentTab === 'admin' && <SuperAdminView />}
         </ErrorBoundary>
       </main>
 

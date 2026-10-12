@@ -26,9 +26,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 );
 
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // Ignore service worker registration errors in dev/test environments
+  if (import.meta.env.PROD) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
     });
-  });
+  } else {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      registrations.forEach((r) => r.unregister());
+    });
+  }
 }
