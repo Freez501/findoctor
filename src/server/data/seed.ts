@@ -321,41 +321,34 @@ export const SEED_TRANSACTIONS: readonly Transaction[] = [
 ];
 
 /**
- * Expected calculated balances after 21 transactions:
- * cash_1: 6,300 ₽
- * cash_2: 199,000 ₽
- * bank_1: 814,000 ₽
- * bank_2: 112,000 ₽
- * card_sbp: 35,000 ₽
- * Total: 1,166,300 ₽
+ * Dynamically calculated post-seed balances from INITIAL_ACCOUNTS_SEED and SEED_TRANSACTIONS
+ * so that modifying seed accounts or transactions never desynchronizes tests or initial state.
  */
-export const POST_SEED_ACCOUNTS: readonly Account[] = [
-  {
-    ...INITIAL_ACCOUNTS_SEED[0],
-    currentBalance: 6300,
+export const POST_SEED_ACCOUNTS: readonly Account[] = INITIAL_ACCOUNTS_SEED.map((acc) => {
+  let balance = acc.initialBalance;
+  for (const tx of SEED_TRANSACTIONS) {
+    if (tx.isDeleted) continue;
+    if (tx.type === 'income' && tx.toAccountId === acc.id) {
+      balance += tx.amount;
+    } else if (tx.type === 'expense' && tx.fromAccountId === acc.id) {
+      balance -= tx.amount;
+    } else if (tx.type === 'transfer') {
+      if (tx.fromAccountId === acc.id) balance -= tx.amount;
+      if (tx.toAccountId === acc.id) balance += tx.amount;
+    }
+  }
+  return {
+    ...acc,
+    currentBalance: balance,
     updatedAt: '2026-09-16T23:30:00Z',
-  },
-  {
-    ...INITIAL_ACCOUNTS_SEED[1],
-    currentBalance: 199000,
-    updatedAt: '2026-09-16T23:30:00Z',
-  },
-  {
-    ...INITIAL_ACCOUNTS_SEED[2],
-    currentBalance: 814000,
-    updatedAt: '2026-09-16T23:30:00Z',
-  },
-  {
-    ...INITIAL_ACCOUNTS_SEED[3],
-    currentBalance: 112000,
-    updatedAt: '2026-09-16T23:30:00Z',
-  },
-  {
-    ...INITIAL_ACCOUNTS_SEED[4],
-    currentBalance: 35000,
-    updatedAt: '2026-09-16T23:30:00Z',
-  },
-];
+  };
+});
+
+export const EXPECTED_SEED_ACCOUNTS_COUNT = INITIAL_ACCOUNTS_SEED.length;
+export const EXPECTED_SEED_TOTAL_BALANCE = POST_SEED_ACCOUNTS.reduce(
+  (sum, acc) => sum + acc.currentBalance,
+  0
+);
 
 export function getInitialAccounts(): Account[] {
   return JSON.parse(JSON.stringify(POST_SEED_ACCOUNTS));

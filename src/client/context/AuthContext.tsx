@@ -113,7 +113,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     } catch (err) {
-      console.warn('[AuthContext] Could not fetch server auth, operating in local offline mode:', err);
+      if (!import.meta.env.PROD) {
+        console.warn('[AuthContext] Could not fetch server auth, operating in local offline mode:', err);
+      }
     }
   }, [currentCompany?.id]);
 

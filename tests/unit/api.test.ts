@@ -3,6 +3,7 @@ import request from 'supertest';
 import { createApp } from '../../src/server/app.js';
 import { InMemoryStore } from '../../src/server/storage/InMemoryStore.js';
 import { ACCOUNT_IDS, EVENT_IDS } from '../../src/shared/constants.js';
+import { EXPECTED_SEED_ACCOUNTS_COUNT, EXPECTED_SEED_TOTAL_BALANCE } from '../../src/server/data/seed.js';
 
 describe('Milestone M2: Backend REST API Integration Tests', () => {
   let app: any;
@@ -51,11 +52,11 @@ describe('Milestone M2: Backend REST API Integration Tests', () => {
   // 2. ACCOUNTS
   // =========================================================================
   describe('Accounts Endpoints', () => {
-    it('GET /api/accounts should return 5 accounts and consolidated capital 1,166,300 ₽', async () => {
+    it('GET /api/accounts should return seed accounts and consolidated capital', async () => {
       const res = await request(app).get('/api/accounts');
       expect(res.status).toBe(200);
-      expect(res.body.accounts).toHaveLength(5);
-      expect(res.body.totalBalance).toBe(1166300);
+      expect(res.body.accounts).toHaveLength(EXPECTED_SEED_ACCOUNTS_COUNT);
+      expect(res.body.totalBalance).toBe(EXPECTED_SEED_TOTAL_BALANCE);
 
       const cash1 = res.body.accounts.find((a: any) => a.id === ACCOUNT_IDS.CASH_1);
       expect(cash1).toBeDefined();

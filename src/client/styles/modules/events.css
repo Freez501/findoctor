@@ -1,0 +1,205 @@
+/* ========================================================================= */
+/* Catering Events View (shadcn Grid & Card Layout)                          */
+/* ========================================================================= */
+.events-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.events-header-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+@media (min-width: 768px) {
+  .events-header-panel {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+.events-summary-grid,
+.capital-breakdown-pills {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.events-summary-card,
+.breakdown-pill {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.events-summary-card:hover,
+.breakdown-pill:hover {
+  border-color: #a1a1aa;
+}
+
+.events-summary-header,
+.pill-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
+.events-summary-amount,
+.pill-amount {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.event-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.event-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease;
+}
+
+.event-card:hover {
+  border-color: #a1a1aa;
+}
+
+.event-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.event-card-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--foreground);
+  line-height: 1.3;
+}
+
+.event-card-client {
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+  margin-top: 3px;
+}
+
+.status-badge {
+  font-size: 0.725rem;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.status-active {
+  background: #ecfdf5;
+  color: var(--color-success);
+  border: 1px solid #a7f3d0;
+}
+
+.status-completed {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.status-planned {
+  background: #fefce8;
+  color: #a16207;
+  border: 1px solid #fef08a;
+}
+
+.status-cancelled {
+  background: #fef2f2;
+  color: var(--destructive);
+  border: 1px solid #fecaca;
+}
+
+.event-progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.event-progress-bar {
+  height: 5px;
+  background: var(--muted);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.event-progress-fill {
+  height: 100%;
+  background: var(--color-bank);
+  border-radius: var(--radius-full);
+}
+
+.event-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  background: var(--muted);
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.event-metric-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.event-metric-label {
+  font-size: 0.6875rem;
+  color: var(--muted-foreground);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.event-metric-val {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.event-metric-val.val-positive {
+  color: var(--color-success);
+}
+
+.event-metric-val.val-warning {
+  color: var(--chart-1);
+}
+

@@ -6,6 +6,7 @@ import { InMemoryStore } from '../../src/server/storage/InMemoryStore.js';
 import { JsonFileStore } from '../../src/server/storage/JsonFileStore.js';
 import { createStorage, getStorageInstance, setStorageInstance } from '../../src/server/storage/factory.js';
 import { ACCOUNT_IDS, CATEGORY_IDS, EVENT_IDS } from '../../src/shared/constants.js';
+import { EXPECTED_SEED_ACCOUNTS_COUNT, EXPECTED_SEED_TOTAL_BALANCE } from '../../src/server/data/seed.js';
 
 describe('Storage Layer Unit Tests', () => {
   describe('InMemoryStore', () => {
@@ -15,12 +16,12 @@ describe('Storage Layer Unit Tests', () => {
       store = new InMemoryStore();
     });
 
-    it('should initialize with canonical 5 accounts totaling 1,166,300 ₽', async () => {
+    it('should initialize with canonical seed accounts and calculated total balance', async () => {
       const accounts = await store.getAccounts();
-      expect(accounts).toHaveLength(5);
+      expect(accounts).toHaveLength(EXPECTED_SEED_ACCOUNTS_COUNT);
 
       const total = accounts.reduce((sum, a) => sum + a.currentBalance, 0);
-      expect(total).toBe(1166300);
+      expect(total).toBe(EXPECTED_SEED_TOTAL_BALANCE);
 
       const cash1 = await store.getAccountById(ACCOUNT_IDS.CASH_1);
       expect(cash1).toBeDefined();
