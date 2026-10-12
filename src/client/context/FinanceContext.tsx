@@ -91,18 +91,69 @@ function sortAccounts(accounts: Account[]): Account[] {
   });
 }
 
+interface SwrSnapshot {
+  accounts: Account[];
+  categories: Category[];
+  partners: Partner[];
+  events: CateringEvent[];
+  transactions: Transaction[];
+}
+
+function readSwrSnapshot(companyId?: string | null): SwrSnapshot | null {
+  if (typeof window === 'undefined') return null;
+  const targetId = companyId || localStorage.getItem('truespace_company_id') || 'company_truespace_default';
+  try {
+    const raw = sessionStorage.getItem(`findoctor_swr_${targetId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.accounts)) {
+      return parsed;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return null;
+}
+
+function writeSwrSnapshot(companyId: string, snapshot: SwrSnapshot): void {
+  if (typeof window === 'undefined' || !companyId) return;
+  try {
+    sessionStorage.setItem(`findoctor_swr_${companyId}`, JSON.stringify(snapshot));
+  } catch {
+    // ignore quota errors
+  }
+}
+
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentCompany, isAuthenticated } = useAuth();
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [partners, setPartners] = useState<Partner[]>([]);
-  const [events, setEvents] = useState<CateringEvent[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const initialSnap = useMemo(() => readSwrSnapshot(currentCompany?.id), []);
+
+  const [accounts, setAccounts] = useState<Account[]>(() =>
+    initialSnap?.accounts ? sortAccounts(initialSnap.accounts) : []
+  );
+  const [categories, setCategories] = useState<Category[]>(() => initialSnap?.categories || []);
+  const [partners, setPartners] = useState<Partner[]>(() => initialSnap?.partners || []);
+  const [events, setEvents] = useState<CateringEvent[]>(() => initialSnap?.events || []);
+  const [transactions, setTransactions] = useState<Transaction[]>(() => initialSnap?.transactions || []);
   const [botStatus, setBotStatus] = useState<BotStatus | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isInitialLoaded, setIsInitialLoaded] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(() => !initialSnap);
+  const [isInitialLoaded, setIsInitialLoaded] = useState<boolean>(() => Boolean(initialSnap));
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  // Keep SWR snapshot in sync with live state for 0ms F5 reload
+  useEffect(() => {
+    const activeId = currentCompany?.id || api.activeCompanyId;
+    if (isAuthenticated && isInitialLoaded && activeId && accounts.length > 0) {
+      writeSwrSnapshot(activeId, {
+        accounts,
+        categories,
+        partners,
+        events,
+        transactions,
+      });
+    }
+  }, [isAuthenticated, isInitialLoaded, currentCompany?.id, accounts, categories, partners, events, transactions]);
 
   // Calculate aggregated capital safely
   const totalBalance = useMemo(() => {
@@ -248,6 +299,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setCategories([]);
     setPartners([]);
     setBotStatus(null);
+    setIsInitialLoaded(false);
+    if (typeof window !== 'undefined') {
+      try {
+        Object.keys(sessionStorage).forEach((k) => {
+          if (k.startsWith('findoctor_swr_')) sessionStorage.removeItem(k);
+        });
+      } catch {}
+    }
   }, []);
 
   // Reload data when active company changes or on mount; wipe state cleanly on logout
@@ -258,6 +317,15 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
     if (currentCompany?.id) {
       api.setActiveCompanyId(currentCompany.id);
+      const snap = readSwrSnapshot(currentCompany.id);
+      if (snap) {
+        setAccounts(sortAccounts(snap.accounts));
+        setCategories(snap.categories || []);
+        setPartners(snap.partners || []);
+        setEvents(snap.events || []);
+        setTransactions(snap.transactions || []);
+        setIsInitialLoaded(true);
+      }
     }
     refreshAll();
   }, [isAuthenticated, currentCompany?.id, refreshAll, clearFinanceState]);

@@ -12,9 +12,10 @@ import { useAccounts } from '../../hooks/useAccounts.js';
 import { formatRubles, formatPercent } from '../../utils/formatters.js';
 
 export const TotalCapitalBanner: React.FC = () => {
-  const { accounts, totalBalance } = useAccounts();
+  const { accounts, totalBalance, isLoading } = useAccounts();
 
   const activeAccounts = accounts.filter((a) => a.isActive !== false);
+  const isInitialColdLoad = isLoading && accounts.length === 0;
 
   return (
     <section className="total-capital-banner hero-glow-banner" aria-label="Сводный баланс и ликвидность">
@@ -31,7 +32,22 @@ export const TotalCapitalBanner: React.FC = () => {
           </div>
 
           <div className="banner-total-amount">
-            {formatRubles(totalBalance)}
+            {isInitialColdLoad ? (
+              <span
+                className="animate-pulse"
+                style={{
+                  display: 'inline-block',
+                  width: '180px',
+                  height: '44px',
+                  borderRadius: '10px',
+                  background: 'rgba(255, 255, 255, 0.14)',
+                  verticalAlign: 'middle',
+                }}
+                aria-label="Загрузка баланса"
+              />
+            ) : (
+              formatRubles(totalBalance)
+            )}
           </div>
         </div>
 

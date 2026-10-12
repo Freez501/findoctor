@@ -52,24 +52,31 @@ export function createAuthRouter(store: IFinanceStore): Router {
       let activeCompanyId = DEFAULT_COMPANY_ID;
       if (user) {
         const companies = await store.getCompanies();
-        const userCompanies: string[] = [];
-        for (const comp of companies) {
-          if (user.isSuperAdmin || comp.ownerId === user.id) {
-            userCompanies.push(comp.id);
-          } else {
-            const members = await store.getCompanyMembers(comp.id);
-            if (members.some((m) => m.membership.userId === user.id)) {
-              userCompanies.push(comp.id);
-            }
-          }
-        }
+        const ownedIds = companies
+          .filter((comp) => user!.isSuperAdmin || comp.ownerId === user!.id)
+          .map((comp) => comp.id);
 
-        if (headerCompanyId && userCompanies.includes(headerCompanyId)) {
+        if (headerCompanyId && ownedIds.includes(headerCompanyId)) {
           activeCompanyId = headerCompanyId;
-        } else if (userCompanies.length > 0) {
-          activeCompanyId = userCompanies[0];
+        } else if (ownedIds.length > 0 && !headerCompanyId) {
+          activeCompanyId = ownedIds[0];
         } else {
-          activeCompanyId = companies[0]?.id || DEFAULT_COMPANY_ID;
+          const otherCompanies = companies.filter((comp) => !ownedIds.includes(comp.id));
+          const memberResults = await Promise.all(
+            otherCompanies.map(async (comp) => {
+              const members = await store.getCompanyMembers(comp.id);
+              return members.some((m) => m.membership.userId === user!.id) ? comp.id : null;
+            })
+          );
+          const userCompanies = [...ownedIds, ...memberResults.filter((id): id is string => Boolean(id))];
+
+          if (headerCompanyId && userCompanies.includes(headerCompanyId)) {
+            activeCompanyId = headerCompanyId;
+          } else if (userCompanies.length > 0) {
+            activeCompanyId = userCompanies[0];
+          } else {
+            activeCompanyId = companies[0]?.id || DEFAULT_COMPANY_ID;
+          }
         }
       }
 
