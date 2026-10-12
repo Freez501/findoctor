@@ -60,7 +60,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
   initialAccountId,
   initialType = 'expense',
 }) => {
-  const { createTransaction, partners, accounts } = useFinance();
+  const { createTransaction, partners, accounts, events } = useFinance();
   const { currentUser, currentCompany } = useAuth();
 
   // Form State
@@ -76,7 +76,10 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
   });
   const [toAccountId, setToAccountId] = useState<string | null>(null);
   const [categoryId, setCategoryId] = useState<string>(DEFAULT_EXPENSE_CATEGORY_ID);
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(EVENT_IDS.WEDDING);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(() => {
+    if (events.some((e) => e.id === EVENT_IDS.WEDDING)) return EVENT_IDS.WEDDING;
+    return events[0]?.id || null;
+  });
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateStr());
   const [description, setDescription] = useState<string>('');
 
@@ -259,38 +262,30 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
       }
     }
 
-    setIsSubmitting(true);
+    const selectedPartner = partners.find((p) => p.id === selectedPartnerId);
+    const payload = {
+      type,
+      direction: type === 'transfer' ? ('transfer' as const) : direction,
+      amount,
+      fromAccountId: type === 'income' ? null : fromAccountId,
+      toAccountId: type === 'expense' ? null : toAccountId,
+      categoryId: type === 'transfer' ? CATEGORY_IDS.TRANSFER_INTERNAL : categoryId,
+      eventId: type === 'transfer' || direction !== 'operational' ? null : selectedEventId,
+      partnerId: direction === 'dividends' ? selectedPartnerId : null,
+      partnerName: direction === 'dividends' && selectedPartner ? selectedPartner.name : null,
+      description: description.trim(),
+      transactionDate: getIsoDateForSelectedDay(selectedDate),
+      createdBy: currentUser?.id || undefined,
+      companyId: currentCompany?.id,
+    };
 
-    try {
-      const selectedPartner = partners.find((p) => p.id === selectedPartnerId);
-      const result = await createTransaction({
-        type,
-        direction: type === 'transfer' ? 'transfer' : direction,
-        amount,
-        fromAccountId: type === 'income' ? null : fromAccountId,
-        toAccountId: type === 'expense' ? null : toAccountId,
-        categoryId: type === 'transfer' ? CATEGORY_IDS.TRANSFER_INTERNAL : categoryId,
-        eventId: type === 'transfer' || direction !== 'operational' ? null : selectedEventId,
-        partnerId: direction === 'dividends' ? selectedPartnerId : null,
-        partnerName: direction === 'dividends' && selectedPartner ? selectedPartner.name : null,
-        description: description.trim(),
-        transactionDate: getIsoDateForSelectedDay(selectedDate),
-        createdBy: currentUser?.fullName || currentUser?.email || 'Пользователь',
-        companyId: currentCompany?.id,
-      });
+    // Reset form and close modal immediately (0ms optimistic update on dashboard & journal)
+    setAmount(0);
+    setDescription('');
+    setSelectedDate(getTodayDateStr());
+    onClose();
 
-      if (result.success) {
-        // Reset form and close
-        setAmount(0);
-        setDescription('');
-        setSelectedDate(getTodayDateStr());
-        onClose();
-      } else {
-        setValidationError(result.error || 'Ошибка при сохранении операции');
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
+    void createTransaction(payload);
   };
 
   if (!isOpen) return null;

@@ -8,58 +8,62 @@
  * - History of payouts with source accounts, amounts, and descriptions
  */
 
-import React, { useEffect, useState } from 'react';
-import { Users, Loader2 } from 'lucide-react';
-import { api } from '../../api/apiClient.js';
-import { PartnersAnalyticsSummary } from '../../../shared/types.js';
+import React, { useMemo } from 'react';
+import { Users } from 'lucide-react';
+import { PartnersAnalyticsSummary, PartnerMetricItem } from '../../../shared/types.js';
+import { useFinance } from '../../context/FinanceContext.js';
 import { formatRubles, formatDateRu } from '../../utils/formatters.js';
 
+const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+
 export const PartnersDashboard: React.FC = () => {
-  const [data, setData] = useState<PartnersAnalyticsSummary | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const { partners, accounts, transactions } = useFinance();
 
-  const fetchAnalytics = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const res = await api.getPartnersAnalytics();
-      setData(res);
-    } catch (err: any) {
-      setError(err.message || 'Ошибка загрузки аналитики партнёров');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const data: PartnersAnalyticsSummary = useMemo(() => {
+    const accountMap = new Map(accounts.map((a) => [a.id, a.name]));
+    const activeTxs = transactions.filter((t) => !t.isDeleted);
 
-  useEffect(() => {
-    fetchAnalytics();
-  }, []);
+    const partnerMetrics: PartnerMetricItem[] = partners.map((p) => {
+      const pTxs = activeTxs.filter(
+        (tx) =>
+          tx.partnerId === p.id ||
+          (tx.partnerName && tx.partnerName.toLowerCase() === p.name.toLowerCase()) ||
+          (tx.direction === 'dividends' && tx.description?.toLowerCase().includes(p.name.toLowerCase()))
+      );
 
-  if (isLoading) {
-    return (
-      <div className="glass-panel" style={{ padding: '30px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-        <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto 8px', color: 'var(--color-accent)' }} />
-        <p style={{ fontSize: '0.85rem' }}>Загрузка данных по партнёрам...</p>
-      </div>
+      const totalWithdrawn = round2(
+        pTxs.reduce((sum, tx) => sum + (tx.type === 'expense' ? tx.amount : 0), 0)
+      );
+
+      const payouts = pTxs
+        .filter((tx) => tx.type === 'expense')
+        .sort((a, b) => new Date(b.transactionDate).getTime() - new Date(a.transactionDate).getTime())
+        .map((tx) => ({
+          transactionId: tx.id,
+          date: tx.transactionDate,
+          amount: tx.amount,
+          fromAccountName: tx.fromAccountId ? accountMap.get(tx.fromAccountId) || tx.fromAccountId : undefined,
+          comment: tx.description,
+        }));
+
+      return {
+        partnerId: p.id,
+        partnerName: p.name,
+        totalWithdrawn,
+        transactionsCount: payouts.length,
+        recentPayouts: payouts,
+      };
+    });
+
+    const totalDividendsPaid = round2(
+      partnerMetrics.reduce((sum, item) => sum + item.totalWithdrawn, 0)
     );
-  }
 
-  if (error || !data) {
-    return (
-      <div className="glass-panel" style={{ padding: '24px', textAlign: 'center', color: '#dc2626' }}>
-        <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>{error || 'Не удалось загрузить данные по партнёрам'}</p>
-        <button
-          type="button"
-          onClick={fetchAnalytics}
-          className="btn-confirm-no"
-          style={{ marginTop: '10px', padding: '6px 14px' }}
-        >
-          Повторить попытку
-        </button>
-      </div>
-    );
-  }
+    return {
+      totalDividendsPaid,
+      partners: partnerMetrics,
+    };
+  }, [partners, accounts, transactions]);
 
   return (
     <div className="partners-dashboard-panel animate-fade-in">

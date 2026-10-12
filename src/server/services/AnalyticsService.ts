@@ -106,20 +106,68 @@ export class AnalyticsService {
   }
 
   /**
-   * Calculates profitability margin metrics for all registered events.
+   * Calculates profitability margin metrics for all registered events using a single parallel fetch.
    */
   public async getAllEventsMargin(companyId?: string): Promise<EventMarginMetrics[]> {
-    const events = await this.store.getEvents(companyId);
-    const metrics: EventMarginMetrics[] = [];
+    const [events, allTxs, categories] = await Promise.all([
+      this.store.getEvents(companyId),
+      this.store.getTransactions({ includeDeleted: false, companyId }),
+      this.store.getCategories(companyId),
+    ]);
 
-    for (const ev of events) {
-      const metric = await this.getEventMargin(ev.id, companyId);
-      if (metric) {
-        metrics.push(metric);
+    const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
+
+    return events.map((event) => {
+      const normEventId = event.id.replace(/-/g, '_');
+      const eventTxs = allTxs.filter(
+        (tx) =>
+          tx.eventId &&
+          (tx.eventId === event.id || tx.eventId.replace(/-/g, '_') === normEventId)
+      );
+
+      const revenue = round2(
+        eventTxs.filter((tx) => tx.type === 'income').reduce((sum, tx) => sum + tx.amount, 0)
+      );
+      const directExpenses = round2(
+        eventTxs.filter((tx) => tx.type === 'expense').reduce((sum, tx) => sum + tx.amount, 0)
+      );
+      const netProfit = round2(revenue - directExpenses);
+
+      let marginPercentage = 0;
+      if (revenue > 0) {
+        marginPercentage = round2((netProfit / revenue) * 100);
+      } else if (directExpenses > 0) {
+        marginPercentage = -100;
       }
-    }
 
-    return metrics;
+      const catSumMap = new Map<string, number>();
+      for (const tx of eventTxs) {
+        if (tx.type === 'expense') {
+          const prev = catSumMap.get(tx.categoryId) || 0;
+          catSumMap.set(tx.categoryId, round2(prev + tx.amount));
+        }
+      }
+
+      const expensesByCategory: CategoryExpenseBreakdown[] = Array.from(catSumMap.entries())
+        .map(([categoryId, amount]) => ({
+          categoryId,
+          categoryName: categoryMap.get(categoryId) || categoryId,
+          amount,
+          percentage: directExpenses > 0 ? round2((amount / directExpenses) * 100) : 0,
+        }))
+        .sort((a, b) => b.amount - a.amount);
+
+      return {
+        eventId: event.id,
+        eventTitle: event.title,
+        eventDate: event.eventDate,
+        revenue,
+        directExpenses,
+        netProfit,
+        marginPercentage,
+        expensesByCategory,
+      };
+    });
   }
 
   /**
@@ -134,21 +182,37 @@ export class AnalyticsService {
   }
 
   /**
-   * Consolidated overview of the business.
+   * Consolidated overview of the business in a single parallel batch.
    */
   public async getOverview(companyId?: string): Promise<GetAnalyticsOverviewResponseDTO> {
-    const accounts = await this.store.getAccounts(companyId);
-    const totalBalance = round2(accounts.reduce((sum, a) => sum + a.currentBalance, 0));
-    const generalExpensesTotal = await this.getGeneralExpensesTotal(companyId);
+    const [accounts, events, allTxs] = await Promise.all([
+      this.store.getAccounts(companyId),
+      this.store.getEvents(companyId),
+      this.store.getTransactions({ includeDeleted: false, companyId }),
+    ]);
 
-    const events = await this.store.getEvents(companyId);
+    const totalBalance = round2(accounts.reduce((sum, a) => sum + a.currentBalance, 0));
+    const generalExpensesTotal = round2(
+      allTxs
+        .filter((tx) => tx.type === 'expense' && (tx.eventId === null || tx.eventId === undefined))
+        .reduce((sum, tx) => sum + tx.amount, 0)
+    );
+
     const activeEventsCount = events.filter((e) => e.status === 'active').length;
 
-    const eventMetrics = await this.getAllEventsMargin(companyId);
-    const eventsTotalRevenue = round2(eventMetrics.reduce((sum, m) => sum + m.revenue, 0));
-    const eventsTotalExpenses = round2(eventMetrics.reduce((sum, m) => sum + m.directExpenses, 0));
-    const eventsNetProfit = round2(eventsTotalRevenue - eventsTotalExpenses);
+    let eventsTotalRevenue = 0;
+    let eventsTotalExpenses = 0;
+    for (const ev of events) {
+      const normEventId = ev.id.replace(/-/g, '_');
+      for (const tx of allTxs) {
+        if (tx.eventId && (tx.eventId === ev.id || tx.eventId.replace(/-/g, '_') === normEventId)) {
+          if (tx.type === 'income') eventsTotalRevenue = round2(eventsTotalRevenue + tx.amount);
+          else if (tx.type === 'expense') eventsTotalExpenses = round2(eventsTotalExpenses + tx.amount);
+        }
+      }
+    }
 
+    const eventsNetProfit = round2(eventsTotalRevenue - eventsTotalExpenses);
     const averageMarginPercentage =
       eventsTotalRevenue > 0
         ? round2((eventsNetProfit / eventsTotalRevenue) * 100)
@@ -171,11 +235,12 @@ export class AnalyticsService {
    * Analytics on partner withdrawals, dividends, and cash distribution.
    */
   public async getPartnersAnalytics(companyId?: string): Promise<PartnersAnalyticsSummary> {
-    const partners = await this.store.getPartners(companyId);
-    const accounts = await this.store.getAccounts(companyId);
+    const [partners, accounts, transactions] = await Promise.all([
+      this.store.getPartners(companyId),
+      this.store.getAccounts(companyId),
+      this.store.getTransactions({ includeDeleted: false, companyId }),
+    ]);
     const accountMap = new Map(accounts.map((a) => [a.id, a.name]));
-
-    const transactions = await this.store.getTransactions({ includeDeleted: false, companyId });
 
     // Group transactions by partner
     const partnerMetrics: PartnerMetricItem[] = partners.map((p) => {

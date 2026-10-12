@@ -19,7 +19,7 @@ interface Props {
 
 export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelected, onToggleSelect }) => {
   const { accounts, categories, events, deleteTransaction } = useFinance();
-  const { userRole, isSuperAdmin } = useAuth();
+  const { userRole, isSuperAdmin, usersList, currentUser } = useAuth();
   const canDelete = isSuperAdmin || userRole === 'owner' || userRole === 'admin';
   const [isConfirming, setIsConfirming] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
@@ -27,6 +27,14 @@ export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelect
   const accMap = new Map(accounts.map((a) => [a.id, a.name]));
   const catMap = new Map(categories.map((c) => [c.id, c.name]));
   const eventMap = new Map(events.map((e) => [e.id, e.title]));
+
+  const createdByDisplay = (() => {
+    if (!transaction.createdBy) return null;
+    const raw = typeof transaction.createdBy === 'object' ? (transaction.createdBy as any).name : String(transaction.createdBy);
+    if (currentUser && raw === currentUser.id) return currentUser.fullName || currentUser.email;
+    const foundUser = usersList.find((u) => u.id === raw);
+    return foundUser ? foundUser.fullName || foundUser.email : raw;
+  })();
 
   const categoryName = catMap.get(transaction.categoryId) || (transaction.categoryId === 'uncategorized' ? 'Без статьи' : 'Операция');
   const eventTitle = transaction.eventId ? eventMap.get(transaction.eventId) || 'Мероприятие' : 'Общие расходы';
@@ -121,7 +129,7 @@ export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelect
           <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
             {formatDateTimeRu(transaction.transactionDate)}
           </span>
-          {transaction.createdBy && (
+          {createdByDisplay && (
             <span
               style={{
                 fontSize: '0.675rem',
@@ -131,9 +139,9 @@ export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelect
                 color: 'var(--color-mid-gray)',
                 whiteSpace: 'nowrap',
               }}
-              title={`Запись внёс сотрудник: ${typeof transaction.createdBy === 'object' ? transaction.createdBy.name : transaction.createdBy}`}
+              title={`Запись внёс сотрудник: ${createdByDisplay}`}
             >
-              👤 {typeof transaction.createdBy === 'object' ? transaction.createdBy.name : transaction.createdBy}
+              👤 {createdByDisplay}
             </span>
           )}
         </div>

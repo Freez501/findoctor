@@ -586,8 +586,6 @@ export class FinanceService {
       throw new Error('Счёт списания принадлежит другой организации');
     }
 
-    const updatedSource = await this.store.adjustAccountBalance(source.id, -params.amount);
-
     const tx = await this.store.createTransaction({
       type: 'expense',
       amount: params.amount,
@@ -604,6 +602,8 @@ export class FinanceService {
       createdBy: params.createdBy,
       updatedBy: params.updatedBy,
     });
+
+    const updatedSource = await this.store.adjustAccountBalance(source.id, -params.amount);
 
     return {
       transaction: this.attachAliases(tx),
@@ -638,8 +638,6 @@ export class FinanceService {
       throw new Error('Счёт зачисления принадлежит другой организации');
     }
 
-    const updatedTarget = await this.store.adjustAccountBalance(target.id, params.amount);
-
     const tx = await this.store.createTransaction({
       type: 'income',
       amount: params.amount,
@@ -656,6 +654,8 @@ export class FinanceService {
       createdBy: params.createdBy,
       updatedBy: params.updatedBy,
     });
+
+    const updatedTarget = await this.store.adjustAccountBalance(target.id, params.amount);
 
     return {
       transaction: this.attachAliases(tx),
@@ -702,9 +702,6 @@ export class FinanceService {
       throw new Error('Перевод между счетами разных организаций запрещен');
     }
 
-    const updatedSource = await this.store.adjustAccountBalance(source.id, -params.amount);
-    const updatedTarget = await this.store.adjustAccountBalance(target.id, params.amount);
-
     const tx = await this.store.createTransaction({
       type: 'transfer',
       amount: params.amount,
@@ -719,6 +716,9 @@ export class FinanceService {
       createdBy: params.createdBy,
       updatedBy: params.updatedBy,
     });
+
+    const updatedSource = await this.store.adjustAccountBalance(source.id, -params.amount);
+    const updatedTarget = await this.store.adjustAccountBalance(target.id, params.amount);
 
     return {
       transaction: this.attachAliases(tx),

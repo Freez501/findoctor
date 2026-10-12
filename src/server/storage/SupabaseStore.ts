@@ -460,6 +460,17 @@ export class SupabaseStore implements IFinanceStore {
     return data ? this.mapEvent(data) : null;
   }
 
+  private sanitizeUserIdRef(val: unknown): string | null {
+    if (!val || typeof val !== 'string') return null;
+    const trimmed = val.trim();
+    if (!trimmed) return null;
+    // Valid user_profiles IDs in our schema start with 'user_' or UUID format
+    if (trimmed.startsWith('user_') || /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(trimmed)) {
+      return trimmed;
+    }
+    return null;
+  }
+
   public async createEvent(eventInput: NewEventInput): Promise<CateringEvent> {
     const now = new Date().toISOString();
     const eventId =
@@ -478,12 +489,19 @@ export class SupabaseStore implements IFinanceStore {
       guest_count: eventInput.guestCount ?? 0,
       location: eventInput.location ?? null,
       notes: eventInput.notes ?? null,
-      created_by: (eventInput as any).createdBy ?? null,
-      updated_by: (eventInput as any).updatedBy ?? null,
+      created_by: this.sanitizeUserIdRef((eventInput as any).createdBy),
+      updated_by: this.sanitizeUserIdRef((eventInput as any).updatedBy),
       created_at: now,
       updated_at: now,
     };
-    const { data, error } = await this.client.from('events').insert(row).select('*').single();
+    let { data, error } = await this.client.from('events').insert(row).select('*').single();
+    if (error && error.message?.includes('foreign key constraint')) {
+      row.created_by = null;
+      row.updated_by = null;
+      const retry = await this.client.from('events').insert(row).select('*').single();
+      data = retry.data;
+      error = retry.error;
+    }
     if (error) throw new Error(error.message);
     return this.mapEvent(data || row);
   }
@@ -499,7 +517,7 @@ export class SupabaseStore implements IFinanceStore {
     if (updates.guestCount !== undefined) payload.guest_count = updates.guestCount;
     if (updates.location !== undefined) payload.location = updates.location;
     if (updates.notes !== undefined) payload.notes = updates.notes;
-    if (updates.updatedBy !== undefined) payload.updated_by = updates.updatedBy;
+    if (updates.updatedBy !== undefined) payload.updated_by = this.sanitizeUserIdRef(updates.updatedBy);
 
     const { data, error } = await this.client
       .from('events')
@@ -529,7 +547,7 @@ export class SupabaseStore implements IFinanceStore {
     if (error) throw new Error(error.message);
     const all = (data || []).map((r) => this.mapCategory(r));
     if (companyId) {
-      return all.filter((c) => !c.companyId || c.companyId === companyId || c.isSystem);
+      return all.filter((c) => !c.companyId || c.companyId === companyId || c.isSystem || c.companyId === DEFAULT_COMPANY_ID);
     }
     return all;
   }
@@ -637,7 +655,7 @@ export class SupabaseStore implements IFinanceStore {
       amount: round2(txInput.amount),
       from_account_id: txInput.fromAccountId ?? null,
       to_account_id: txInput.toAccountId ?? null,
-      category_id: txInput.categoryId || 'cat_other_expense',
+      category_id: txInput.categoryId || 'overhead',
       event_id: txInput.eventId ?? null,
       partner_id: (txInput as any).partnerId ?? null,
       partner_name: (txInput as any).partnerName ?? null,
@@ -645,12 +663,30 @@ export class SupabaseStore implements IFinanceStore {
       transaction_date: txInput.transactionDate || now,
       is_deleted: false,
       needs_review: (txInput as any).needsReview ?? false,
-      created_by: (txInput as any).createdBy ?? null,
-      updated_by: (txInput as any).updatedBy ?? null,
+      created_by: this.sanitizeUserIdRef((txInput as any).createdBy),
+      updated_by: this.sanitizeUserIdRef((txInput as any).updatedBy),
       created_at: now,
       updated_at: now,
     };
-    const { data, error } = await this.client.from('transactions').insert(row).select('*').single();
+    let { data, error } = await this.client.from('transactions').insert(row).select('*').single();
+    if (error && error.message?.includes('foreign key constraint')) {
+      if (error.message.includes('created_by') || error.message.includes('updated_by')) {
+        row.created_by = null;
+        row.updated_by = null;
+      }
+      if (error.message.includes('event_id')) {
+        row.event_id = null;
+      }
+      if (error.message.includes('partner_id')) {
+        row.partner_id = null;
+      }
+      if (error.message.includes('category_id')) {
+        row.category_id = txInput.type === 'income' ? 'contract_prepayment' : txInput.type === 'transfer' ? 'transfer_internal' : 'overhead';
+      }
+      const retry = await this.client.from('transactions').insert(row).select('*').single();
+      data = retry.data;
+      error = retry.error;
+    }
     if (error) throw new Error(error.message);
     return this.mapTransaction(data || row);
   }

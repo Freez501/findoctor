@@ -305,15 +305,20 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const tempId = `temp-tx-${Date.now()}`;
       const tempTx: Transaction = {
         id: tempId,
+        companyId: dto.companyId,
         type: dto.type,
+        direction: dto.direction,
         amount: numAmount,
         fromAccountId: dto.fromAccountId || null,
         toAccountId: dto.toAccountId || null,
-        categoryId: dto.categoryId || 'cat_other_expense',
+        categoryId: dto.categoryId || 'overhead',
         eventId: dto.eventId || null,
+        partnerId: dto.partnerId || null,
+        partnerName: dto.partnerName || null,
         description: dto.description || '',
         transactionDate: dto.transactionDate || new Date().toISOString(),
         isDeleted: false,
+        createdBy: dto.createdBy,
         createdAt: new Date().toISOString(),
       };
 
@@ -348,11 +353,13 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           if (res.updatedAccounts && res.updatedAccounts.length > 0) {
             mergeUpdatedAccounts(res.updatedAccounts);
           }
+          addToast('Операция записана', 'success');
           return { success: true, transaction: res.transaction };
         } else {
           // Rollback
           setAccounts(prevAccounts);
           setTransactions(prevTransactions);
+          addToast('Сервер отклонил операцию.', 'error');
           return { success: false, error: 'Сервер отклонил операцию.' };
         }
       } catch (err: any) {
@@ -360,10 +367,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setAccounts(prevAccounts);
         setTransactions(prevTransactions);
         const errMsg = err.message || 'Не удалось сохранить операцию. Баланс возвращён в исходное состояние.';
+        addToast(errMsg, 'error');
         return { success: false, error: errMsg };
       }
     },
-    [accounts, transactions, mergeUpdatedAccounts]
+    [accounts, transactions, mergeUpdatedAccounts, addToast]
   );
 
   // 2. Delete / Reverse Transaction

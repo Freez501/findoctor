@@ -3,8 +3,8 @@
  * Analytics Hook & Profitability Utilities (`src/client/hooks/useAnalytics.ts`)
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { EventMarginMetrics } from '../../shared/types.js';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { EventMarginMetrics, CategoryExpenseBreakdown } from '../../shared/types.js';
 import { GetAnalyticsOverviewResponseDTO } from '../../shared/dto.js';
 import { useFinance } from '../context/FinanceContext.js';
 import { useAuth } from '../context/AuthContext.js';
@@ -18,12 +18,8 @@ export interface MarginClassification {
   border: string;
 }
 
-/**
- * Classifies profit margin percentage into Russian visual status tiers:
- * - Green (>= 40%): Высокая рентабельность
- * - Yellow (20–39.99%): Умеренная норма прибыли
- * - Red (< 20% or negative): Низкая маржа / операционный убыток
- */
+const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+
 export function classifyMargin(percentage: number): MarginClassification {
   if (percentage >= 40) {
     return {
@@ -53,12 +49,102 @@ export function classifyMargin(percentage: number): MarginClassification {
 }
 
 export function useAnalytics() {
-  const { transactions, events } = useFinance();
+  const { transactions, events, accounts, categories, isInitialLoaded } = useFinance();
   const { currentCompany, currentUser } = useAuth();
-  const [metrics, setMetrics] = useState<EventMarginMetrics[]>([]);
-  const [overview, setOverview] = useState<GetAnalyticsOverviewResponseDTO | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [serverMetrics, setServerMetrics] = useState<EventMarginMetrics[] | null>(null);
+  const [serverOverview, setServerOverview] = useState<GetAnalyticsOverviewResponseDTO | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Instant 0ms local calculation from FinanceContext state
+  const computed = useMemo(() => {
+    const activeTxs = transactions.filter((t) => !t.isDeleted);
+    const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
+
+    const localMetrics: EventMarginMetrics[] = events.map((event) => {
+      const normEventId = event.id.replace(/-/g, '_');
+      const eventTxs = activeTxs.filter(
+        (tx) =>
+          tx.eventId &&
+          (tx.eventId === event.id || tx.eventId.replace(/-/g, '_') === normEventId)
+      );
+
+      const revenue = round2(
+        eventTxs.filter((tx) => tx.type === 'income').reduce((sum, tx) => sum + tx.amount, 0)
+      );
+      const directExpenses = round2(
+        eventTxs.filter((tx) => tx.type === 'expense').reduce((sum, tx) => sum + tx.amount, 0)
+      );
+      const netProfit = round2(revenue - directExpenses);
+
+      let marginPercentage = 0;
+      if (revenue > 0) {
+        marginPercentage = round2((netProfit / revenue) * 100);
+      } else if (directExpenses > 0) {
+        marginPercentage = -100;
+      }
+
+      const catSumMap = new Map<string, number>();
+      for (const tx of eventTxs) {
+        if (tx.type === 'expense') {
+          const prev = catSumMap.get(tx.categoryId) || 0;
+          catSumMap.set(tx.categoryId, round2(prev + tx.amount));
+        }
+      }
+
+      const expensesByCategory: CategoryExpenseBreakdown[] = Array.from(catSumMap.entries())
+        .map(([categoryId, amount]) => ({
+          categoryId,
+          categoryName: categoryMap.get(categoryId) || categoryId,
+          amount,
+          percentage: directExpenses > 0 ? round2((amount / directExpenses) * 100) : 0,
+        }))
+        .sort((a, b) => b.amount - a.amount);
+
+      return {
+        eventId: event.id,
+        eventTitle: event.title,
+        eventDate: event.eventDate,
+        revenue,
+        directExpenses,
+        netProfit,
+        marginPercentage,
+        expensesByCategory,
+      };
+    });
+
+    const totalBalance = round2(accounts.reduce((sum, a) => sum + a.currentBalance, 0));
+    const generalExpensesTotal = round2(
+      activeTxs
+        .filter((tx) => tx.type === 'expense' && (tx.eventId === null || tx.eventId === undefined))
+        .reduce((sum, tx) => sum + tx.amount, 0)
+    );
+    const eventsTotalRevenue = round2(localMetrics.reduce((sum, m) => sum + m.revenue, 0));
+    const eventsTotalExpenses = round2(localMetrics.reduce((sum, m) => sum + m.directExpenses, 0));
+    const eventsNetProfit = round2(eventsTotalRevenue - eventsTotalExpenses);
+    const averageMarginPercentage =
+      eventsTotalRevenue > 0 ? round2((eventsNetProfit / eventsTotalRevenue) * 100) : 0;
+
+    const localOverview: GetAnalyticsOverviewResponseDTO = {
+      totalBalance,
+      generalExpensesTotal,
+      eventsCount: events.length,
+      activeEventsCount: events.filter((e) => e.status === 'active').length,
+      eventsTotalRevenue,
+      eventsTotalExpenses,
+      eventsNetProfit,
+      averageMarginPercentage,
+      accounts,
+    };
+
+    return { localMetrics, localOverview };
+  }, [transactions, events, accounts, categories]);
+
+  // Clear stale server overrides whenever local transactions or events change
+  useEffect(() => {
+    setServerMetrics(null);
+    setServerOverview(null);
+  }, [transactions, events, currentCompany?.id]);
 
   const fetchAnalytics = useCallback(async () => {
     setIsLoading(true);
@@ -94,24 +180,27 @@ export function useAnalytics() {
       const eventsData = await eventsRes.json();
       const overviewData = await overviewRes.json();
 
-      setMetrics(eventsData.analytics || []);
-      setOverview(overviewData || null);
+      setServerMetrics(eventsData.analytics || []);
+      setServerOverview(overviewData || null);
     } catch (err: any) {
-      setError(err.message || 'Сбой обновления аналитики');
+      if (!isInitialLoaded) {
+        setError(err.message || 'Сбой обновления аналитики');
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [currentCompany?.id, currentUser?.id]);
+  }, [currentCompany?.id, currentUser?.id, isInitialLoaded]);
 
-  // Automatically refresh analytics whenever active transactions, events, or company changes
   useEffect(() => {
-    fetchAnalytics();
-  }, [fetchAnalytics, transactions, events]);
+    if (!isInitialLoaded) {
+      fetchAnalytics();
+    }
+  }, [isInitialLoaded, fetchAnalytics]);
 
   return {
-    metrics,
-    overview,
-    isLoading,
+    metrics: serverMetrics ?? computed.localMetrics,
+    overview: serverOverview ?? computed.localOverview,
+    isLoading: !isInitialLoaded && isLoading,
     error,
     refetch: fetchAnalytics,
   };
