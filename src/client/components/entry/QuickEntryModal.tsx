@@ -84,7 +84,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
   const [description, setDescription] = useState<string>('');
 
   // UI state
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const isSubmitting = false;
   const [validationError, setValidationError] = useState<string | null>(null);
   const [highlightedField, setHighlightedField] = useState<'fromAccount' | 'toAccount' | 'transferAccounts' | null>(null);
 

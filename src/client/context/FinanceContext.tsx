@@ -386,7 +386,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         description: dto.description || '',
         transactionDate: dto.transactionDate || new Date().toISOString(),
         isDeleted: false,
-        createdBy: dto.createdBy,
+        createdBy: dto.createdBy as any,
         createdAt: new Date().toISOString(),
       };
 
