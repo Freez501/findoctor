@@ -12,6 +12,8 @@ import { AnalyticsDashboard } from './components/analytics/AnalyticsDashboard.js
 import { QuickEntryModal } from './components/entry/QuickEntryModal.js';
 import { Toast } from './components/common/Toast.js';
 import { AuthView } from './components/auth/AuthView.js';
+import { ProductLanding } from './components/landing/ProductLanding.js';
+import { OnboardingChecklist } from './components/onboarding/OnboardingChecklist.js';
 import { ErrorBoundary } from './components/common/ErrorBoundary.js';
 import { useAuth } from './context/AuthContext.js';
 
@@ -29,7 +31,9 @@ const SuperAdminView = lazy(() =>
 );
 
 export const App: React.FC = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, enterDemoMode } = useAuth();
+  const [showAuthScreen, setShowAuthScreen] = useState<boolean>(false);
+  const [authInitialMode, setAuthInitialMode] = useState<'login' | 'register'>('login');
   const [currentTab, setCurrentTab] = useState<TabType>('accounts');
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>(undefined);
@@ -47,7 +51,20 @@ export const App: React.FC = () => {
   if (!isAuthenticated) {
     return (
       <>
-        <AuthView />
+        {showAuthScreen ? (
+          <AuthView
+            initialMode={authInitialMode}
+            onBackToLanding={() => setShowAuthScreen(false)}
+          />
+        ) : (
+          <ProductLanding
+            onTryDemo={() => enterDemoMode()}
+            onOpenAuth={(mode = 'login') => {
+              setAuthInitialMode(mode);
+              setShowAuthScreen(true);
+            }}
+          />
+        )}
         <Toast />
       </>
     );
@@ -64,6 +81,11 @@ export const App: React.FC = () => {
 
       {/* Main Tab Content */}
       <main className="app-container app-main-content">
+        <OnboardingChecklist
+          currentTab={currentTab}
+          onSelectTab={setCurrentTab}
+          onOpenQuickEntry={() => handleOpenEntry()}
+        />
         <ErrorBoundary>
           <Suspense
             fallback={

@@ -99,20 +99,24 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="app-header">
       <div className="header-container">
-        {/* Brand: Brilliant Event */}
+        {/* Brand: FINDOCTOR */}
         <div
           className="brand-group cursor-pointer"
           onClick={() => onSelectTab?.('accounts')}
           role="button"
           tabIndex={0}
-          title={`${currentCompany?.name || 'Brilliant Event'} — Главный экран`}
+          title="FINDOCTOR — Главный экран"
         >
           <div className="brand-icon-brilliant" aria-hidden="true">
             <Sparkles size={17} className="brand-gem-sparkle" />
           </div>
           <div className="brand-text-block">
-            <div className="brand-title-brilliant">{currentCompany?.name || 'Brilliant Event'}</div>
-            <div className="brand-tagline">Catering & Bar Finance</div>
+            <div className="brand-title-brilliant">
+              {!currentCompany?.name || currentCompany.name === 'Truespace Catering'
+                ? 'FINDOCTOR'
+                : currentCompany.name}
+            </div>
+            <div className="brand-tagline">Финансы и маржа ивентов</div>
           </div>
         </div>
 
@@ -201,7 +205,7 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
                     <div>
                       <div className="profile-company-name">
-                        {currentCompany?.name || 'Brilliant Event'}
+                        {currentCompany?.name || 'FINDOCTOR'}
                       </div>
                       <div className="profile-company-plan">
                         Организация • <span className="profile-plan-badge">PRO</span>

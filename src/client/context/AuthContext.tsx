@@ -21,10 +21,12 @@ export interface AuthContextType {
   isSuperAdmin: boolean;
   userRole: UserRole;
   isAuthenticated: boolean;
+  isDemoMode: boolean;
   isAdminModalOpen: boolean;
   setAdminModalOpen: (open: boolean) => void;
   login: (email: string, password?: string) => Promise<void>;
   register: (email: string, password?: string, fullName?: string, companyName?: string, code?: string) => Promise<void>;
+  enterDemoMode: () => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (userId: string, data: Partial<UserProfile>) => Promise<void>;
   updateCompanyDetails: (companyId: string, data: Partial<Company>) => Promise<void>;
@@ -42,6 +44,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem('truespace_logged_in') === 'true' && !!localStorage.getItem('truespace_user_id');
+  });
+
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(() => {
+    return localStorage.getItem('truespace_demo_mode') === 'true';
   });
 
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
@@ -83,11 +89,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         api.getCompanies().catch(() => [...INITIAL_COMPANIES_SEED]),
       ]);
 
+      const isDemo = localStorage.getItem('truespace_demo_mode') === 'true';
       if (userRes?.user) {
-        setCurrentUser(userRes.user);
-        localStorage.setItem('truespace_current_user', JSON.stringify(userRes.user));
-        localStorage.setItem('truespace_user_id', userRes.user.id);
-        api.setActiveUserId(userRes.user.id);
+        const effectiveUser: UserProfile = isDemo
+          ? { ...userRes.user, fullName: 'Гость (Демо-режим)', isSuperAdmin: false }
+          : userRes.user;
+        setCurrentUser(effectiveUser);
+        localStorage.setItem('truespace_current_user', JSON.stringify(effectiveUser));
+        localStorage.setItem('truespace_user_id', effectiveUser.id);
+        api.setActiveUserId(effectiveUser.id);
       }
       if (users && users.length > 0) {
         setUsersList(users);
@@ -100,7 +110,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           currentCompany?.id ||
           companies[0].id;
 
-        const activeCo = companies.find((c) => c.id === preferredCompanyId) || companies[0];
+        const rawActiveCo = companies.find((c) => c.id === preferredCompanyId) || companies[0];
+        const activeCo: Company =
+          isDemo && rawActiveCo.id === 'company_truespace_default'
+            ? { ...rawActiveCo, name: 'FINDOCTOR • Демо-кейтеринг' }
+            : rawActiveCo;
         setCurrentCompany(activeCo);
         localStorage.setItem('truespace_current_company', JSON.stringify(activeCo));
         localStorage.setItem('truespace_company_id', activeCo.id);
@@ -145,7 +159,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (res.user) {
       setCurrentUser(res.user);
       setIsAuthenticated(true);
+      setIsDemoMode(false);
       localStorage.setItem('truespace_logged_in', 'true');
+      localStorage.removeItem('truespace_demo_mode');
       localStorage.setItem('truespace_current_user', JSON.stringify(res.user));
       localStorage.setItem('truespace_user_id', res.user.id);
       api.setActiveUserId(res.user.id);
@@ -165,7 +181,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (res.user) {
       setCurrentUser(res.user);
       setIsAuthenticated(true);
+      setIsDemoMode(false);
       localStorage.setItem('truespace_logged_in', 'true');
+      localStorage.removeItem('truespace_demo_mode');
       localStorage.setItem('truespace_current_user', JSON.stringify(res.user));
       localStorage.setItem('truespace_user_id', res.user.id);
       api.setActiveUserId(res.user.id);
@@ -180,14 +198,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
+  const enterDemoMode = useCallback(async () => {
+    const demoUser: UserProfile = {
+      ...INITIAL_USERS_SEED[0],
+      fullName: 'Гость (Демо-режим)',
+      isSuperAdmin: false,
+    };
+    const demoCompany: Company = {
+      ...INITIAL_COMPANIES_SEED[0],
+      name: 'FINDOCTOR • Демо-кейтеринг',
+    };
+    setCurrentUser(demoUser);
+    setCurrentCompany(demoCompany);
+    setIsDemoMode(true);
+    setIsAuthenticated(true);
+    localStorage.setItem('truespace_logged_in', 'true');
+    localStorage.setItem('truespace_demo_mode', 'true');
+    localStorage.setItem('truespace_current_user', JSON.stringify(demoUser));
+    localStorage.setItem('truespace_user_id', demoUser.id);
+    localStorage.setItem('truespace_current_company', JSON.stringify(demoCompany));
+    localStorage.setItem('truespace_company_id', demoCompany.id);
+    api.setActiveUserId(demoUser.id);
+    api.setActiveCompanyId(demoCompany.id);
+  }, []);
+
   const logout = useCallback(async () => {
     await api.logout().catch(() => {});
     localStorage.setItem('truespace_logged_in', 'false');
+    localStorage.removeItem('truespace_demo_mode');
     localStorage.removeItem('truespace_current_user');
     localStorage.removeItem('truespace_user_id');
     localStorage.removeItem('truespace_current_company');
     localStorage.removeItem('truespace_company_id');
     setIsAuthenticated(false);
+    setIsDemoMode(false);
     setCurrentUser(null);
     setCurrentCompany(null);
     api.setActiveUserId('');
@@ -338,10 +382,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isSuperAdmin,
         userRole,
         isAuthenticated,
+        isDemoMode,
         isAdminModalOpen,
         setAdminModalOpen,
         login,
         register,
+        enterDemoMode,
         logout,
         updateProfile,
         updateCompanyDetails,

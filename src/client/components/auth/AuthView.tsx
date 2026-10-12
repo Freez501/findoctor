@@ -10,14 +10,19 @@
  */
 
 import React, { useState } from 'react';
-import { Wine, Lock, Mail, Building2, User, ArrowRight, Shield, AlertCircle, Eye, EyeOff, CheckCircle2, KeyRound } from 'lucide-react';
+import { Activity, Lock, Mail, Building2, User, ArrowRight, Shield, AlertCircle, Eye, EyeOff, CheckCircle2, KeyRound, Play, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
 import { api } from '../../api/apiClient.js';
 
-export const AuthView: React.FC = () => {
-  const { login, register, forgotPassword } = useAuth();
+interface AuthViewProps {
+  initialMode?: 'login' | 'register';
+  onBackToLanding?: () => void;
+}
 
-  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login');
+export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBackToLanding }) => {
+  const { login, register, forgotPassword, enterDemoMode } = useAuth();
+
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(initialMode);
   const [registerStep, setRegisterStep] = useState<'details' | 'verify'>('details');
   const [verificationCode, setVerificationCode] = useState('');
 
@@ -92,14 +97,36 @@ export const AuthView: React.FC = () => {
   return (
     <div className="auth-page-wrapper">
       <div className="auth-card-container animate-fade-in">
+        {onBackToLanding && (
+          <button
+            type="button"
+            onClick={onBackToLanding}
+            className="auth-back-landing-btn"
+          >
+            <ArrowLeft size={14} />
+            <span>О продукте FINDOCTOR</span>
+          </button>
+        )}
+
         {/* Brand Header */}
         <div className="auth-brand-header">
           <div className="auth-brand-icon">
-            <Wine size={26} strokeWidth={2.2} />
+            <Activity size={26} strokeWidth={2.2} />
           </div>
-          <h1 className="auth-brand-title">Brilliant Event</h1>
-          <p className="auth-brand-subtitle">Система финансового учёта барного кейтеринга</p>
+          <h1 className="auth-brand-title">FINDOCTOR</h1>
+          <p className="auth-brand-subtitle">Финансы, касса и реальная маржа выездных мероприятий</p>
         </div>
+
+        {/* One-Click Demo Button */}
+        <button
+          type="button"
+          onClick={() => enterDemoMode()}
+          className="auth-demo-quick-btn"
+          data-testid="auth-try-demo-btn"
+        >
+          <Play size={16} />
+          <span>Попробовать с демо-данными в 1 клик (без регистрации)</span>
+        </button>
 
         {/* Tab Toggle: Login vs Register (hidden on forgot) */}
         {mode !== 'forgot' && (

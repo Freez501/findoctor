@@ -1,0 +1,20 @@
+{
+  "name": "FINDOCTOR — Финансы и маржа выездных мероприятий",
+  "short_name": "FINDOCTOR",
+  "description": "Финансовый учёт, касса и реальная маржинальность для выездных баров, кейтеринга и ивентов",
+  "lang": "ru-RU",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#fbfbfa",
+  "theme_color": "#363330",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
