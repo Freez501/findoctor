@@ -61,37 +61,70 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
 
   const [currentCompany, setCurrentCompany] = useState<Company | null>(() => {
+    const isDemo = localStorage.getItem('truespace_demo_mode') === 'true';
+    const savedUserId = localStorage.getItem('truespace_user_id') || '';
+    const isRealCustomUser = !isDemo && savedUserId && savedUserId !== 'user_nikita' && savedUserId !== 'user_vlad';
     const saved = localStorage.getItem('truespace_current_company');
     if (saved) {
-      try { return JSON.parse(saved); } catch {}
+      try {
+        const parsed = JSON.parse(saved) as Company;
+        if (isRealCustomUser && parsed?.id === 'company_truespace_default') {
+          localStorage.removeItem('truespace_current_company');
+          localStorage.removeItem('truespace_company_id');
+          return null;
+        }
+        return parsed;
+      } catch {}
     }
     return null;
   });
 
-  const [companiesList, setCompaniesList] = useState<Company[]>([...INITIAL_COMPANIES_SEED]);
+  const [companiesList, setCompaniesList] = useState<Company[]>(() => {
+    const saved = localStorage.getItem('truespace_current_company');
+    if (saved) {
+      try {
+        return [JSON.parse(saved)];
+      } catch {}
+    }
+    return [...INITIAL_COMPANIES_SEED];
+  });
   const [companyMembers, setCompanyMembers] = useState<{ membership: CompanyMembership; user?: UserProfile }[]>([]);
   const [isAdminModalOpen, setAdminModalOpen] = useState(false);
 
   const refreshAuthData = useCallback(async () => {
     try {
+      const isDemo = localStorage.getItem('truespace_demo_mode') === 'true';
       const savedUserId = localStorage.getItem('truespace_user_id');
       if (savedUserId && !api.activeUserId) {
         api.setActiveUserId(savedUserId);
       }
       const savedCompanyId = localStorage.getItem('truespace_company_id');
-      if (savedCompanyId && !api.activeCompanyId) {
+      const isRealCustomUser = !isDemo && savedUserId && savedUserId !== 'user_nikita' && savedUserId !== 'user_vlad';
+      if (savedCompanyId && (!isRealCustomUser || savedCompanyId !== 'company_truespace_default')) {
         api.setActiveCompanyId(savedCompanyId);
       }
 
       const [userRes, users, companies] = await Promise.all([
         api.getCurrentUser().catch(() => null),
-        api.getUsers().catch(() => [...INITIAL_USERS_SEED]),
-        api.getCompanies().catch(() => [...INITIAL_COMPANIES_SEED]),
+        api.getUsers().catch(() => null),
+        api.getCompanies().catch(() => null),
       ]);
 
-      const isDemo = localStorage.getItem('truespace_demo_mode') === 'true';
+      // If requests were aborted by a rapid page refresh (F5), do not overwrite existing auth state
+      if (!userRes && !companies) {
+        return;
+      }
+
+      let effectiveUser: UserProfile | null = null;
+      const rawSavedUser = localStorage.getItem('truespace_current_user');
+      if (rawSavedUser) {
+        try {
+          effectiveUser = JSON.parse(rawSavedUser);
+        } catch {}
+      }
+
       if (userRes?.user) {
-        const effectiveUser: UserProfile = isDemo
+        effectiveUser = isDemo
           ? { ...userRes.user, fullName: 'Гость (Демо-режим)', isSuperAdmin: false }
           : userRes.user;
         setCurrentUser(effectiveUser);
@@ -104,13 +137,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       if (companies && companies.length > 0) {
         setCompaniesList(companies);
+
+        // For real (non-demo) users, prioritize their owned company so they never land on demo data
+        const ownedCo =
+          !isDemo && effectiveUser
+            ? companies.find((c) => c.ownerId === effectiveUser!.id && c.id !== 'company_truespace_default') ||
+              companies.find((c) => c.ownerId === effectiveUser!.id)
+            : undefined;
+
+        const validSavedCompanyId =
+          savedCompanyId &&
+          (!isRealCustomUser || savedCompanyId !== 'company_truespace_default') &&
+          companies.some((c) => c.id === savedCompanyId)
+            ? savedCompanyId
+            : undefined;
+
         const preferredCompanyId =
+          (isDemo ? 'company_truespace_default' : undefined) ||
+          validSavedCompanyId ||
+          (userRes?.activeCompanyId &&
+            userRes.activeCompanyId !== 'company_truespace_default' &&
+            companies.some((c) => c.id === userRes.activeCompanyId) &&
+            userRes.activeCompanyId) ||
+          ownedCo?.id ||
           (userRes?.activeCompanyId && companies.some((c) => c.id === userRes.activeCompanyId) && userRes.activeCompanyId) ||
-          (savedCompanyId && companies.some((c) => c.id === savedCompanyId) && savedCompanyId) ||
-          currentCompany?.id ||
           companies[0].id;
 
-        const rawActiveCo = companies.find((c) => c.id === preferredCompanyId) || companies[0];
+        const rawActiveCo = companies.find((c) => c.id === preferredCompanyId) || ownedCo || companies[0];
         const activeCo: Company =
           isDemo && rawActiveCo.id === 'company_truespace_default'
             ? { ...rawActiveCo, name: 'FINDOCTOR • Демо-кейтеринг' }
@@ -122,16 +175,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Fetch company members for this company
         if (activeCo) {
-          const members = await api.getCompanyMembers(activeCo.id).catch(() => []);
-          setCompanyMembers(members);
+          const members = await api.getCompanyMembers(activeCo.id).catch(() => null);
+          if (members) {
+            setCompanyMembers(members);
+          }
         }
       }
     } catch (err) {
       if (!import.meta.env.PROD) {
-        console.warn('[AuthContext] Could not fetch server auth, operating in local offline mode:', err);
+        console.warn('[AuthContext] Could not fetch server auth:', err);
       }
     }
-  }, [currentCompany?.id]);
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) {

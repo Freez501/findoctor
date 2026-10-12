@@ -101,7 +101,13 @@ interface SwrSnapshot {
 
 function readSwrSnapshot(companyId?: string | null): SwrSnapshot | null {
   if (typeof window === 'undefined') return null;
-  const targetId = companyId || localStorage.getItem('truespace_company_id') || 'company_truespace_default';
+  const isDemo = localStorage.getItem('truespace_demo_mode') === 'true';
+  const savedUserId = localStorage.getItem('truespace_user_id') || '';
+  const isRealCustomUser = !isDemo && savedUserId && savedUserId !== 'user_nikita' && savedUserId !== 'user_vlad';
+  const targetId = companyId || localStorage.getItem('truespace_company_id') || '';
+  if (!targetId || (isRealCustomUser && targetId === 'company_truespace_default')) {
+    return null;
+  }
   try {
     const raw = sessionStorage.getItem(`findoctor_swr_${targetId}`);
     if (!raw) return null;
@@ -315,17 +321,18 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       clearFinanceState();
       return;
     }
-    if (currentCompany?.id) {
-      api.setActiveCompanyId(currentCompany.id);
-      const snap = readSwrSnapshot(currentCompany.id);
-      if (snap) {
-        setAccounts(sortAccounts(snap.accounts));
-        setCategories(snap.categories || []);
-        setPartners(snap.partners || []);
-        setEvents(snap.events || []);
-        setTransactions(snap.transactions || []);
-        setIsInitialLoaded(true);
-      }
+    if (!currentCompany?.id) {
+      return;
+    }
+    api.setActiveCompanyId(currentCompany.id);
+    const snap = readSwrSnapshot(currentCompany.id);
+    if (snap) {
+      setAccounts(sortAccounts(snap.accounts));
+      setCategories(snap.categories || []);
+      setPartners(snap.partners || []);
+      setEvents(snap.events || []);
+      setTransactions(snap.transactions || []);
+      setIsInitialLoaded(true);
     }
     refreshAll();
   }, [isAuthenticated, currentCompany?.id, refreshAll, clearFinanceState]);
