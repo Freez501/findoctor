@@ -8,6 +8,7 @@
 import { IFinanceStore } from './interfaces.js';
 import { InMemoryStore } from './InMemoryStore.js';
 import { JsonFileStore } from './JsonFileStore.js';
+import { SupabaseStore } from './SupabaseStore.js';
 
 export type StorageMode = 'memory' | 'json' | 'supabase';
 
@@ -28,14 +29,18 @@ export function createStorage(options?: StorageOptions): IFinanceStore {
     case 'memory':
       return new InMemoryStore();
 
-    case 'supabase':
-      // Supabase adapter hook: falls back gracefully to JSON file storage if not configured
-      if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    case 'supabase': {
+      const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+      const key =
+        process.env.SUPABASE_SERVICE_ROLE_KEY ||
+        process.env.SUPABASE_ANON_KEY ||
+        process.env.VITE_SUPABASE_ANON_KEY;
+      if (!url || !key) {
         console.warn('[StorageFactory] STORAGE_MODE=supabase requested but credentials missing. Falling back to JsonFileStore.');
         return new JsonFileStore(options?.filePath);
       }
-      // Reserved for SupabaseStore in future cloud integration
-      return new JsonFileStore(options?.filePath);
+      return new SupabaseStore(url, key);
+    }
 
     case 'json':
     default:

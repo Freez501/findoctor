@@ -13,6 +13,7 @@
 import { IFinanceStore } from '../storage/interfaces.js';
 import { getStorageInstance } from '../storage/factory.js';
 import { Account, Category, Transaction, TransactionFilter, TransactionType, Partner, TransactionDirection } from '../../shared/types.js';
+import { CreateTransactionDTO } from '../../shared/dto.js';
 import {
   DEFAULT_EXPENSE_CATEGORY_ID,
   DEFAULT_INCOME_CATEGORY_ID,
@@ -140,7 +141,7 @@ export class FinanceService {
    * Universal transaction creation dispatcher.
    * Handles expense, income, and transfer operations with strict validation.
    */
-  public async createTransaction(dto: any): Promise<CreateTransactionResult> {
+  public async createTransaction(dto: CreateTransactionDTO): Promise<CreateTransactionResult> {
     if (!dto || typeof dto !== 'object') {
       throw new Error('Данные транзакции должны быть объектом');
     }
@@ -380,63 +381,64 @@ export class FinanceService {
       targetTo !== existing.toAccountId;
 
     if (financialChanges) {
-      // 1. Revert old financial impact
-      if (existing.type === 'expense' && existing.fromAccountId) {
-        const acc = await this.store.getAccountById(existing.fromAccountId);
-        if (acc) {
-          const res = await this.store.updateAccountBalance(acc.id, round2(acc.currentBalance + existing.amount));
-          updatedAccountsMap.set(res.id, res);
-        }
-      } else if (existing.type === 'income' && existing.toAccountId) {
-        const acc = await this.store.getAccountById(existing.toAccountId);
-        if (acc) {
-          const res = await this.store.updateAccountBalance(acc.id, round2(acc.currentBalance - existing.amount));
-          updatedAccountsMap.set(res.id, res);
-        }
-      } else if (existing.type === 'transfer') {
-        if (existing.fromAccountId) {
-          const src = await this.store.getAccountById(existing.fromAccountId);
-          if (src) {
-            const res = await this.store.updateAccountBalance(src.id, round2(src.currentBalance + existing.amount));
-            updatedAccountsMap.set(res.id, res);
-          }
-        }
-        if (existing.toAccountId) {
-          const dst = await this.store.getAccountById(existing.toAccountId);
-          if (dst) {
-            const currentBal = updatedAccountsMap.get(dst.id)?.currentBalance ?? dst.currentBalance;
-            const res = await this.store.updateAccountBalance(dst.id, round2(currentBal - existing.amount));
-            updatedAccountsMap.set(res.id, res);
-          }
-        }
-      }
-
-      // 2. Apply new financial impact
+      // Validate target accounts before mutating any balances
       if (targetType === 'expense') {
         if (!targetFrom) throw new Error('Для расхода необходим счёт списания');
         const acc = await this.store.getAccountById(targetFrom);
         if (!acc) throw new Error(`Счёт ${targetFrom} не найден`);
-        const currentBal = updatedAccountsMap.get(acc.id)?.currentBalance ?? acc.currentBalance;
-        const res = await this.store.updateAccountBalance(acc.id, round2(currentBal - targetAmount));
-        updatedAccountsMap.set(res.id, res);
       } else if (targetType === 'income') {
         if (!targetTo) throw new Error('Для дохода необходим счёт зачисления');
         const acc = await this.store.getAccountById(targetTo);
         if (!acc) throw new Error(`Счёт ${targetTo} не найден`);
-        const currentBal = updatedAccountsMap.get(acc.id)?.currentBalance ?? acc.currentBalance;
-        const res = await this.store.updateAccountBalance(acc.id, round2(currentBal + targetAmount));
-        updatedAccountsMap.set(res.id, res);
       } else if (targetType === 'transfer') {
         if (!targetFrom || !targetTo) throw new Error('Для перевода необходимы оба счёта');
         if (targetFrom === targetTo) throw new Error('Счета списания и зачисления должны отличаться');
         const src = await this.store.getAccountById(targetFrom);
         const dst = await this.store.getAccountById(targetTo);
         if (!src || !dst) throw new Error('Счёт не найден');
-        const srcBal = updatedAccountsMap.get(src.id)?.currentBalance ?? src.currentBalance;
-        const resSrc = await this.store.updateAccountBalance(src.id, round2(srcBal - targetAmount));
+      }
+
+      // 1. Revert old financial impact atomically
+      if (existing.type === 'expense' && existing.fromAccountId) {
+        const acc = await this.store.getAccountById(existing.fromAccountId);
+        if (acc) {
+          const res = await this.store.adjustAccountBalance(acc.id, existing.amount);
+          updatedAccountsMap.set(res.id, res);
+        }
+      } else if (existing.type === 'income' && existing.toAccountId) {
+        const acc = await this.store.getAccountById(existing.toAccountId);
+        if (acc) {
+          const res = await this.store.adjustAccountBalance(acc.id, -existing.amount);
+          updatedAccountsMap.set(res.id, res);
+        }
+      } else if (existing.type === 'transfer') {
+        if (existing.fromAccountId) {
+          const src = await this.store.getAccountById(existing.fromAccountId);
+          if (src) {
+            const res = await this.store.adjustAccountBalance(src.id, existing.amount);
+            updatedAccountsMap.set(res.id, res);
+          }
+        }
+        if (existing.toAccountId) {
+          const dst = await this.store.getAccountById(existing.toAccountId);
+          if (dst) {
+            const res = await this.store.adjustAccountBalance(dst.id, -existing.amount);
+            updatedAccountsMap.set(res.id, res);
+          }
+        }
+      }
+
+      // 2. Apply new financial impact atomically
+      if (targetType === 'expense' && targetFrom) {
+        const res = await this.store.adjustAccountBalance(targetFrom, -targetAmount);
+        updatedAccountsMap.set(res.id, res);
+      } else if (targetType === 'income' && targetTo) {
+        const res = await this.store.adjustAccountBalance(targetTo, targetAmount);
+        updatedAccountsMap.set(res.id, res);
+      } else if (targetType === 'transfer' && targetFrom && targetTo) {
+        const resSrc = await this.store.adjustAccountBalance(targetFrom, -targetAmount);
         updatedAccountsMap.set(resSrc.id, resSrc);
-        const dstBal = updatedAccountsMap.get(dst.id)?.currentBalance ?? dst.currentBalance;
-        const resDst = await this.store.updateAccountBalance(dst.id, round2(dstBal + targetAmount));
+        const resDst = await this.store.adjustAccountBalance(targetTo, targetAmount);
         updatedAccountsMap.set(resDst.id, resDst);
       }
     }

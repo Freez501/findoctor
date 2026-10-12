@@ -10,14 +10,17 @@ import ReactDOM from 'react-dom/client';
 import App from './App.js';
 import { AuthProvider } from './context/AuthContext.js';
 import { FinanceProvider } from './context/FinanceContext.js';
+import { ErrorBoundary } from './components/common/ErrorBoundary.js';
 import './styles/globals.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <AuthProvider>
-      <FinanceProvider>
-        <App />
-      </FinanceProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <FinanceProvider>
+          <App />
+        </FinanceProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );

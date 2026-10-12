@@ -142,7 +142,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const res = await api.getAccounts();
       setAccounts(sortAccounts(res.accounts));
     } catch (err: any) {
-      console.error('Failed to load accounts:', err);
+      if (!import.meta.env.PROD) console.error('Failed to load accounts:', err);
     }
   }, []);
 
@@ -151,7 +151,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const res = await api.getCategories();
       setCategories(res.categories);
     } catch (err: any) {
-      console.error('Failed to load categories:', err);
+      if (!import.meta.env.PROD) console.error('Failed to load categories:', err);
     }
   }, []);
 
@@ -160,7 +160,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const res = await api.getPartners();
       setPartners(res.partners);
     } catch (err: any) {
-      console.error('Failed to load partners:', err);
+      if (!import.meta.env.PROD) console.error('Failed to load partners:', err);
     }
   }, []);
 
@@ -169,7 +169,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const res = await api.getEvents();
       setEvents(res.events);
     } catch (err: any) {
-      console.error('Failed to load events:', err);
+      if (!import.meta.env.PROD) console.error('Failed to load events:', err);
     }
   }, []);
 
@@ -178,16 +178,26 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const res = await api.getTransactions({ includeDeleted: false });
       setTransactions(res.transactions);
     } catch (err: any) {
-      console.error('Failed to load transactions:', err);
+      if (!import.meta.env.PROD) console.error('Failed to load transactions:', err);
     }
   }, []);
 
   const refreshBotStatus = useCallback(async () => {
     try {
       const res = await api.getTelegramStatus();
-      setBotStatus(res);
+      setBotStatus((prev) => {
+        if (
+          prev &&
+          prev.enabled === res.enabled &&
+          prev.mode === res.mode &&
+          prev.botUsername === res.botUsername
+        ) {
+          return prev;
+        }
+        return res;
+      });
     } catch (err: any) {
-      console.error('Failed to load Telegram bot status:', err);
+      if (!import.meta.env.PROD) console.error('Failed to load Telegram bot status:', err);
     }
   }, []);
 
@@ -272,8 +282,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // 1. Create Transaction with Optimistic Balance Updates
   const createTransaction = useCallback(
     async (dto: CreateTransactionDTO): Promise<{ success: boolean; transaction?: Transaction; error?: string }> => {
+      const numAmount = Number(dto.amount);
       // Local validation
-      if (!dto.amount || dto.amount <= 0) {
+      if (!numAmount || isNaN(numAmount) || numAmount <= 0) {
         return { success: false, error: 'Сумма операции должна быть больше 0 ₽.' };
       }
       if (dto.type === 'transfer' && dto.fromAccountId === dto.toAccountId) {
@@ -295,10 +306,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const tempTx: Transaction = {
         id: tempId,
         type: dto.type,
-        amount: dto.amount,
+        amount: numAmount,
         fromAccountId: dto.fromAccountId || null,
         toAccountId: dto.toAccountId || null,
-        categoryId: dto.categoryId,
+        categoryId: dto.categoryId || 'cat_other_expense',
         eventId: dto.eventId || null,
         description: dto.description || '',
         transactionDate: dto.transactionDate || new Date().toISOString(),
@@ -310,14 +321,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return current.map((acc) => {
           let newBalance = acc.currentBalance;
           if (dto.type === 'expense' && acc.id === dto.fromAccountId) {
-            newBalance = roundRubles(newBalance - dto.amount);
+            newBalance = roundRubles(newBalance - numAmount);
           } else if (dto.type === 'income' && acc.id === dto.toAccountId) {
-            newBalance = roundRubles(newBalance + dto.amount);
+            newBalance = roundRubles(newBalance + numAmount);
           } else if (dto.type === 'transfer') {
             if (acc.id === dto.fromAccountId) {
-              newBalance = roundRubles(newBalance - dto.amount);
+              newBalance = roundRubles(newBalance - numAmount);
             } else if (acc.id === dto.toAccountId) {
-              newBalance = roundRubles(newBalance + dto.amount);
+              newBalance = roundRubles(newBalance + numAmount);
             }
           }
           return newBalance !== acc.currentBalance ? { ...acc, currentBalance: newBalance } : acc;

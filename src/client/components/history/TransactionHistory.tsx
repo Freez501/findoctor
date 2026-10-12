@@ -3,15 +3,16 @@
  * Transaction History Journal Component (`src/client/components/history/TransactionHistory.tsx`)
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, Suspense, lazy } from 'react';
 import { History, ReceiptText, Trash2, ArrowLeftRight } from 'lucide-react';
 import { Transaction } from '../../../shared/types.js';
 import { useFinance } from '../../context/FinanceContext.js';
 import { TransactionFilterBar } from './TransactionFilterBar.js';
 import { TransactionRow } from './TransactionRow.js';
 import { TransactionEditModal } from './TransactionEditModal.js';
-import { StatementImportModal } from '../import/StatementImportModal.js';
 import { BatchDeleteModal, BatchMoveModal } from './TransactionBatchModals.js';
+
+const StatementImportModal = lazy(() => import('../import/StatementImportModal.js'));
 
 export interface FilterState {
   accountId: string;
@@ -451,10 +452,14 @@ export const TransactionHistory: React.FC = () => {
         onClose={() => setEditingTx(null)}
       />
 
-      <StatementImportModal
-        isOpen={isImportOpen}
-        onClose={() => setIsImportOpen(false)}
-      />
+      {isImportOpen && (
+        <Suspense fallback={null}>
+          <StatementImportModal
+            isOpen={isImportOpen}
+            onClose={() => setIsImportOpen(false)}
+          />
+        </Suspense>
+      )}
 
       <BatchDeleteModal
         isOpen={isBatchDeleteOpen}

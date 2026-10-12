@@ -87,13 +87,15 @@ export interface CreateTransactionDTO {
   /** Direction: operational (event-based), business (overhead), dividends (partner payouts), transfer */
   direction?: import('./types.js').TransactionDirection;
   /** Strictly positive amount in rubles (> 0) */
-  amount: number;
+  amount: number | string;
   /** Source account ID (mandatory for expense and transfer) */
   fromAccountId?: string | null;
+  sourceAccountId?: string | null;
   /** Destination account ID (mandatory for income and transfer) */
   toAccountId?: string | null;
+  targetAccountId?: string | null;
   /** Associated category ID */
-  categoryId: string;
+  categoryId?: string;
   /** Event ID or null for general bar overhead */
   eventId?: string | null;
   /** Partner ID (for dividends or partner-attributed transactions) */
@@ -322,7 +324,7 @@ export function validateCreateTransactionDTO(input: unknown): ValidationResult<C
     errors: [],
     data: {
       type: payload.type!,
-      amount: Math.round(payload.amount! * 100) / 100, // Normalize to 2 decimal places
+      amount: Math.round(Number(payload.amount!) * 100) / 100, // Normalize to 2 decimal places
       fromAccountId: payload.fromAccountId || null,
       toAccountId: payload.toAccountId || null,
       categoryId: payload.categoryId!.trim(),

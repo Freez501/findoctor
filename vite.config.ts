@@ -19,6 +19,17 @@ export default defineConfig({
   build: {
     outDir: 'dist/client',
     emptyOutDir: true,
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom'],
+          icons: ['lucide-react'],
+          xlsx: ['xlsx'],
+          supabase: ['@supabase/supabase-js'],
+        },
+      },
+    },
   },
   test: {
     globals: true,

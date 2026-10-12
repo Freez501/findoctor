@@ -28,9 +28,27 @@ import { createTelegramRouter } from './routes/telegram.js';
 import { createSystemRouter } from './routes/system.js';
 import { createCompaniesRouter } from './routes/companies.js';
 import { createAuthRouter } from './routes/auth.js';
+import { authMiddleware } from './middleware/auth.js';
 
 export interface AppOptions {
   store?: IFinanceStore;
+}
+
+function isOriginAllowed(origin?: string): boolean {
+  if (!origin) return true; // Same-origin, curl, or server-to-server requests
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return true;
+  if (/^https?:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$/i.test(origin)) {
+    return true;
+  }
+
+  const customOrigins = [
+    ...(process.env.ALLOWED_ORIGINS || '').split(','),
+    process.env.FRONTEND_URL || '',
+  ]
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+  return customOrigins.includes(origin);
 }
 
 export function createApp(options?: AppOptions): Express {
@@ -43,9 +61,21 @@ export function createApp(options?: AppOptions): Express {
   const telegramService = new TelegramBotService(financeService, parserService);
 
   // Middlewares
-  app.use(cors());
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        if (isOriginAllowed(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error('Origin not allowed by CORS policy'));
+        }
+      },
+      credentials: true,
+    })
+  );
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  app.use(authMiddleware);
 
   // Request logger in dev
   if (process.env.NODE_ENV !== 'test') {
@@ -101,8 +131,14 @@ export function createApp(options?: AppOptions): Express {
       console.error('[AppError]', err);
     }
 
+    const isProd = process.env.NODE_ENV === 'production';
+    const safeMessage =
+      statusCode === 500 && isProd
+        ? 'Внутренняя ошибка сервера'
+        : err.message || 'Внутренняя ошибка сервера';
+
     res.status(statusCode).json({
-      error: err.message || 'Внутренняя ошибка сервера',
+      error: safeMessage,
       statusCode,
     });
   });

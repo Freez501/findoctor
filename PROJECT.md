@@ -1,45 +1,9 @@
 # Project: Truespace — Барный кейтеринг и финансы
 
-- **Статус:** `in_progress` ➔ `stage_account_validation_and_highlighting_completed` (Реализована валидация выбора счёта в QuickEntryModal с визуальной анимацией тряски/подсветки, интерактивным бейджем-указателем «👈 Пожалуйста, нажмите на один из счетов ниже», автоскроллом к невыбранному счёту и понятным переводом серверных ошибок на русский язык; 556/556 тестов green, сборка Vite + TS без ошибок)
-- **Текущий этап — Выполнение всех 18 фиксов (FIX_PLAN.md) + Доработка UX модалок и валидаций:**
-  1. **Группа P0 — Критическая безопасность и изоляция данных:**
-     - `FIX-01`: В `supabase.sql` и `src/server/data/supabase.sql` заменены небезопасные политики `USING (true)` на строгие RLS-функции с `auth.uid()` (`truespace_is_super_admin`, `truespace_user_has_company_access`). Документировано в `SUPABASE_FIXES.md`.
-     - `FIX-02`: В `src/server/routes/companies.ts` устранён RBAC bypass при удалении компаний — запрещено неавторизованное удаление без `callingUserId`.
-     - `FIX-03`: В `src/server/routes/transactions.ts` добавлен RBAC-контроль на `POST /api/transactions/batch-delete` (доступно только ролям `owner` и `admin`).
-     - `FIX-04`: В `src/server/routes/accounts.ts` и `FinanceService.ts` на эндпоинт сброса балансов добавлен RBAC и строгая изоляция по `companyId`.
-     - `FIX-05`: В `FinanceService.ts` (`executeTransfer`, `executeExpense`, `executeIncome`) обеспечена изоляция тенантов — перевод между счетами разных организаций блокируется.
-     - `FIX-06`: В `AnalyticsService.ts` и `src/server/routes/analytics.ts` добавлена фильтрация по `companyId` для всех методов аналитики.
-     - `FIX-07`: В `FinanceService.ts` (`updateTransaction`) добавлена валидация на неположительные суммы (`<= 0`).
-  2. **Группа P1 — Надёжность, целостность данных и синхронизация:**
-     - `FIX-08`: Устранено состояние гонки (race condition) при одновременных операциях с балансом — внедрён атомарный метод `adjustAccountBalance(id, delta)` в `IFinanceStore`, `InMemoryStore`, `JsonFileStore`.
-     - `FIX-09`: Тип `paid_until` в SQL-схеме обновлён на `TIMESTAMPTZ` с сохранением часового пояса.
-     - `FIX-10`: Добавлены составные индексы по `company_id` для таблиц `transactions`, `accounts`, `events`, `categories`, `partners`.
-     - `FIX-11`: Устранена утечка стейта при выходе (`logout`) в `FinanceContext.tsx` — состояние немедленно очищается в `[]`.
-     - `FIX-12`: В `cloudMirror.ts` реализована персистентная дисковая очередь повторных попыток (`data/cloud_mirror_retry_queue.json`) с лимитом 5 попыток и автоматическим сбросом.
-     - `FIX-13`: В SQL-схеме для полей `created_by` и `updated_by` добавлены `FOREIGN KEY REFERENCES user_profiles(id) ON DELETE SET NULL`.
-  3. **Группа P2 — Косметика, доступность и полировка UX:**
-     - `FIX-14`: Сенсорные цели (touch targets) для кнопок-иконок в `TransactionRow.tsx` и `EventsView.tsx` увеличены до минимума 44x44px.
-     - `FIX-15`: Захардкоженные цвета заменены на токены CSS-переменных (`var(--color-success)`, `var(--color-destructive)`, `var(--color-accent)`) в `TransactionRow.tsx`, `EventsView.tsx`, `SuperAdminView.tsx`.
-     - `FIX-16`: В `QuickEntryModal.tsx` захардкоженное имя `'Никита'` в fallback автора заменено на `'Пользователь'`.
-     - `FIX-17`: Контрастность текста переменной `--color-text-muted` и `--muted-foreground` улучшена с `#8a8580` до `#6b7280` (соответствие WCAG AA 4.6:1).
-     - `FIX-18`: Повторяющиеся inline-стили в `AuthView.tsx` и `SuperAdminView.tsx` вынесены в чистые многоразовые классы в `globals.css`.
-  4. **Новые доработки (выбор даты, защита от потери данных, создание статей, валидация счетов):**
-     - В `QuickEntryModal.tsx` добавлен блок «Дата операции» с быстрым выбором («Сегодня», «Вчера», кастомный пикер даты) и передачей точного ISO-времени в `createTransaction`.
-     - В `TransactionEditModal.tsx` внедрена защита от случайного клика мимо окна (по фону/бэкдропу) и нажатия Esc: при наличии изменённых данных (`isDirty`) запрашивается подтверждение перед закрытием, предотвращая случайную потерю введённой даты/суммы.
-     - В `QuickEntryModal.tsx` аналогично добавлена защита при наличии изменённой суммы, даты или заметки.
-     - В `CategoryChips.tsx` устранён баг с выкидыванием из окна при создании статьи через «+ Новая статья» (заменён вложенный `<form>` на `<div>` с `e.stopPropagation()`), устранено закрытие модалки, и статья мгновенно появляется в списке и выбирается.
-     - В `src/server/routes/categories.ts` и `SettingsView.tsx` исправлена привязка `companyId` при создании и редактировании статей (устранено скрытие созданной статьи в тенантах).
-     - **Валидация и подсветка счетов:**
-       - В `QuickEntryModal.tsx` устранён скрытый баг с подстановкой фантомных дефолтных счетов (`cash_2`), которых нет в созданных организациях (где счета генерируются с динамическими ID).
-       - Если счёт списания или зачисления не выбран, форма не отправляет запрос на сервер, а мягко скроллит к блоку счетов, подсвечивает его красной рамкой с анимацией покачивания (shake) и выводит интерактивный бейдж `👈 Пожалуйста, нажмите на один из счетов ниже`.
-       - При клике на любой счёт подсветка ошибки мгновенно исчезает.
-       - В `src/client/api/errors.ts` ошибка сервера при отсутствии счёта теперь возвращает понятный человеческий текст `«Счёт не выбран или не найден. Пожалуйста, нажмите на один из доступных счетов в списке выше.»` вместо пугающего `«Запрошенная запись не найдена или уже была удалена.»`.
-  5. **Тестирование и сборка:**
-     - 556 / 556 тестов пройдены успешно (100% green, 29 тест-сьютов).
-     - Сборка TypeScript и Vite завершена без ошибок (`dist/client/`).
+- **Статус:** `in_progress` ➔ `stage_autonomous_fix_prompt_completed` (Выполнены все 4 этапа из `AUTONOMOUS_FIX_PROMPT.md`: полноценный `SupabaseStore`, устранение P0 уязвимостей авторизации/CORS/RBAC, атомарный `updateTransaction`, асинхронный `JsonFileStore`, `ErrorBoundary`, Code Splitting с `React.lazy`, оптимизация `FinanceContext`, Rate Limiting, Source Maps и CI/CD пайплайн; 561/561 тестов green, сборка Vite + TS без ошибок)
 - **Локальная версия:** `http://localhost:5173/` (бэкенд API: `http://localhost:3001/api`)
 - **Wi-Fi доступ с телефона:** `http://192.168.100.82:5173/`
-- **Тесты:** 556 / 556 passed (100% green, 29 тест-сьютов)
+- **Тесты:** 561 / 561 passed (100% green, 30 тест-сьютов)
 - **Сборка:** Typecheck & Vite Build 100% green (0 errors)
 
 ## Architecture

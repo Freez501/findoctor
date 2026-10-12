@@ -14,20 +14,36 @@ import {
   mirrorMembershipToCloud,
   mirrorAccountToCloud,
 } from '../storage/cloudMirror.js';
-
-// Ephemeral active session user (in local offline/mock mode defaults to Nikita)
-let currentSessionUserId = 'user_nikita';
+import {
+  extractAuthContext,
+  signAuthToken,
+  verifyPassword,
+} from '../middleware/auth.js';
+import { createRateLimiter } from '../middleware/rateLimit.js';
 
 export function createAuthRouter(store: IFinanceStore): Router {
   const router = Router();
+  let devSessionUserId = 'user_nikita';
+
+  const loginRateLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: 'Слишком много попыток входа. Пожалуйста, подождите 15 минут.',
+  });
+
+  const codeRateLimiter = createRateLimiter({
+    windowMs: 60 * 1000,
+    max: 5,
+    message: 'Слишком много запросов кода подтверждения. Пожалуйста, подождите 1 минуту.',
+  });
 
   // GET /api/auth/me
   router.get('/me', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const headerUserId = (req.headers['x-user-id'] as string) || '';
+      const ctx = extractAuthContext(req, devSessionUserId);
       const headerCompanyId = (req.headers['x-company-id'] as string) || '';
 
-      const targetUserId = headerUserId || currentSessionUserId;
+      const targetUserId = ctx.userId || devSessionUserId;
       let user = await store.getUserById(targetUserId);
       if (!user) {
         user = (await store.getUsers())[0] || null;
@@ -84,7 +100,7 @@ export function createAuthRouter(store: IFinanceStore): Router {
       if (!user) {
         return res.status(404).json({ error: `Пользователь ${userId} не найден` });
       }
-      currentSessionUserId = userId;
+      devSessionUserId = userId;
 
       // Find company for this user
       const companies = await store.getCompanies();
@@ -101,7 +117,13 @@ export function createAuthRouter(store: IFinanceStore): Router {
         }
       }
 
-      res.json({ success: true, user, company: userCompany });
+      const token = signAuthToken({
+        userId: user.id,
+        email: user.email,
+        companyId: userCompany?.id || DEFAULT_COMPANY_ID,
+      });
+
+      res.json({ success: true, user, company: userCompany, token });
     } catch (err) {
       next(err);
     }
@@ -115,6 +137,7 @@ export function createAuthRouter(store: IFinanceStore): Router {
         return res.status(400).json({ error: 'Поле email обязательно' });
       }
 
+      const ctx = extractAuthContext(req, devSessionUserId);
       const existingUsers = await store.getUsers();
       let user = existingUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
 
@@ -135,7 +158,7 @@ export function createAuthRouter(store: IFinanceStore): Router {
         companyId: targetCompanyId,
         userId: user.id,
         role: targetRole,
-        invitedBy: currentSessionUserId,
+        invitedBy: ctx.userId || devSessionUserId,
       });
 
       res.status(201).json({ user, companyId: targetCompanyId, role: targetRole });
@@ -148,7 +171,7 @@ export function createAuthRouter(store: IFinanceStore): Router {
   const verificationStore = new Map<string, { code: string; expiresAt: number; fullName?: string; companyName?: string }>();
 
   // POST /api/auth/login
-  router.post('/login', async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/login', loginRateLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { email, password } = req.body;
       if (!email || typeof email !== 'string') {
@@ -156,17 +179,6 @@ export function createAuthRouter(store: IFinanceStore): Router {
       }
 
       const trimmedEmail = email.trim().toLowerCase();
-
-      // Check admin password restriction
-      if (trimmedEmail === 'admin@gmail.com') {
-        if (!password) {
-          return res.status(401).json({ error: 'Для входа в профиль администратора введите пароль' });
-        }
-        if (password !== 'Qazxsw123') {
-          return res.status(401).json({ error: 'Неверный пароль администратора платформы' });
-        }
-      }
-
       const users = await store.getUsers();
       const user = users.find((u) => u.email.toLowerCase() === trimmedEmail);
       if (!user) {
@@ -175,7 +187,14 @@ export function createAuthRouter(store: IFinanceStore): Router {
         });
       }
 
-      currentSessionUserId = user.id;
+      // Verify super-admin password via environment hash if configured
+      if (user.isSuperAdmin && process.env.ADMIN_PASSWORD_HASH) {
+        if (!password || !verifyPassword(String(password), process.env.ADMIN_PASSWORD_HASH)) {
+          return res.status(401).json({ error: 'Неверный пароль администратора платформы' });
+        }
+      }
+
+      devSessionUserId = user.id;
 
       // Find company for this user
       const companies = await store.getCompanies();
@@ -192,10 +211,17 @@ export function createAuthRouter(store: IFinanceStore): Router {
         }
       }
 
+      const token = signAuthToken({
+        userId: user.id,
+        email: user.email,
+        companyId: userCompany?.id || DEFAULT_COMPANY_ID,
+      });
+
       res.json({
         success: true,
         user,
         company: userCompany,
+        token,
       });
     } catch (err) {
       next(err);
@@ -203,7 +229,7 @@ export function createAuthRouter(store: IFinanceStore): Router {
   });
 
   // POST /api/auth/send-code
-  router.post('/send-code', async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/send-code', codeRateLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { email, password, fullName, companyName } = req.body;
       if (!email || typeof email !== 'string') {
@@ -268,7 +294,9 @@ export function createAuthRouter(store: IFinanceStore): Router {
         }
       }
 
-      console.log(`[Auth] Verification code registered for ${trimmedEmail}: ${code}`);
+      if (isTestEnv) {
+        console.log(`[Auth] Verification code registered for ${trimmedEmail}: ${code}`);
+      }
 
       res.json({
         success: true,
@@ -283,7 +311,7 @@ export function createAuthRouter(store: IFinanceStore): Router {
   });
 
   // POST /api/auth/verify-code
-  router.post('/verify-code', async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/verify-code', codeRateLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { email, code } = req.body;
       if (!email || !code) {
@@ -292,7 +320,11 @@ export function createAuthRouter(store: IFinanceStore): Router {
 
       const trimmedEmail = email.trim().toLowerCase();
       const stored = verificationStore.get(trimmedEmail);
-      let isValid = (stored && stored.code === String(code).trim()) || String(code).trim() === '777111';
+      let isValid = Boolean(
+        stored &&
+          stored.code === String(code).trim() &&
+          stored.expiresAt >= Date.now()
+      );
 
       if (!isValid) {
         const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -354,7 +386,11 @@ export function createAuthRouter(store: IFinanceStore): Router {
       // If code was supplied, verify it
       if (code) {
         const stored = verificationStore.get(trimmedEmail);
-        let isValid = (stored && stored.code === String(code).trim()) || String(code).trim() === '777111';
+        let isValid = Boolean(
+          stored &&
+            stored.code === String(code).trim() &&
+            stored.expiresAt >= Date.now()
+        );
 
         if (!isValid) {
           const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -380,6 +416,7 @@ export function createAuthRouter(store: IFinanceStore): Router {
         if (!isValid) {
           return res.status(400).json({ error: 'Неверный код подтверждения email. Проверьте цифры из письма.' });
         }
+        verificationStore.delete(trimmedEmail);
       }
 
       const existingUsers = await store.getUsers();
@@ -418,7 +455,7 @@ export function createAuthRouter(store: IFinanceStore): Router {
         role: 'owner',
       });
 
-      currentSessionUserId = user.id;
+      devSessionUserId = user.id;
 
       // Mirror user, company, and membership to cloud in background
       mirrorUserProfileToCloud(user).catch(() => {});
@@ -446,12 +483,17 @@ export function createAuthRouter(store: IFinanceStore): Router {
         mirrorAccountToCloud(createdAcc).catch(() => {});
       }
 
-      currentSessionUserId = user.id;
+      const token = signAuthToken({
+        userId: user.id,
+        email: user.email,
+        companyId: newCompany.id,
+      });
 
       res.status(201).json({
         success: true,
         user,
         company: newCompany,
+        token,
       });
     } catch (err) {
       next(err);
@@ -460,7 +502,7 @@ export function createAuthRouter(store: IFinanceStore): Router {
 
   // POST /api/auth/logout
   router.post('/logout', async (_req: Request, res: Response) => {
-    currentSessionUserId = '';
+    devSessionUserId = '';
     res.json({ success: true, message: 'Сессия успешно завершена' });
   });
 

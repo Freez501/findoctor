@@ -3,20 +3,30 @@
  * Root Application Component (`src/client/App.tsx`)
  */
 
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { Plus } from 'lucide-react';
 import { Header, TabType } from './components/common/Header.js';
 import { TotalCapitalBanner } from './components/accounts/TotalCapitalBanner.js';
 import { AccountsGrid } from './components/accounts/AccountsGrid.js';
-import { EventsView } from './components/events/EventsView.js';
 import { AnalyticsDashboard } from './components/analytics/AnalyticsDashboard.js';
-import { TransactionHistory } from './components/history/TransactionHistory.js';
-import { SettingsView } from './components/settings/SettingsView.js';
-import { SuperAdminView } from './components/admin/SuperAdminView.js';
 import { QuickEntryModal } from './components/entry/QuickEntryModal.js';
 import { Toast } from './components/common/Toast.js';
 import { AuthView } from './components/auth/AuthView.js';
+import { ErrorBoundary } from './components/common/ErrorBoundary.js';
 import { useAuth } from './context/AuthContext.js';
+
+const EventsView = lazy(() =>
+  import('./components/events/EventsView.js').then((m) => ({ default: m.EventsView }))
+);
+const TransactionHistory = lazy(() =>
+  import('./components/history/TransactionHistory.js').then((m) => ({ default: m.TransactionHistory }))
+);
+const SettingsView = lazy(() =>
+  import('./components/settings/SettingsView.js').then((m) => ({ default: m.SettingsView }))
+);
+const SuperAdminView = lazy(() =>
+  import('./components/admin/SuperAdminView.js').then((m) => ({ default: m.SuperAdminView }))
+);
 
 export const App: React.FC = () => {
   const { isAuthenticated } = useAuth();
@@ -54,17 +64,27 @@ export const App: React.FC = () => {
 
       {/* Main Tab Content */}
       <main className="app-container app-main-content">
-        {currentTab === 'accounts' && (
-          <>
-            <TotalCapitalBanner />
-            <AccountsGrid onOpenEntryWithAccount={(accId) => handleOpenEntry(accId)} />
-          </>
-        )}
-        {currentTab === 'events' && <EventsView />}
-        {currentTab === 'analytics' && <AnalyticsDashboard />}
-        {currentTab === 'history' && <TransactionHistory />}
-        {currentTab === 'settings' && <SettingsView />}
-        {currentTab === 'admin' && <SuperAdminView />}
+        <ErrorBoundary>
+          <Suspense
+            fallback={
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted-foreground)' }}>
+                Загрузка раздела...
+              </div>
+            }
+          >
+            {currentTab === 'accounts' && (
+              <>
+                <TotalCapitalBanner />
+                <AccountsGrid onOpenEntryWithAccount={(accId) => handleOpenEntry(accId)} />
+              </>
+            )}
+            {currentTab === 'events' && <EventsView />}
+            {currentTab === 'analytics' && <AnalyticsDashboard />}
+            {currentTab === 'history' && <TransactionHistory />}
+            {currentTab === 'settings' && <SettingsView />}
+            {currentTab === 'admin' && <SuperAdminView />}
+          </Suspense>
+        </ErrorBoundary>
       </main>
 
       {/* Floating Action Button (Mobile) */}

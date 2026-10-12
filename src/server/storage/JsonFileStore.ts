@@ -63,11 +63,14 @@ export class JsonFileStore extends InMemoryStore implements IFinanceStore {
     // Default: initialize with seed and persist
     const initialState = createInitialDatabaseState();
     this.state = initialState;
-    this.persist();
+    this.persistSync();
     return initialState;
   }
 
-  private persist(): void {
+  private writePromise: Promise<void> = Promise.resolve();
+  private dirty = false;
+
+  private persistSync(): void {
     try {
       const dir = path.dirname(this.filePath);
       if (!fs.existsSync(dir)) {
@@ -80,135 +83,156 @@ export class JsonFileStore extends InMemoryStore implements IFinanceStore {
     }
   }
 
+  private async persist(): Promise<void> {
+    this.dirty = true;
+    this.writePromise = this.writePromise.then(async () => {
+      if (!this.dirty) return;
+      this.dirty = false;
+      try {
+        const dir = path.dirname(this.filePath);
+        await fs.promises.mkdir(dir, { recursive: true });
+        const serialized = JSON.stringify(this.state, null, 2);
+        const tempFile = `${this.filePath}.tmp`;
+        await fs.promises.writeFile(tempFile, serialized, 'utf-8');
+        await fs.promises.rename(tempFile, this.filePath).catch(async () => {
+          await fs.promises.writeFile(this.filePath, serialized, 'utf-8');
+        });
+      } catch (err) {
+        console.warn(`[JsonFileStore] Warning: Failed to write to disk (${this.filePath}):`, err);
+      }
+    });
+    return this.writePromise;
+  }
+
   public override async createCompany(companyInput: Omit<Company, 'createdAt' | 'updatedAt'> & { id?: string }): Promise<Company> {
     const result = await super.createCompany(companyInput);
-    this.persist();
+    await this.persist();
     return result;
   }
 
   public override async updateCompany(id: string, updates: Partial<Company>): Promise<Company> {
     const result = await super.updateCompany(id, updates);
-    this.persist();
+    await this.persist();
     return result;
   }
 
   public override async deleteCompany(id: string): Promise<boolean> {
     const result = await super.deleteCompany(id);
-    if (result) this.persist();
+    if (result) await this.persist();
     return result;
   }
 
   public override async saveUserProfile(userInput: Partial<UserProfile> & { id: string; email: string }): Promise<UserProfile> {
     const result = await super.saveUserProfile(userInput);
-    this.persist();
+    await this.persist();
     return result;
   }
 
   public override async addCompanyMember(data: { companyId: string; userId: string; role: UserRole; invitedBy?: string }): Promise<CompanyMembership> {
     const result = await super.addCompanyMember(data);
-    this.persist();
+    await this.persist();
     return result;
   }
 
   public override async updateAccountBalance(id: string, newBalance: number): Promise<Account> {
     const result = await super.updateAccountBalance(id, newBalance);
-    this.persist();
+    await this.persist();
     return result;
   }
 
   public override async adjustAccountBalance(id: string, delta: number): Promise<Account> {
     const result = await super.adjustAccountBalance(id, delta);
-    this.persist();
+    await this.persist();
     return result;
   }
 
   public override async createEvent(eventInput: NewEventInput): Promise<CateringEvent> {
     const result = await super.createEvent(eventInput);
-    this.persist();
+    await this.persist();
     return result;
   }
 
   public override async updateEvent(id: string, updates: Partial<CateringEvent>): Promise<CateringEvent> {
     const result = await super.updateEvent(id, updates);
-    this.persist();
+    await this.persist();
     return result;
   }
 
   public override async deleteEvent(id: string): Promise<boolean> {
     const result = await super.deleteEvent(id);
     if (result) {
-      this.persist();
+      await this.persist();
     }
     return result;
   }
 
   public override async createTransaction(txInput: NewTransactionInput): Promise<Transaction> {
     const result = await super.createTransaction(txInput);
-    this.persist();
+    await this.persist();
     return result;
   }
 
   public override async updateTransaction(id: string, updates: Partial<Transaction>): Promise<Transaction> {
     const result = await super.updateTransaction(id, updates);
-    this.persist();
+    await this.persist();
     return result;
   }
 
   public override async softDeleteTransaction(id: string): Promise<Transaction> {
     const result = await super.softDeleteTransaction(id);
-    this.persist();
+    await this.persist();
     return result;
   }
 
   public override async saveAccount(accountInput: Partial<Account> & { id: string }): Promise<Account> {
     const result = await super.saveAccount(accountInput);
-    this.persist();
+    await this.persist();
     return result;
   }
 
   public override async createAccount(accountInput: Omit<Account, 'currentBalance' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<Account> {
     const result = await super.createAccount(accountInput);
-    this.persist();
+    await this.persist();
     return result;
   }
 
   public override async savePartner(partnerInput: Omit<Partner, 'createdAt' | 'updatedAt'> & { id?: string }): Promise<Partner> {
     const result = await super.savePartner(partnerInput);
-    this.persist();
+    await this.persist();
     return result;
   }
 
   public override async saveCategory(category: Category): Promise<Category> {
     const result = await super.saveCategory(category);
-    this.persist();
+    await this.persist();
     return result;
   }
 
   public override async deleteAccount(id: string): Promise<boolean> {
     const result = await super.deleteAccount(id);
-    if (result) this.persist();
+    if (result) await this.persist();
     return result;
   }
 
   public override async deletePartner(id: string): Promise<boolean> {
     const result = await super.deletePartner(id);
-    if (result) this.persist();
+    if (result) await this.persist();
     return result;
   }
 
   public override async deleteCategory(id: string): Promise<boolean> {
     const result = await super.deleteCategory(id);
-    if (result) this.persist();
+    if (result) await this.persist();
     return result;
   }
 
   public override async resetToSeed(): Promise<void> {
     await super.resetToSeed();
-    this.persist();
+    await this.persist();
   }
 
   public override async importState(newState: any): Promise<void> {
     await super.importState(newState);
-    this.persist();
+    await this.persist();
   }
 }

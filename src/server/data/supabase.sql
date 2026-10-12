@@ -116,6 +116,22 @@ CREATE TRIGGER trg_accounts_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION truespace_set_updated_at();
 
+-- 2.1 ATOMIC BALANCE ADJUSTMENT RPC
+CREATE OR REPLACE FUNCTION truespace_adjust_account_balance(p_account_id TEXT, p_delta NUMERIC)
+RETURNS NUMERIC AS $$
+DECLARE
+    v_new_balance NUMERIC;
+BEGIN
+    UPDATE accounts
+    SET current_balance = current_balance + p_delta,
+        updated_at = NOW()
+    WHERE id = p_account_id
+    RETURNING current_balance INTO v_new_balance;
+
+    RETURN v_new_balance;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- ============================================================================
 -- 3. TABLE: PARTNERS (Партнёры и сооснователи)
 -- ============================================================================
