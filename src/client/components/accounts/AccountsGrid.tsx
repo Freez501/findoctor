@@ -11,7 +11,6 @@ import { useAccounts } from '../../hooks/useAccounts.js';
 import { useFinance } from '../../context/FinanceContext.js';
 import { getAccountsWord } from '../../utils/formatters.js';
 import { AccountCard } from './AccountCard.js';
-import { SyncStatusButton } from '../common/SyncStatusButton.js';
 
 interface AccountsGridProps {
   onOpenEntryWithAccount?: (accountId: string) => void;
@@ -50,8 +49,7 @@ export const AccountsGrid: React.FC<AccountsGridProps> = ({ onOpenEntryWithAccou
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <SyncStatusButton variant="compact" />
+        <div>
           <button
             type="button"
             onClick={handleRefresh}
@@ -60,8 +58,7 @@ export const AccountsGrid: React.FC<AccountsGridProps> = ({ onOpenEntryWithAccou
             title="Обновить остатки по счетам"
             aria-label="Обновить остатки"
           >
-            <RefreshCw size={14} className={isLoading || isRefreshing ? 'animate-spin' : ''} aria-hidden="true" />
-            <span className="btn-text">{isRefreshing ? 'Обновление...' : 'Обновить'}</span>
+            <RefreshCw size={15} className={isLoading || isRefreshing ? 'animate-spin' : ''} aria-hidden="true" />
           </button>
         </div>
       </div>

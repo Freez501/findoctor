@@ -973,21 +973,23 @@ textarea {
 .btn-refresh-accounts {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  width: 32px;
   height: 32px;
-  padding: 0 10px;
+  padding: 0;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--foreground);
-  transition: background 0.15s ease;
+  border-radius: var(--radius-md);
+  color: var(--muted-foreground);
+  transition: all 0.15s ease;
   box-shadow: var(--shadow-sm);
+  cursor: pointer;
 }
 
 .btn-refresh-accounts:hover {
   background: var(--muted);
+  color: var(--foreground);
+  border-color: var(--color-hairline);
 }
 
 .accounts-grid {

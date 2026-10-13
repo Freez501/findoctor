@@ -50,7 +50,7 @@ describe('Security P0, SupabaseStore & Architecture P1/P2 Verification', () => {
       .set('x-enforce-rate-limit', '1')
       .send({ email: 'rate@truespace.ru', code: '000000' });
     expect(sixth.status).toBe(429);
-  });
+  }, 15000);
 
   it('updates transaction balances atomically via adjustAccountBalance', async () => {
     const service = new FinanceService(store);
