@@ -20,6 +20,10 @@ import {
   UserProfile,
   CompanyMembership,
   UserRole,
+  EventPaymentMilestone,
+  EventBudgetItem,
+  EventVendor,
+  CashFlowForecast,
 } from '../../shared/types.js';
 import {
   CreateEventDTO,
@@ -322,6 +326,87 @@ export class ApiClient {
       ...options,
       method: 'DELETE',
     });
+  }
+
+  // --- Event Payment Milestones (График оплат) ---
+  public getMilestones(eventId: string, options?: RequestOptions): Promise<{ milestones: EventPaymentMilestone[] }> {
+    return this.request<{ milestones: EventPaymentMilestone[] }>(`/api/events/${encodeURIComponent(eventId)}/milestones`, options);
+  }
+
+  public createMilestone(eventId: string, data: Partial<EventPaymentMilestone>, options?: RequestOptions): Promise<{ milestone: EventPaymentMilestone }> {
+    return this.request<{ milestone: EventPaymentMilestone }>(`/api/events/${encodeURIComponent(eventId)}/milestones`, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  public updateMilestone(eventId: string, milestoneId: string, data: Partial<EventPaymentMilestone>, options?: RequestOptions): Promise<{ milestone: EventPaymentMilestone }> {
+    return this.request<{ milestone: EventPaymentMilestone }>(`/api/events/${encodeURIComponent(eventId)}/milestones/${encodeURIComponent(milestoneId)}`, {
+      ...options,
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  public deleteMilestone(eventId: string, milestoneId: string, options?: RequestOptions): Promise<{ success: boolean; deletedId: string }> {
+    return this.request<{ success: boolean; deletedId: string }>(`/api/events/${encodeURIComponent(eventId)}/milestones/${encodeURIComponent(milestoneId)}`, {
+      ...options,
+      method: 'DELETE',
+    });
+  }
+
+  // --- Event Budget Items (Смета План-Факт) ---
+  public getBudgetItems(eventId: string, options?: RequestOptions): Promise<{ budgetItems: EventBudgetItem[] }> {
+    return this.request<{ budgetItems: EventBudgetItem[] }>(`/api/events/${encodeURIComponent(eventId)}/budget`, options);
+  }
+
+  public saveBudgetItem(eventId: string, data: Partial<EventBudgetItem>, options?: RequestOptions): Promise<{ budgetItem: EventBudgetItem }> {
+    return this.request<{ budgetItem: EventBudgetItem }>(`/api/events/${encodeURIComponent(eventId)}/budget`, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  public deleteBudgetItem(eventId: string, budgetId: string, options?: RequestOptions): Promise<{ success: boolean; deletedId: string }> {
+    return this.request<{ success: boolean; deletedId: string }>(`/api/events/${encodeURIComponent(eventId)}/budget/${encodeURIComponent(budgetId)}`, {
+      ...options,
+      method: 'DELETE',
+    });
+  }
+
+  // --- Event Vendors & Crew (Подрядчики и команда) ---
+  public getVendors(eventId: string, options?: RequestOptions): Promise<{ vendors: EventVendor[] }> {
+    return this.request<{ vendors: EventVendor[] }>(`/api/events/${encodeURIComponent(eventId)}/vendors`, options);
+  }
+
+  public createVendor(eventId: string, data: Partial<EventVendor>, options?: RequestOptions): Promise<{ vendor: EventVendor }> {
+    return this.request<{ vendor: EventVendor }>(`/api/events/${encodeURIComponent(eventId)}/vendors`, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  public updateVendor(eventId: string, vendorId: string, data: Partial<EventVendor>, options?: RequestOptions): Promise<{ vendor: EventVendor }> {
+    return this.request<{ vendor: EventVendor }>(`/api/events/${encodeURIComponent(eventId)}/vendors/${encodeURIComponent(vendorId)}`, {
+      ...options,
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  public deleteVendor(eventId: string, vendorId: string, options?: RequestOptions): Promise<{ success: boolean; deletedId: string }> {
+    return this.request<{ success: boolean; deletedId: string }>(`/api/events/${encodeURIComponent(eventId)}/vendors/${encodeURIComponent(vendorId)}`, {
+      ...options,
+      method: 'DELETE',
+    });
+  }
+
+  // --- Cash Flow Forecast & Shortage Radar ---
+  public getCashFlowForecast(daysAhead: number = 30, options?: RequestOptions): Promise<CashFlowForecast> {
+    return this.request<CashFlowForecast>(`/api/analytics/cashflow-calendar?daysAhead=${daysAhead}`, options);
   }
 
   // --- Transactions ---

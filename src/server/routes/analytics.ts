@@ -60,6 +60,17 @@ export function createAnalyticsRouter(analyticsService?: AnalyticsService): Rout
     }
   });
 
+  router.get('/cashflow-calendar', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const companyId = (req.headers['x-company-id'] as string) || (req.query.companyId as string) || undefined;
+      const daysAhead = req.query.daysAhead ? parseInt(req.query.daysAhead as string, 10) : 30;
+      const forecast = await service.getCashFlowForecast(companyId, isNaN(daysAhead) ? 30 : daysAhead);
+      res.json(forecast);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   return router;
 }
 

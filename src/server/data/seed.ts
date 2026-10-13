@@ -6,7 +6,19 @@
  * Final capital after 21 transactions: exactly 1 166 300 ₽.
  */
 
-import { Account, CateringEvent, Category, Transaction, Partner, Company, UserProfile, CompanyMembership } from '../../shared/types.js';
+import {
+  Account,
+  CateringEvent,
+  Category,
+  Transaction,
+  Partner,
+  Company,
+  UserProfile,
+  CompanyMembership,
+  EventPaymentMilestone,
+  EventBudgetItem,
+  EventVendor,
+} from '../../shared/types.js';
 import {
   ACCOUNT_IDS,
   INITIAL_ACCOUNTS_SEED,
@@ -18,6 +30,9 @@ import {
   INITIAL_COMPANIES_SEED,
   INITIAL_USERS_SEED,
   INITIAL_MEMBERSHIPS_SEED,
+  INITIAL_MILESTONES_SEED,
+  INITIAL_BUDGET_ITEMS_SEED,
+  INITIAL_VENDORS_SEED,
 } from '../../shared/constants.js';
 
 /**
@@ -382,6 +397,18 @@ export function getInitialMemberships(): CompanyMembership[] {
   return JSON.parse(JSON.stringify(INITIAL_MEMBERSHIPS_SEED));
 }
 
+export function getInitialMilestones(): EventPaymentMilestone[] {
+  return JSON.parse(JSON.stringify(INITIAL_MILESTONES_SEED));
+}
+
+export function getInitialBudgetItems(): EventBudgetItem[] {
+  return JSON.parse(JSON.stringify(INITIAL_BUDGET_ITEMS_SEED));
+}
+
+export function getInitialVendors(): EventVendor[] {
+  return JSON.parse(JSON.stringify(INITIAL_VENDORS_SEED));
+}
+
 export function getSeedTransactions(): Transaction[] {
   return JSON.parse(JSON.stringify(SEED_TRANSACTIONS));
 }
@@ -395,6 +422,9 @@ export interface DatabaseState {
   categories: Category[];
   partners: Partner[];
   transactions: Transaction[];
+  milestones?: EventPaymentMilestone[];
+  budgetItems?: EventBudgetItem[];
+  vendors?: EventVendor[];
 }
 
 export function createInitialDatabaseState(): DatabaseState {
@@ -407,5 +437,8 @@ export function createInitialDatabaseState(): DatabaseState {
     categories: getInitialCategories(),
     partners: getInitialPartners(),
     transactions: getSeedTransactions(),
+    milestones: getInitialMilestones(),
+    budgetItems: getInitialBudgetItems(),
+    vendors: getInitialVendors(),
   };
 }

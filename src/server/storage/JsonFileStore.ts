@@ -17,6 +17,9 @@ import {
   UserProfile,
   CompanyMembership,
   UserRole,
+  EventPaymentMilestone,
+  EventBudgetItem,
+  EventVendor,
 } from '../../shared/types.js';
 import { createInitialDatabaseState, DatabaseState } from '../data/seed.js';
 import { InMemoryStore } from './InMemoryStore.js';
@@ -52,6 +55,9 @@ export class JsonFileStore extends InMemoryStore implements IFinanceStore {
             if (!Array.isArray(parsed.companies)) parsed.companies = seed.companies;
             if (!Array.isArray(parsed.users)) parsed.users = seed.users;
             if (!Array.isArray(parsed.memberships)) parsed.memberships = seed.memberships;
+            if (!Array.isArray(parsed.milestones)) parsed.milestones = seed.milestones;
+            if (!Array.isArray(parsed.budgetItems)) parsed.budgetItems = seed.budgetItems;
+            if (!Array.isArray(parsed.vendors)) parsed.vendors = seed.vendors;
             return parsed;
           }
         }
@@ -222,6 +228,42 @@ export class JsonFileStore extends InMemoryStore implements IFinanceStore {
 
   public override async deleteCategory(id: string): Promise<boolean> {
     const result = await super.deleteCategory(id);
+    if (result) await this.persist();
+    return result;
+  }
+
+  public override async saveMilestone(milestoneInput: any): Promise<EventPaymentMilestone> {
+    const result = await super.saveMilestone(milestoneInput);
+    await this.persist();
+    return result;
+  }
+
+  public override async deleteMilestone(id: string): Promise<boolean> {
+    const result = await super.deleteMilestone(id);
+    if (result) await this.persist();
+    return result;
+  }
+
+  public override async saveBudgetItem(itemInput: any): Promise<EventBudgetItem> {
+    const result = await super.saveBudgetItem(itemInput);
+    await this.persist();
+    return result;
+  }
+
+  public override async deleteBudgetItem(id: string): Promise<boolean> {
+    const result = await super.deleteBudgetItem(id);
+    if (result) await this.persist();
+    return result;
+  }
+
+  public override async saveVendor(vendorInput: any): Promise<EventVendor> {
+    const result = await super.saveVendor(vendorInput);
+    await this.persist();
+    return result;
+  }
+
+  public override async deleteVendor(id: string): Promise<boolean> {
+    const result = await super.deleteVendor(id);
     if (result) await this.persist();
     return result;
   }

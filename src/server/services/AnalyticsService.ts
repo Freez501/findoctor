@@ -12,7 +12,14 @@
 
 import { IFinanceStore } from '../storage/interfaces.js';
 import { getStorageInstance } from '../storage/factory.js';
-import { EventMarginMetrics, CategoryExpenseBreakdown, PartnersAnalyticsSummary, PartnerMetricItem } from '../../shared/types.js';
+import {
+  EventMarginMetrics,
+  CategoryExpenseBreakdown,
+  PartnersAnalyticsSummary,
+  PartnerMetricItem,
+  CashFlowForecast,
+  CashFlowCalendarDay,
+} from '../../shared/types.js';
 import { GetAnalyticsOverviewResponseDTO } from '../../shared/dto.js';
 import { round2 } from './FinanceService.js';
 
@@ -282,6 +289,110 @@ export class AnalyticsService {
     return {
       totalDividendsPaid,
       partners: partnerMetrics,
+    };
+  }
+
+  /**
+   * Cash Flow Forecast & Shortage Radar (Платёжный календарь и радар кассовых разрывов)
+   */
+  public async getCashFlowForecast(companyId?: string, daysAhead: number = 30): Promise<CashFlowForecast> {
+    const [accounts, events, milestones, vendors] = await Promise.all([
+      this.store.getAccounts(companyId),
+      this.store.getEvents(companyId),
+      this.store.getMilestones(companyId),
+      this.store.getVendors(companyId),
+    ]);
+
+    const currentCapital = round2(accounts.reduce((sum, a) => sum + (a.isActive ? a.currentBalance : 0), 0));
+    const eventMap = new Map(events.map((e) => [e.id, e.title]));
+
+    const today = new Date();
+    const startDateStr = today.toISOString().split('T')[0];
+    const endDate = new Date(today.getTime() + daysAhead * 24 * 60 * 60 * 1000);
+    const endDateStr = endDate.toISOString().split('T')[0];
+
+    const days: CashFlowCalendarDay[] = [];
+    let runningBalance = currentCapital;
+    let hasShortages = false;
+    let firstShortageDate: string | undefined = undefined;
+    let maxShortageAmount = 0;
+
+    for (let i = 0; i < daysAhead; i++) {
+      const d = new Date(today.getTime() + i * 24 * 60 * 60 * 1000);
+      const dateStr = d.toISOString().split('T')[0];
+
+      // Incomes due today: pending/overdue milestones
+      const dayMilestones = milestones.filter((m) => {
+        if (m.status === 'received') return false;
+        // Overdue milestones are grouped into today (first day)
+        if (i === 0 && m.dueDate < dateStr) return true;
+        return m.dueDate === dateStr;
+      });
+
+      // Expenses due today: unpaid vendors
+      const dayVendors = vendors.filter((v) => {
+        if (v.remainingAmount <= 0) return false;
+        const vendorDueDate = v.dueDate || (events.find((e) => e.id === v.eventId)?.eventDate);
+        if (!vendorDueDate) return false;
+        if (i === 0 && vendorDueDate < dateStr) return true;
+        return vendorDueDate === dateStr;
+      });
+
+      const plannedIncomes = dayMilestones.map((m) => ({
+        id: m.id,
+        eventId: m.eventId,
+        eventTitle: eventMap.get(m.eventId) || 'Мероприятие',
+        title: m.title,
+        amount: round2(m.amount - (m.paidAmount || 0)),
+      }));
+
+      const plannedExpenses = dayVendors.map((v) => ({
+        id: v.id,
+        eventId: v.eventId,
+        eventTitle: eventMap.get(v.eventId) || 'Мероприятие',
+        vendorName: v.name,
+        title: `Выплата: ${v.name} (${v.role})`,
+        amount: round2(v.remainingAmount),
+      }));
+
+      const totalIncome = round2(plannedIncomes.reduce((sum, item) => sum + item.amount, 0));
+      const totalExpense = round2(plannedExpenses.reduce((sum, item) => sum + item.amount, 0));
+      const openingBalance = runningBalance;
+      const closingBalance = round2(openingBalance + totalIncome - totalExpense);
+      const isShortage = closingBalance < 0;
+      const shortageAmount = isShortage ? round2(Math.abs(closingBalance)) : undefined;
+
+      if (isShortage) {
+        hasShortages = true;
+        if (!firstShortageDate) firstShortageDate = dateStr;
+        if (shortageAmount && shortageAmount > maxShortageAmount) {
+          maxShortageAmount = shortageAmount;
+        }
+      }
+
+      days.push({
+        date: dateStr,
+        openingBalance,
+        plannedIncomes,
+        plannedExpenses,
+        totalIncome,
+        totalExpense,
+        closingBalance,
+        isShortage,
+        shortageAmount,
+      });
+
+      runningBalance = closingBalance;
+    }
+
+    return {
+      currentCapital,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      days,
+      hasShortages,
+      firstShortageDate,
+      maxShortageAmount: round2(maxShortageAmount),
     };
   }
 }

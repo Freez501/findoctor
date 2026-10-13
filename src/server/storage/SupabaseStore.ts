@@ -15,6 +15,9 @@ import {
   UserProfile,
   CompanyMembership,
   UserRole,
+  EventPaymentMilestone,
+  EventBudgetItem,
+  EventVendor,
 } from '../../shared/types.js';
 import { DEFAULT_COMPANY_ID } from '../../shared/constants.js';
 import { createInitialDatabaseState, DatabaseState } from '../data/seed.js';
@@ -536,6 +539,258 @@ export class SupabaseStore implements IFinanceStore {
     const { error } = await this.client.from('events').delete().eq('id', id);
     if (error) throw new Error(error.message);
     return true;
+  }
+
+  // =========================================================================
+  // EVENT PAYMENT MILESTONES (График оплат от заказчика)
+  // =========================================================================
+
+  public async getMilestones(companyId?: string, eventId?: string): Promise<EventPaymentMilestone[]> {
+    const target = companyId || DEFAULT_COMPANY_ID;
+    let query = this.client.from('event_payment_milestones').select('*').eq('company_id', target);
+    if (eventId) {
+      query = query.eq('event_id', eventId);
+    }
+    const { data, error } = await query.order('due_date', { ascending: true });
+    if (error) {
+      console.warn('[SupabaseStore] getMilestones error, fallback empty:', error.message);
+      return [];
+    }
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      companyId: row.company_id,
+      eventId: row.event_id,
+      title: row.title,
+      dueDate: row.due_date,
+      amount: round2(row.amount),
+      status: row.status,
+      paidAmount: row.paid_amount ? round2(row.paid_amount) : undefined,
+      paidDate: row.paid_date || undefined,
+      notes: row.notes || undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  public async getMilestoneById(id: string): Promise<EventPaymentMilestone | null> {
+    const { data, error } = await this.client.from('event_payment_milestones').select('*').eq('id', id).maybeSingle();
+    if (error || !data) return null;
+    return {
+      id: data.id,
+      companyId: data.company_id,
+      eventId: data.event_id,
+      title: data.title,
+      dueDate: data.due_date,
+      amount: round2(data.amount),
+      status: data.status,
+      paidAmount: data.paid_amount ? round2(data.paid_amount) : undefined,
+      paidDate: data.paid_date || undefined,
+      notes: data.notes || undefined,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  }
+
+  public async saveMilestone(mInput: Omit<EventPaymentMilestone, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<EventPaymentMilestone> {
+    const id = mInput.id || `ms-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const row = {
+      id,
+      company_id: mInput.companyId || DEFAULT_COMPANY_ID,
+      event_id: mInput.eventId,
+      title: mInput.title,
+      due_date: mInput.dueDate,
+      amount: round2(mInput.amount),
+      status: mInput.status || 'pending',
+      paid_amount: mInput.paidAmount ? round2(mInput.paidAmount) : null,
+      paid_date: mInput.paidDate || null,
+      notes: mInput.notes || null,
+      updated_at: new Date().toISOString(),
+    };
+    const { data, error } = await this.client.from('event_payment_milestones').upsert(row).select().single();
+    if (error) {
+      throw new Error(`Ошибка сохранения этапа оплаты: ${error.message}`);
+    }
+    return {
+      id: data.id,
+      companyId: data.company_id,
+      eventId: data.event_id,
+      title: data.title,
+      dueDate: data.due_date,
+      amount: round2(data.amount),
+      status: data.status,
+      paidAmount: data.paid_amount ? round2(data.paid_amount) : undefined,
+      paidDate: data.paid_date || undefined,
+      notes: data.notes || undefined,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  }
+
+  public async deleteMilestone(id: string): Promise<boolean> {
+    const { error } = await this.client.from('event_payment_milestones').delete().eq('id', id);
+    return !error;
+  }
+
+  // =========================================================================
+  // EVENT BUDGET ITEMS (Смета мероприятия: План-Факт)
+  // =========================================================================
+
+  public async getBudgetItems(companyId?: string, eventId?: string): Promise<EventBudgetItem[]> {
+    const target = companyId || DEFAULT_COMPANY_ID;
+    let query = this.client.from('event_budget_items').select('*').eq('company_id', target);
+    if (eventId) {
+      query = query.eq('event_id', eventId);
+    }
+    const { data, error } = await query;
+    if (error) {
+      console.warn('[SupabaseStore] getBudgetItems error, fallback empty:', error.message);
+      return [];
+    }
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      companyId: row.company_id,
+      eventId: row.event_id,
+      categoryId: row.category_id,
+      plannedAmount: round2(row.planned_amount),
+      notes: row.notes || undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  public async saveBudgetItem(bInput: Omit<EventBudgetItem, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<EventBudgetItem> {
+    const id = bInput.id || `bgt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const row = {
+      id,
+      company_id: bInput.companyId || DEFAULT_COMPANY_ID,
+      event_id: bInput.eventId,
+      category_id: bInput.categoryId,
+      planned_amount: round2(bInput.plannedAmount),
+      notes: bInput.notes || null,
+      updated_at: new Date().toISOString(),
+    };
+    const { data, error } = await this.client.from('event_budget_items').upsert(row).select().single();
+    if (error) {
+      throw new Error(`Ошибка сохранения позиции сметы: ${error.message}`);
+    }
+    return {
+      id: data.id,
+      companyId: data.company_id,
+      eventId: data.event_id,
+      categoryId: data.category_id,
+      plannedAmount: round2(data.planned_amount),
+      notes: data.notes || undefined,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  }
+
+  public async deleteBudgetItem(id: string): Promise<boolean> {
+    const { error } = await this.client.from('event_budget_items').delete().eq('id', id);
+    return !error;
+  }
+
+  // =========================================================================
+  // EVENT VENDORS & CREW (Подрядчики и команда на мероприятии)
+  // =========================================================================
+
+  public async getVendors(companyId?: string, eventId?: string): Promise<EventVendor[]> {
+    const target = companyId || DEFAULT_COMPANY_ID;
+    let query = this.client.from('event_vendors').select('*').eq('company_id', target);
+    if (eventId) {
+      query = query.eq('event_id', eventId);
+    }
+    const { data, error } = await query;
+    if (error) {
+      console.warn('[SupabaseStore] getVendors error, fallback empty:', error.message);
+      return [];
+    }
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      companyId: row.company_id,
+      eventId: row.event_id,
+      name: row.name,
+      role: row.role,
+      phone: row.phone || undefined,
+      agreedFee: round2(row.agreed_fee),
+      paidAmount: round2(row.paid_amount),
+      remainingAmount: round2(row.remaining_amount),
+      status: row.status,
+      dueDate: row.due_date || undefined,
+      notes: row.notes || undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  public async getVendorById(id: string): Promise<EventVendor | null> {
+    const { data, error } = await this.client.from('event_vendors').select('*').eq('id', id).maybeSingle();
+    if (error || !data) return null;
+    return {
+      id: data.id,
+      companyId: data.company_id,
+      eventId: data.event_id,
+      name: data.name,
+      role: data.role,
+      phone: data.phone || undefined,
+      agreedFee: round2(data.agreed_fee),
+      paidAmount: round2(data.paid_amount),
+      remainingAmount: round2(data.remaining_amount),
+      status: data.status,
+      dueDate: data.due_date || undefined,
+      notes: data.notes || undefined,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  }
+
+  public async saveVendor(vInput: Omit<EventVendor, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<EventVendor> {
+    const id = vInput.id || `vnd-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const agreedFee = round2(vInput.agreedFee);
+    const paidAmount = round2(vInput.paidAmount);
+    const remainingAmount = Math.max(0, round2(agreedFee - paidAmount));
+    const status = paidAmount >= agreedFee && agreedFee > 0 ? 'paid' : paidAmount > 0 ? 'partial' : 'pending';
+
+    const row = {
+      id,
+      company_id: vInput.companyId || DEFAULT_COMPANY_ID,
+      event_id: vInput.eventId,
+      name: vInput.name,
+      role: vInput.role,
+      phone: vInput.phone || null,
+      agreed_fee: agreedFee,
+      paid_amount: paidAmount,
+      remaining_amount: remainingAmount,
+      status: vInput.status || status,
+      due_date: vInput.dueDate || null,
+      notes: vInput.notes || null,
+      updated_at: new Date().toISOString(),
+    };
+    const { data, error } = await this.client.from('event_vendors').upsert(row).select().single();
+    if (error) {
+      throw new Error(`Ошибка сохранения подрядчика: ${error.message}`);
+    }
+    return {
+      id: data.id,
+      companyId: data.company_id,
+      eventId: data.event_id,
+      name: data.name,
+      role: data.role,
+      phone: data.phone || undefined,
+      agreedFee: round2(data.agreed_fee),
+      paidAmount: round2(data.paid_amount),
+      remainingAmount: round2(data.remaining_amount),
+      status: data.status,
+      dueDate: data.due_date || undefined,
+      notes: data.notes || undefined,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  }
+
+  public async deleteVendor(id: string): Promise<boolean> {
+    const { error } = await this.client.from('event_vendors').delete().eq('id', id);
+    return !error;
   }
 
   // =========================================================================

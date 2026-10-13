@@ -260,6 +260,10 @@ export interface Transaction {
   partnerId?: string | null;
   /** Partner display name cache */
   partnerName?: string | null;
+  /** Associated vendor / crew member for on-site payouts */
+  vendorId?: string | null;
+  /** Vendor display name cache */
+  vendorName?: string | null;
   /** Freeform commentary or receipt memo */
   description?: string;
   /** Transaction date and time (ISO 8601 string) */
@@ -425,4 +429,98 @@ export interface ParsedStatementItem {
   needsReview: boolean;
   rawText?: string;
   selected?: boolean;
+}
+
+/**
+ * Event Payment Milestone (График оплат от заказчика)
+ */
+export type MilestoneStatus = 'pending' | 'received' | 'overdue';
+
+export interface EventPaymentMilestone {
+  id: string;
+  companyId?: string;
+  eventId: string;
+  title: string;
+  dueDate: string; // YYYY-MM-DD
+  amount: number;
+  status: MilestoneStatus;
+  paidAmount?: number;
+  paidDate?: string;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Event Budget Item (Смета мероприятия: План vs Факт)
+ */
+export interface EventBudgetItem {
+  id: string;
+  companyId?: string;
+  eventId: string;
+  categoryId: string;
+  plannedAmount: number;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Event Vendor & Crew Member (Подрядчики и команда на мероприятии)
+ */
+export type VendorPayoutStatus = 'pending' | 'partial' | 'paid';
+
+export interface EventVendor {
+  id: string;
+  companyId?: string;
+  eventId: string;
+  name: string;
+  role: string;
+  phone?: string;
+  agreedFee: number;
+  paidAmount: number;
+  remainingAmount: number;
+  status: VendorPayoutStatus;
+  dueDate?: string;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Cash Flow Forecast Day (Платёжный календарь и радар кассовых разрывов)
+ */
+export interface CashFlowCalendarDay {
+  date: string; // YYYY-MM-DD
+  openingBalance: number;
+  plannedIncomes: Array<{
+    id: string;
+    eventId: string;
+    eventTitle: string;
+    title: string;
+    amount: number;
+  }>;
+  plannedExpenses: Array<{
+    id: string;
+    eventId?: string;
+    eventTitle?: string;
+    vendorName?: string;
+    title: string;
+    amount: number;
+  }>;
+  totalIncome: number;
+  totalExpense: number;
+  closingBalance: number;
+  isShortage: boolean;
+  shortageAmount?: number;
+}
+
+export interface CashFlowForecast {
+  currentCapital: number;
+  startDate: string;
+  endDate: string;
+  days: CashFlowCalendarDay[];
+  hasShortages: boolean;
+  firstShortageDate?: string;
+  maxShortageAmount?: number;
 }

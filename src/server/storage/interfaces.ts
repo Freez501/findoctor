@@ -16,6 +16,9 @@ import {
   UserProfile,
   CompanyMembership,
   UserRole,
+  EventPaymentMilestone,
+  EventBudgetItem,
+  EventVendor,
 } from '../../shared/types.js';
 import { CreateEventDTO, CreateTransactionDTO } from '../../shared/dto.js';
 import { DatabaseState } from '../data/seed.js';
@@ -61,6 +64,23 @@ export interface IFinanceStore {
   createEvent(event: NewEventInput): Promise<CateringEvent>;
   updateEvent(id: string, updates: Partial<CateringEvent>): Promise<CateringEvent>;
   deleteEvent(id: string): Promise<boolean>;
+
+  // Event Payment Milestones (График оплат от заказчика)
+  getMilestones(companyId?: string, eventId?: string): Promise<EventPaymentMilestone[]>;
+  getMilestoneById(id: string): Promise<EventPaymentMilestone | null>;
+  saveMilestone(milestone: Omit<EventPaymentMilestone, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<EventPaymentMilestone>;
+  deleteMilestone(id: string): Promise<boolean>;
+
+  // Event Budget Items (Смета мероприятия: План-Факт)
+  getBudgetItems(companyId?: string, eventId?: string): Promise<EventBudgetItem[]>;
+  saveBudgetItem(item: Omit<EventBudgetItem, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<EventBudgetItem>;
+  deleteBudgetItem(id: string): Promise<boolean>;
+
+  // Event Vendors & Crew (Подрядчики и команда на мероприятии)
+  getVendors(companyId?: string, eventId?: string): Promise<EventVendor[]>;
+  getVendorById(id: string): Promise<EventVendor | null>;
+  saveVendor(vendor: Omit<EventVendor, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<EventVendor>;
+  deleteVendor(id: string): Promise<boolean>;
 
   // Categories
   getCategories(companyId?: string): Promise<Category[]>;

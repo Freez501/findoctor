@@ -16,6 +16,9 @@ import {
   UserProfile,
   CompanyMembership,
   UserRole,
+  EventPaymentMilestone,
+  EventBudgetItem,
+  EventVendor,
 } from '../../shared/types.js';
 import { DEFAULT_COMPANY_ID } from '../../shared/constants.js';
 import { createInitialDatabaseState, DatabaseState } from '../data/seed.js';
@@ -355,6 +358,209 @@ export class InMemoryStore implements IFinanceStore {
   }
 
   // =========================================================================
+  // EVENT PAYMENT MILESTONES (График оплат от заказчика)
+  // =========================================================================
+
+  public async getMilestones(companyId?: string, eventId?: string): Promise<EventPaymentMilestone[]> {
+    const targetCompany = companyId || DEFAULT_COMPANY_ID;
+    if (!this.state.milestones) this.state.milestones = [];
+    return clone(
+      this.state.milestones.filter((m) => {
+        const matchesComp = (m.companyId || DEFAULT_COMPANY_ID) === targetCompany;
+        const matchesEvent = eventId ? m.eventId === eventId : true;
+        return matchesComp && matchesEvent;
+      })
+    );
+  }
+
+  public async getMilestoneById(id: string): Promise<EventPaymentMilestone | null> {
+    if (!this.state.milestones) this.state.milestones = [];
+    const item = this.state.milestones.find((m) => m.id === id);
+    return item ? clone(item) : null;
+  }
+
+  public async saveMilestone(milestoneInput: Omit<EventPaymentMilestone, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<EventPaymentMilestone> {
+    if (!this.state.milestones) this.state.milestones = [];
+    const now = new Date().toISOString();
+    const id = milestoneInput.id || `ms-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const existingIndex = this.state.milestones.findIndex((m) => m.id === id);
+
+    if (existingIndex !== -1) {
+      const updated: EventPaymentMilestone = {
+        ...this.state.milestones[existingIndex],
+        ...milestoneInput,
+        id,
+        updatedAt: now,
+      };
+      this.state.milestones[existingIndex] = updated;
+      return clone(updated);
+    }
+
+    const created: EventPaymentMilestone = {
+      id,
+      companyId: milestoneInput.companyId || DEFAULT_COMPANY_ID,
+      eventId: milestoneInput.eventId,
+      title: milestoneInput.title.trim(),
+      dueDate: milestoneInput.dueDate,
+      amount: milestoneInput.amount,
+      status: milestoneInput.status || 'pending',
+      paidAmount: milestoneInput.paidAmount || (milestoneInput.status === 'received' ? milestoneInput.amount : 0),
+      paidDate: milestoneInput.paidDate,
+      notes: milestoneInput.notes,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.state.milestones.push(created);
+    return clone(created);
+  }
+
+  public async deleteMilestone(id: string): Promise<boolean> {
+    if (!this.state.milestones) this.state.milestones = [];
+    const index = this.state.milestones.findIndex((m) => m.id === id);
+    if (index === -1) return false;
+    this.state.milestones.splice(index, 1);
+    return true;
+  }
+
+  // =========================================================================
+  // EVENT BUDGET ITEMS (Смета мероприятия: План-Факт)
+  // =========================================================================
+
+  public async getBudgetItems(companyId?: string, eventId?: string): Promise<EventBudgetItem[]> {
+    const targetCompany = companyId || DEFAULT_COMPANY_ID;
+    if (!this.state.budgetItems) this.state.budgetItems = [];
+    return clone(
+      this.state.budgetItems.filter((b) => {
+        const matchesComp = (b.companyId || DEFAULT_COMPANY_ID) === targetCompany;
+        const matchesEvent = eventId ? b.eventId === eventId : true;
+        return matchesComp && matchesEvent;
+      })
+    );
+  }
+
+  public async saveBudgetItem(itemInput: Omit<EventBudgetItem, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<EventBudgetItem> {
+    if (!this.state.budgetItems) this.state.budgetItems = [];
+    const now = new Date().toISOString();
+    const id = itemInput.id || `bgt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const existingIndex = this.state.budgetItems.findIndex(
+      (b) => b.id === id || (b.eventId === itemInput.eventId && b.categoryId === itemInput.categoryId)
+    );
+
+    if (existingIndex !== -1) {
+      const updated: EventBudgetItem = {
+        ...this.state.budgetItems[existingIndex],
+        ...itemInput,
+        id: this.state.budgetItems[existingIndex].id,
+        updatedAt: now,
+      };
+      this.state.budgetItems[existingIndex] = updated;
+      return clone(updated);
+    }
+
+    const created: EventBudgetItem = {
+      id,
+      companyId: itemInput.companyId || DEFAULT_COMPANY_ID,
+      eventId: itemInput.eventId,
+      categoryId: itemInput.categoryId,
+      plannedAmount: itemInput.plannedAmount,
+      notes: itemInput.notes,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.state.budgetItems.push(created);
+    return clone(created);
+  }
+
+  public async deleteBudgetItem(id: string): Promise<boolean> {
+    if (!this.state.budgetItems) this.state.budgetItems = [];
+    const index = this.state.budgetItems.findIndex((b) => b.id === id);
+    if (index === -1) return false;
+    this.state.budgetItems.splice(index, 1);
+    return true;
+  }
+
+  // =========================================================================
+  // EVENT VENDORS & CREW (Подрядчики и команда на мероприятии)
+  // =========================================================================
+
+  public async getVendors(companyId?: string, eventId?: string): Promise<EventVendor[]> {
+    const targetCompany = companyId || DEFAULT_COMPANY_ID;
+    if (!this.state.vendors) this.state.vendors = [];
+    return clone(
+      this.state.vendors.filter((v) => {
+        const matchesComp = (v.companyId || DEFAULT_COMPANY_ID) === targetCompany;
+        const matchesEvent = eventId ? v.eventId === eventId : true;
+        return matchesComp && matchesEvent;
+      })
+    );
+  }
+
+  public async getVendorById(id: string): Promise<EventVendor | null> {
+    if (!this.state.vendors) this.state.vendors = [];
+    const item = this.state.vendors.find((v) => v.id === id);
+    return item ? clone(item) : null;
+  }
+
+  public async saveVendor(vendorInput: Omit<EventVendor, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<EventVendor> {
+    if (!this.state.vendors) this.state.vendors = [];
+    const now = new Date().toISOString();
+    const id = vendorInput.id || `vnd-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const agreedFee = Number(vendorInput.agreedFee) || 0;
+    const paidAmount = Number(vendorInput.paidAmount) || 0;
+    const remainingAmount = Math.max(0, agreedFee - paidAmount);
+    const status: 'pending' | 'partial' | 'paid' =
+      paidAmount >= agreedFee && agreedFee > 0
+        ? 'paid'
+        : paidAmount > 0
+          ? 'partial'
+          : 'pending';
+
+    const existingIndex = this.state.vendors.findIndex((v) => v.id === id);
+
+    if (existingIndex !== -1) {
+      const updated: EventVendor = {
+        ...this.state.vendors[existingIndex],
+        ...vendorInput,
+        id,
+        agreedFee,
+        paidAmount,
+        remainingAmount,
+        status: vendorInput.status || status,
+        updatedAt: now,
+      };
+      this.state.vendors[existingIndex] = updated;
+      return clone(updated);
+    }
+
+    const created: EventVendor = {
+      id,
+      companyId: vendorInput.companyId || DEFAULT_COMPANY_ID,
+      eventId: vendorInput.eventId,
+      name: vendorInput.name.trim(),
+      role: vendorInput.role.trim(),
+      phone: vendorInput.phone,
+      agreedFee,
+      paidAmount,
+      remainingAmount,
+      status: vendorInput.status || status,
+      dueDate: vendorInput.dueDate,
+      notes: vendorInput.notes,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.state.vendors.push(created);
+    return clone(created);
+  }
+
+  public async deleteVendor(id: string): Promise<boolean> {
+    if (!this.state.vendors) this.state.vendors = [];
+    const index = this.state.vendors.findIndex((v) => v.id === id);
+    if (index === -1) return false;
+    this.state.vendors.splice(index, 1);
+    return true;
+  }
+
+  // =========================================================================
   // CATEGORIES
   // =========================================================================
 
@@ -475,6 +681,8 @@ export class InMemoryStore implements IFinanceStore {
       eventId: txInput.eventId ?? null,
       partnerId: (txInput as any).partnerId ?? null,
       partnerName: (txInput as any).partnerName ?? null,
+      vendorId: (txInput as any).vendorId ?? null,
+      vendorName: (txInput as any).vendorName ?? null,
       description: txInput.description ?? '',
       transactionDate: txInput.transactionDate || now,
       companyId: (txInput as any).companyId || DEFAULT_COMPANY_ID,
@@ -487,6 +695,18 @@ export class InMemoryStore implements IFinanceStore {
     };
 
     this.state.transactions.push(newTx);
+
+    // If transaction is an expense bound to a vendor, automatically reduce remaining amount
+    if (newTx.vendorId && newTx.type === 'expense' && !newTx.isDeleted) {
+      const vendor = (this.state.vendors || []).find((v) => v.id === newTx.vendorId);
+      if (vendor) {
+        vendor.paidAmount = Math.round(((vendor.paidAmount || 0) + newTx.amount) * 100) / 100;
+        vendor.remainingAmount = Math.max(0, Math.round(((vendor.agreedFee || 0) - vendor.paidAmount) * 100) / 100);
+        vendor.status = vendor.paidAmount >= vendor.agreedFee && vendor.agreedFee > 0 ? 'paid' : 'partial';
+        vendor.updatedAt = now;
+      }
+    }
+
     return clone(newTx);
   }
 
@@ -521,6 +741,18 @@ export class InMemoryStore implements IFinanceStore {
     }
     tx.isDeleted = true;
     tx.updatedAt = new Date().toISOString();
+
+    // If deleting an expense tied to a vendor, restore remaining fee
+    if ((tx as any).vendorId && tx.type === 'expense') {
+      const vendor = (this.state.vendors || []).find((v) => v.id === (tx as any).vendorId);
+      if (vendor) {
+        vendor.paidAmount = Math.max(0, Math.round(((vendor.paidAmount || 0) - tx.amount) * 100) / 100);
+        vendor.remainingAmount = Math.max(0, Math.round(((vendor.agreedFee || 0) - vendor.paidAmount) * 100) / 100);
+        vendor.status = vendor.paidAmount >= vendor.agreedFee && vendor.agreedFee > 0 ? 'paid' : vendor.paidAmount > 0 ? 'partial' : 'pending';
+        vendor.updatedAt = new Date().toISOString();
+      }
+    }
+
     return clone(tx);
   }
 
@@ -541,5 +773,8 @@ export class InMemoryStore implements IFinanceStore {
     if (newState.companies) this.state.companies = clone(newState.companies);
     if (newState.users) this.state.users = clone(newState.users);
     if (newState.memberships) this.state.memberships = clone(newState.memberships);
+    if (newState.milestones) this.state.milestones = clone(newState.milestones);
+    if (newState.budgetItems) this.state.budgetItems = clone(newState.budgetItems);
+    if (newState.vendors) this.state.vendors = clone(newState.vendors);
   }
 }

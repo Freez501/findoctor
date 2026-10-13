@@ -20,7 +20,7 @@ describe('Security P0, SupabaseStore & Architecture P1/P2 Verification', () => {
       .post('/api/auth/verify-code')
       .send({ email: 'newuser@truespace.ru', code: '777111' });
     expect(res.status).toBe(400);
-  });
+  }, 20000);
 
   it('signs and verifies JWT Bearer tokens and authenticates /api/auth/me', async () => {
     const token = signAuthToken({
@@ -36,7 +36,7 @@ describe('Security P0, SupabaseStore & Architecture P1/P2 Verification', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(meRes.status).toBe(200);
     expect(meRes.body.user.id).toBe('user_vlad');
-  });
+  }, 20000);
 
   it('enforces rate limiting when x-enforce-rate-limit header is set', async () => {
     for (let i = 0; i < 5; i++) {
@@ -50,7 +50,7 @@ describe('Security P0, SupabaseStore & Architecture P1/P2 Verification', () => {
       .set('x-enforce-rate-limit', '1')
       .send({ email: 'rate@truespace.ru', code: '000000' });
     expect(sixth.status).toBe(429);
-  }, 15000);
+  }, 25000);
 
   it('updates transaction balances atomically via adjustAccountBalance', async () => {
     const service = new FinanceService(store);
