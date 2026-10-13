@@ -51,7 +51,7 @@ export function translateApiError(statusCode: number, rawMessage?: string): stri
     return rawMessage || 'Неверные учётные данные. Проверьте email и пароль.';
   }
   if (msg.includes('не найдена') || msg.includes('не найден') || msg.includes('not found')) {
-    return rawMessage || 'Запрошенная запись не найдена или уже была удалена.';
+    return 'Запрошенная запись не найдена или уже была удалена.';
   }
   if (msg.includes('categoryid')) {
     return 'Пожалуйста, выберите статью/категорию операции.';
