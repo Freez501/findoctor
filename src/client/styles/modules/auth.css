@@ -479,6 +479,21 @@
   box-shadow: var(--shadow-md);
 }
 
+.landing-btn-hero-demo {
+  background: linear-gradient(135deg, #1c1917 0%, #292524 100%);
+  color: #fef3c7;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  box-shadow: 0 4px 18px -2px rgba(245, 158, 11, 0.35), 0 2px 6px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.landing-btn-hero-demo:hover {
+  transform: translateY(-2px);
+  border-color: rgba(245, 158, 11, 0.85);
+  box-shadow: 0 6px 24px -2px rgba(245, 158, 11, 0.5), 0 3px 8px rgba(0, 0, 0, 0.2);
+  color: #ffffff;
+}
+
 .landing-btn-secondary {
   display: inline-flex;
   align-items: center;
@@ -627,6 +642,20 @@
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
+}
+
+.landing-preview-footer-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: #faf9f6;
+  border: 1px dashed var(--color-hairline);
+  font-size: 0.76rem;
+  color: var(--color-mid-gray);
+  font-weight: 500;
 }
 
 .landing-features-grid {

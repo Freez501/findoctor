@@ -10,7 +10,7 @@
  */
 
 import React, { useState } from 'react';
-import { Activity, Lock, Mail, Building2, User, ArrowRight, Shield, AlertCircle, Eye, EyeOff, CheckCircle2, KeyRound, Play, ArrowLeft } from 'lucide-react';
+import { Activity, Lock, Mail, Building2, User, ArrowRight, Shield, AlertCircle, Eye, EyeOff, CheckCircle2, KeyRound, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
 import { api } from '../../api/apiClient.js';
 
@@ -20,7 +20,7 @@ interface AuthViewProps {
 }
 
 export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBackToLanding }) => {
-  const { login, register, forgotPassword, enterDemoMode } = useAuth();
+  const { login, register, forgotPassword } = useAuth();
 
   const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(initialMode);
   const [registerStep, setRegisterStep] = useState<'details' | 'verify'>('details');
@@ -28,10 +28,12 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -54,31 +56,34 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
           if (!fullName.trim()) {
             throw new Error('Укажите ваше имя');
           }
-          if (!companyName.trim()) {
-            throw new Error('Укажите название организации или кейтеринга');
-          }
           if (!email.trim()) {
             throw new Error('Укажите email');
           }
           if (password.length < 6) {
             throw new Error('Пароль должен содержать минимум 6 символов');
           }
+          if (password !== confirmPassword) {
+            throw new Error('Введённые пароли не совпадают. Пожалуйста, проверьте ввод.');
+          }
 
-          // Step 1: Send verification code to email via Supabase Auth / server
+          const targetCompany = companyName.trim() || `Кейтеринг ${fullName.trim()}`;
+
+          // Step 1: Send verification code to email via server
           const res = await api.sendVerificationCode({
             email: email.trim(),
             password,
             fullName: fullName.trim(),
-            companyName: companyName.trim(),
+            companyName: targetCompany,
           });
           setSuccessMessage(res.message || `Проверочный код отправлен на ${email.trim()}`);
           setRegisterStep('verify');
         } else {
           // Step 2: Confirm code and finalize registration
           if (!verificationCode.trim()) {
-            throw new Error('Введите 6-значный проверочный код');
+            throw new Error('Введите 6-значный проверочный код из письма');
           }
-          await register(email.trim(), password, fullName.trim(), companyName.trim(), verificationCode.trim());
+          const targetCompany = companyName.trim() || `Кейтеринг ${fullName.trim()}`;
+          await register(email.trim(), password, fullName.trim(), targetCompany, verificationCode.trim());
         }
       } else if (mode === 'forgot') {
         if (!email.trim()) {
@@ -117,17 +122,6 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
           <p className="auth-brand-subtitle">Финансы, касса и реальная маржа выездных мероприятий</p>
         </div>
 
-        {/* One-Click Demo Button */}
-        <button
-          type="button"
-          onClick={() => enterDemoMode()}
-          className="auth-demo-quick-btn"
-          data-testid="auth-try-demo-btn"
-        >
-          <Play size={16} />
-          <span>Попробовать с демо-данными в 1 клик (без регистрации)</span>
-        </button>
-
         {/* Tab Toggle: Login vs Register (hidden on forgot) */}
         {mode !== 'forgot' && (
           <div className="auth-tabs">
@@ -154,7 +148,6 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
               className={`auth-tab-btn ${mode === 'register' ? 'auth-tab-btn-active' : ''}`}
             >
               <span>Регистрация</span>
-              <span className="auth-trial-pill">14 дней Pro</span>
             </button>
           </div>
         )}
@@ -180,7 +173,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
           {mode === 'register' && registerStep === 'verify' ? (
             <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="auth-info-card">
-                Мы направили проверочное письмо на <strong>{email}</strong>. Введите 6-значный код из письма или перейдите по ссылке внутри письма для подтверждения email и запуска 14 дней PRO.
+                Мы направили проверочное письмо на <strong>{email}</strong>. Введите 6-значный код из письма для подтверждения email и завершения регистрации.
               </div>
 
               <div className="auth-field">
@@ -230,11 +223,12 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
                   onClick={async () => {
                     try {
                       setIsLoading(true);
+                      const targetCompany = companyName.trim() || `Кейтеринг ${fullName.trim()}`;
                       const res = await api.sendVerificationCode({
                         email: email.trim(),
                         password,
                         fullName: fullName.trim(),
-                        companyName: companyName.trim(),
+                        companyName: targetCompany,
                       });
                       setSuccessMessage(res.message || 'Проверочное письмо отправлено повторно');
                     } catch (e: any) {
@@ -270,13 +264,12 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
                   </div>
 
                   <div className="auth-field">
-                    <label className="auth-label">Название организации / кейтеринга</label>
+                    <label className="auth-label">Название организации или проекта</label>
                     <div className="auth-input-wrapper">
                       <Building2 size={16} className="auth-input-icon" />
                       <input
                         type="text"
-                        required
-                        placeholder="Например, Brilliant Event или Кейтеринг Бриллианты"
+                        placeholder="Например, Мой Кейтеринг или Бар на выезд"
                         value={companyName}
                         onChange={(e) => setCompanyName(e.target.value)}
                         className="auth-input"
@@ -354,6 +347,46 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
                 </div>
               )}
 
+              {mode === 'register' && (
+                <div className="auth-field">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label className="auth-label">Повторите пароль</label>
+                    {confirmPassword && password && (
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 600,
+                          color: password === confirmPassword ? 'var(--color-success)' : 'var(--destructive)',
+                        }}
+                      >
+                        {password === confirmPassword ? '✓ Пароли совпадают' : '✕ Пароли не совпадают'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="auth-input-wrapper">
+                    <Lock size={16} className="auth-input-icon" />
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required
+                      placeholder="••••••••"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="auth-input"
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="auth-toggle-pwd"
+                      title={showConfirmPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                      aria-label={showConfirmPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                    >
+                      {showConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {mode === 'login' && (
                 <div className="auth-checkbox-row">
                   <input
@@ -380,7 +413,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
                     : mode === 'login'
                     ? 'Войти в личный кабинет'
                     : mode === 'register'
-                    ? 'Создать аккаунт и начать 14 дней PRO'
+                    ? 'Зарегистрироваться'
                     : 'Отправить ссылку для сброса'}
                 </span>
                 <ArrowRight size={16} />
@@ -404,7 +437,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
                 }}
                 className="auth-switch-btn"
               >
-                Создать организацию
+                Зарегистрироваться
               </button>
             </span>
           )}

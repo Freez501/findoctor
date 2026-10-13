@@ -39,14 +39,6 @@ export const ProductLanding: React.FC<ProductLandingProps> = ({ onTryDemo, onOpe
           <div className="landing-nav-actions">
             <button
               type="button"
-              onClick={onTryDemo}
-              className="landing-btn-demo-sm"
-            >
-              <Play size={14} />
-              <span>Демо в 1 клик</span>
-            </button>
-            <button
-              type="button"
               onClick={() => onOpenAuth('login')}
               className="landing-btn-login"
             >
@@ -79,7 +71,7 @@ export const ProductLanding: React.FC<ProductLandingProps> = ({ onTryDemo, onOpe
               <button
                 type="button"
                 onClick={onTryDemo}
-                className="landing-btn-primary"
+                className="landing-btn-primary landing-btn-hero-demo"
                 data-testid="landing-try-demo-btn"
               >
                 <Play size={18} />
@@ -147,14 +139,10 @@ export const ProductLanding: React.FC<ProductLandingProps> = ({ onTryDemo, onOpe
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={onTryDemo}
-              className="landing-preview-action"
-            >
-              <span>Открыть этот кейс в интерактивном демо</span>
-              <ArrowRight size={15} />
-            </button>
+            <div className="landing-preview-footer-note">
+              <Sparkles size={14} className="text-accent" />
+              <span>Автоматический расчёт из журнала операций на площадке</span>
+            </div>
           </div>
         </section>
 
