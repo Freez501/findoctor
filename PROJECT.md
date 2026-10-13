@@ -3,7 +3,7 @@
 - **Статус:** `in_progress` ➔ `stage_autonomous_fix_prompt_completed` (Выполнены все 4 этапа из `AUTONOMOUS_FIX_PROMPT.md`: полноценный `SupabaseStore`, устранение P0 уязвимостей авторизации/CORS/RBAC, атомарный `updateTransaction`, асинхронный `JsonFileStore`, `ErrorBoundary`, Code Splitting с `React.lazy`, оптимизация `FinanceContext`, Rate Limiting, Source Maps и CI/CD пайплайн; 561/561 тестов green, сборка Vite + TS без ошибок)
 - **Локальная версия:** `http://localhost:5173/` (бэкенд API: `http://localhost:3001/api`)
 - **Wi-Fi доступ с телефона:** `http://192.168.100.82:5173/`
-- **Тесты:** 561 / 561 passed (100% green, 30 тест-сьютов)
+- **Тесты:** 565 / 565 passed (100% green, 31 тест-сьют)
 - **Сборка:** Typecheck & Vite Build 100% green (0 errors)
 
 ## Architecture
