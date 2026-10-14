@@ -41,7 +41,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'accounts', label: 'Счета', icon: Wallet },
   { id: 'events', label: 'Мероприятия', icon: Calendar },
-  { id: 'analytics', label: 'Маржинальность', icon: BarChart3 },
+  { id: 'analytics', label: 'Аналитика', icon: BarChart3 },
   { id: 'history', label: 'Журнал', icon: History },
   { id: 'settings', label: 'Настройки', icon: Settings },
   { id: 'admin', label: 'Супер-админ', icon: Shield, badge: '👑' },

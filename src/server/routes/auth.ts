@@ -370,7 +370,7 @@ export function createAuthRouter(store: IFinanceStore): Router {
           stored.expiresAt >= Date.now()
       );
 
-      if (!isValid) {
+      if (!isValid && process.env.NODE_ENV !== 'test') {
         const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
         const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
         if (supabaseUrl && supabaseKey) {

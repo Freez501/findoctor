@@ -248,9 +248,9 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
                   <Circle size={18} className="onboarding-icon-pending" />
                 )}
               </div>
-              <h3 className="onboarding-step-heading">Посмотрите чистую прибыль и маржу</h3>
+              <h3 className="onboarding-step-heading">Посмотрите чистую прибыль и аналитику</h3>
               <p className="onboarding-step-desc">
-                Перейдите в раздел «Маржинальность», чтобы увидеть рентабельность каждого выезда в
+                Перейдите в раздел «Аналитика», чтобы увидеть рентабельность каждого выезда в
                 процентах и рублях.
               </p>
               <button
@@ -263,7 +263,7 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
                 data-testid="onboarding-step-3-btn"
               >
                 <BarChart3 size={14} />
-                <span>Смотреть маржинальность</span>
+                <span>Смотреть аналитику</span>
                 <ChevronRight size={14} />
               </button>
             </div>
