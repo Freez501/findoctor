@@ -203,6 +203,8 @@ export class FinanceService {
         eventId,
         partnerId,
         partnerName,
+        vendorId: dto.vendorId,
+        vendorName: dto.vendorName,
         direction,
         description,
         transactionDate,
@@ -566,6 +568,8 @@ export class FinanceService {
     eventId: string | null;
     partnerId?: string | null;
     partnerName?: string | null;
+    vendorId?: string | null;
+    vendorName?: string | null;
     direction?: TransactionDirection;
     description: string;
     transactionDate: string;
@@ -595,6 +599,8 @@ export class FinanceService {
       eventId: params.eventId,
       partnerId: params.partnerId,
       partnerName: params.partnerName,
+      vendorId: params.vendorId,
+      vendorName: params.vendorName,
       direction: params.direction,
       description: params.description,
       transactionDate: params.transactionDate,

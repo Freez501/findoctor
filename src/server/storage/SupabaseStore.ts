@@ -31,16 +31,24 @@ export class SupabaseStore implements IFinanceStore {
   private fallbackBudgetItems: EventBudgetItem[] = [];
   private fallbackVendors: EventVendor[] = [];
 
-  private isTableMissingError(error: any): boolean {
+  private isResilientFallbackNeeded(error: any): boolean {
     if (!error) return false;
-    const msg = String(error.message || '').toLowerCase();
-    const code = String(error.code || '');
+    const msg = String(error?.message || error || '').toLowerCase();
+    const code = String(error?.code || '');
     return (
       code === 'PGRST205' ||
       code === '42P01' ||
+      code === 'ENOTFOUND' ||
+      code === 'ETIMEDOUT' ||
+      code === 'ECONNREFUSED' ||
+      code === 'ECONNRESET' ||
       msg.includes('could not find the table') ||
       msg.includes('relation') ||
-      msg.includes('does not exist')
+      msg.includes('does not exist') ||
+      msg.includes('fetch failed') ||
+      msg.includes('network') ||
+      msg.includes('failed to fetch') ||
+      msg.includes('abort')
     );
   }
 
@@ -565,56 +573,68 @@ export class SupabaseStore implements IFinanceStore {
 
   public async getMilestones(companyId?: string, eventId?: string): Promise<EventPaymentMilestone[]> {
     const target = companyId || DEFAULT_COMPANY_ID;
-    let query = this.client.from('event_payment_milestones').select('*').eq('company_id', target);
-    if (eventId) {
-      query = query.eq('event_id', eventId);
-    }
-    const { data, error } = await query.order('due_date', { ascending: true });
-    if (error) {
-      if (this.isTableMissingError(error)) {
+    try {
+      let query = this.client.from('event_payment_milestones').select('*').eq('company_id', target);
+      if (eventId) {
+        query = query.eq('event_id', eventId);
+      }
+      const { data, error } = await query.order('due_date', { ascending: true });
+      if (error) {
+        if (this.isResilientFallbackNeeded(error)) {
+          return this.fallbackMilestones.filter((m) => (!eventId || m.eventId === eventId) && (m.companyId || DEFAULT_COMPANY_ID) === target);
+        }
+        console.warn('[SupabaseStore] getMilestones error, fallback empty:', error.message);
+        return [];
+      }
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        companyId: row.company_id,
+        eventId: row.event_id,
+        title: row.title,
+        dueDate: row.due_date,
+        amount: round2(row.amount),
+        status: row.status,
+        paidAmount: row.paid_amount ? round2(row.paid_amount) : undefined,
+        paidDate: row.paid_date || undefined,
+        notes: row.notes || undefined,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
+    } catch (err: any) {
+      if (this.isResilientFallbackNeeded(err)) {
         return this.fallbackMilestones.filter((m) => (!eventId || m.eventId === eventId) && (m.companyId || DEFAULT_COMPANY_ID) === target);
       }
-      console.warn('[SupabaseStore] getMilestones error, fallback empty:', error.message);
+      console.warn('[SupabaseStore] getMilestones network exception, using fallback:', err.message || err);
       return [];
     }
-    return (data || []).map((row: any) => ({
-      id: row.id,
-      companyId: row.company_id,
-      eventId: row.event_id,
-      title: row.title,
-      dueDate: row.due_date,
-      amount: round2(row.amount),
-      status: row.status,
-      paidAmount: row.paid_amount ? round2(row.paid_amount) : undefined,
-      paidDate: row.paid_date || undefined,
-      notes: row.notes || undefined,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
   }
 
   public async getMilestoneById(id: string): Promise<EventPaymentMilestone | null> {
-    const { data, error } = await this.client.from('event_payment_milestones').select('*').eq('id', id).maybeSingle();
-    if (error && this.isTableMissingError(error)) {
+    try {
+      const { data, error } = await this.client.from('event_payment_milestones').select('*').eq('id', id).maybeSingle();
+      if (error && this.isResilientFallbackNeeded(error)) {
+        return this.fallbackMilestones.find((m) => m.id === id) || null;
+      }
+      if (error || !data) {
+        return this.fallbackMilestones.find((m) => m.id === id) || null;
+      }
+      return {
+        id: data.id,
+        companyId: data.company_id,
+        eventId: data.event_id,
+        title: data.title,
+        dueDate: data.due_date,
+        amount: round2(data.amount),
+        status: data.status,
+        paidAmount: data.paid_amount ? round2(data.paid_amount) : undefined,
+        paidDate: data.paid_date || undefined,
+        notes: data.notes || undefined,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+    } catch (err: any) {
       return this.fallbackMilestones.find((m) => m.id === id) || null;
     }
-    if (error || !data) {
-      return this.fallbackMilestones.find((m) => m.id === id) || null;
-    }
-    return {
-      id: data.id,
-      companyId: data.company_id,
-      eventId: data.event_id,
-      title: data.title,
-      dueDate: data.due_date,
-      amount: round2(data.amount),
-      status: data.status,
-      paidAmount: data.paid_amount ? round2(data.paid_amount) : undefined,
-      paidDate: data.paid_date || undefined,
-      notes: data.notes || undefined,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-    };
   }
 
   public async saveMilestone(mInput: Omit<EventPaymentMilestone, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<EventPaymentMilestone> {
@@ -632,58 +652,75 @@ export class SupabaseStore implements IFinanceStore {
       notes: mInput.notes || null,
       updated_at: new Date().toISOString(),
     };
-    const { data, error } = await this.client.from('event_payment_milestones').upsert(row).select().single();
-    if (error) {
-      if (this.isTableMissingError(error)) {
-        console.warn('[SupabaseStore] Table event_payment_milestones not in Supabase, using local memory cache');
-        const existingIdx = this.fallbackMilestones.findIndex((m) => m.id === id);
-        const item: EventPaymentMilestone = {
-          id,
-          companyId: mInput.companyId || DEFAULT_COMPANY_ID,
-          eventId: mInput.eventId,
-          title: mInput.title,
-          dueDate: mInput.dueDate,
-          amount: round2(mInput.amount),
-          status: mInput.status || 'pending',
-          paidAmount: mInput.paidAmount ? round2(mInput.paidAmount) : undefined,
-          paidDate: mInput.paidDate || undefined,
-          notes: mInput.notes || undefined,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        if (existingIdx !== -1) {
-          this.fallbackMilestones[existingIdx] = { ...this.fallbackMilestones[existingIdx], ...item };
-          return this.fallbackMilestones[existingIdx];
+    try {
+      const { data, error } = await this.client.from('event_payment_milestones').upsert(row).select().single();
+      if (error) {
+        if (this.isResilientFallbackNeeded(error)) {
+          return this.saveMilestoneFallback(id, mInput);
         }
-        this.fallbackMilestones.push(item);
-        return item;
+        throw new Error(`Ошибка сохранения этапа оплаты: ${error.message}`);
       }
-      throw new Error(`Ошибка сохранения этапа оплаты: ${error.message}`);
+      return {
+        id: data.id,
+        companyId: data.company_id,
+        eventId: data.event_id,
+        title: data.title,
+        dueDate: data.due_date,
+        amount: round2(data.amount),
+        status: data.status,
+        paidAmount: data.paid_amount ? round2(data.paid_amount) : undefined,
+        paidDate: data.paid_date || undefined,
+        notes: data.notes || undefined,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+    } catch (err: any) {
+      if (this.isResilientFallbackNeeded(err)) {
+        return this.saveMilestoneFallback(id, mInput);
+      }
+      throw new Error(`Ошибка сохранения этапа оплаты: ${err.message || err}`);
     }
-    return {
-      id: data.id,
-      companyId: data.company_id,
-      eventId: data.event_id,
-      title: data.title,
-      dueDate: data.due_date,
-      amount: round2(data.amount),
-      status: data.status,
-      paidAmount: data.paid_amount ? round2(data.paid_amount) : undefined,
-      paidDate: data.paid_date || undefined,
-      notes: data.notes || undefined,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
+  }
+
+  private saveMilestoneFallback(id: string, mInput: any): EventPaymentMilestone {
+    console.warn('[SupabaseStore] Using local memory cache for event_payment_milestones');
+    const existingIdx = this.fallbackMilestones.findIndex((m) => m.id === id);
+    const item: EventPaymentMilestone = {
+      id,
+      companyId: mInput.companyId || DEFAULT_COMPANY_ID,
+      eventId: mInput.eventId,
+      title: mInput.title,
+      dueDate: mInput.dueDate,
+      amount: round2(mInput.amount),
+      status: mInput.status || 'pending',
+      paidAmount: mInput.paidAmount ? round2(mInput.paidAmount) : undefined,
+      paidDate: mInput.paidDate || undefined,
+      notes: mInput.notes || undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
+    if (existingIdx !== -1) {
+      this.fallbackMilestones[existingIdx] = { ...this.fallbackMilestones[existingIdx], ...item };
+      return this.fallbackMilestones[existingIdx];
+    }
+    this.fallbackMilestones.push(item);
+    return item;
   }
 
   public async deleteMilestone(id: string): Promise<boolean> {
-    const { error } = await this.client.from('event_payment_milestones').delete().eq('id', id);
-    if (error && this.isTableMissingError(error)) {
+    try {
+      const { error } = await this.client.from('event_payment_milestones').delete().eq('id', id);
+      if (error && this.isResilientFallbackNeeded(error)) {
+        const idx = this.fallbackMilestones.findIndex((m) => m.id === id);
+        if (idx !== -1) this.fallbackMilestones.splice(idx, 1);
+        return true;
+      }
+      return !error;
+    } catch {
       const idx = this.fallbackMilestones.findIndex((m) => m.id === id);
       if (idx !== -1) this.fallbackMilestones.splice(idx, 1);
       return true;
     }
-    return !error;
   }
 
   // =========================================================================
@@ -692,28 +729,36 @@ export class SupabaseStore implements IFinanceStore {
 
   public async getBudgetItems(companyId?: string, eventId?: string): Promise<EventBudgetItem[]> {
     const target = companyId || DEFAULT_COMPANY_ID;
-    let query = this.client.from('event_budget_items').select('*').eq('company_id', target);
-    if (eventId) {
-      query = query.eq('event_id', eventId);
-    }
-    const { data, error } = await query;
-    if (error) {
-      if (this.isTableMissingError(error)) {
+    try {
+      let query = this.client.from('event_budget_items').select('*').eq('company_id', target);
+      if (eventId) {
+        query = query.eq('event_id', eventId);
+      }
+      const { data, error } = await query;
+      if (error) {
+        if (this.isResilientFallbackNeeded(error)) {
+          return this.fallbackBudgetItems.filter((b) => (!eventId || b.eventId === eventId) && (b.companyId || DEFAULT_COMPANY_ID) === target);
+        }
+        console.warn('[SupabaseStore] getBudgetItems error, fallback empty:', error.message);
+        return [];
+      }
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        companyId: row.company_id,
+        eventId: row.event_id,
+        categoryId: row.category_id,
+        plannedAmount: round2(row.planned_amount),
+        notes: row.notes || undefined,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
+    } catch (err: any) {
+      if (this.isResilientFallbackNeeded(err)) {
         return this.fallbackBudgetItems.filter((b) => (!eventId || b.eventId === eventId) && (b.companyId || DEFAULT_COMPANY_ID) === target);
       }
-      console.warn('[SupabaseStore] getBudgetItems error, fallback empty:', error.message);
+      console.warn('[SupabaseStore] getBudgetItems network error, fallback:', err.message || err);
       return [];
     }
-    return (data || []).map((row: any) => ({
-      id: row.id,
-      companyId: row.company_id,
-      eventId: row.event_id,
-      categoryId: row.category_id,
-      plannedAmount: round2(row.planned_amount),
-      notes: row.notes || undefined,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
   }
 
   public async saveBudgetItem(bInput: Omit<EventBudgetItem, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<EventBudgetItem> {
@@ -727,52 +772,69 @@ export class SupabaseStore implements IFinanceStore {
       notes: bInput.notes || null,
       updated_at: new Date().toISOString(),
     };
-    const { data, error } = await this.client.from('event_budget_items').upsert(row).select().single();
-    if (error) {
-      if (this.isTableMissingError(error)) {
-        console.warn('[SupabaseStore] Table event_budget_items not in Supabase, using local memory cache');
-        const existingIdx = this.fallbackBudgetItems.findIndex(
-          (b) => b.id === id || (b.eventId === bInput.eventId && b.categoryId === bInput.categoryId)
-        );
-        const item: EventBudgetItem = {
-          id,
-          companyId: bInput.companyId || DEFAULT_COMPANY_ID,
-          eventId: bInput.eventId,
-          categoryId: bInput.categoryId,
-          plannedAmount: round2(bInput.plannedAmount),
-          notes: bInput.notes || undefined,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        if (existingIdx !== -1) {
-          this.fallbackBudgetItems[existingIdx] = { ...this.fallbackBudgetItems[existingIdx], ...item };
-          return this.fallbackBudgetItems[existingIdx];
+    try {
+      const { data, error } = await this.client.from('event_budget_items').upsert(row).select().single();
+      if (error) {
+        if (this.isResilientFallbackNeeded(error)) {
+          return this.saveBudgetItemFallback(id, bInput);
         }
-        this.fallbackBudgetItems.push(item);
-        return item;
+        throw new Error(`Ошибка сохранения позиции сметы: ${error.message}`);
       }
-      throw new Error(`Ошибка сохранения позиции сметы: ${error.message}`);
+      return {
+        id: data.id,
+        companyId: data.company_id,
+        eventId: data.event_id,
+        categoryId: data.category_id,
+        plannedAmount: round2(data.planned_amount),
+        notes: data.notes || undefined,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+    } catch (err: any) {
+      if (this.isResilientFallbackNeeded(err)) {
+        return this.saveBudgetItemFallback(id, bInput);
+      }
+      throw new Error(`Ошибка сохранения позиции сметы: ${err.message || err}`);
     }
-    return {
-      id: data.id,
-      companyId: data.company_id,
-      eventId: data.event_id,
-      categoryId: data.category_id,
-      plannedAmount: round2(data.planned_amount),
-      notes: data.notes || undefined,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
+  }
+
+  private saveBudgetItemFallback(id: string, bInput: any): EventBudgetItem {
+    console.warn('[SupabaseStore] Using local memory cache for event_budget_items');
+    const existingIdx = this.fallbackBudgetItems.findIndex(
+      (b) => b.id === id || (b.eventId === bInput.eventId && b.categoryId === bInput.categoryId)
+    );
+    const item: EventBudgetItem = {
+      id,
+      companyId: bInput.companyId || DEFAULT_COMPANY_ID,
+      eventId: bInput.eventId,
+      categoryId: bInput.categoryId,
+      plannedAmount: round2(bInput.plannedAmount),
+      notes: bInput.notes || undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
+    if (existingIdx !== -1) {
+      this.fallbackBudgetItems[existingIdx] = { ...this.fallbackBudgetItems[existingIdx], ...item };
+      return this.fallbackBudgetItems[existingIdx];
+    }
+    this.fallbackBudgetItems.push(item);
+    return item;
   }
 
   public async deleteBudgetItem(id: string): Promise<boolean> {
-    const { error } = await this.client.from('event_budget_items').delete().eq('id', id);
-    if (error && this.isTableMissingError(error)) {
+    try {
+      const { error } = await this.client.from('event_budget_items').delete().eq('id', id);
+      if (error && this.isResilientFallbackNeeded(error)) {
+        const idx = this.fallbackBudgetItems.findIndex((b) => b.id === id);
+        if (idx !== -1) this.fallbackBudgetItems.splice(idx, 1);
+        return true;
+      }
+      return !error;
+    } catch {
       const idx = this.fallbackBudgetItems.findIndex((b) => b.id === id);
       if (idx !== -1) this.fallbackBudgetItems.splice(idx, 1);
       return true;
     }
-    return !error;
   }
 
   // =========================================================================
@@ -781,60 +843,72 @@ export class SupabaseStore implements IFinanceStore {
 
   public async getVendors(companyId?: string, eventId?: string): Promise<EventVendor[]> {
     const target = companyId || DEFAULT_COMPANY_ID;
-    let query = this.client.from('event_vendors').select('*').eq('company_id', target);
-    if (eventId) {
-      query = query.eq('event_id', eventId);
-    }
-    const { data, error } = await query;
-    if (error) {
-      if (this.isTableMissingError(error)) {
+    try {
+      let query = this.client.from('event_vendors').select('*').eq('company_id', target);
+      if (eventId) {
+        query = query.eq('event_id', eventId);
+      }
+      const { data, error } = await query;
+      if (error) {
+        if (this.isResilientFallbackNeeded(error)) {
+          return this.fallbackVendors.filter((v) => (!eventId || v.eventId === eventId) && (v.companyId || DEFAULT_COMPANY_ID) === target);
+        }
+        console.warn('[SupabaseStore] getVendors error, fallback empty:', error.message);
+        return [];
+      }
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        companyId: row.company_id,
+        eventId: row.event_id,
+        name: row.name,
+        role: row.role,
+        phone: row.phone || undefined,
+        agreedFee: round2(row.agreed_fee),
+        paidAmount: round2(row.paid_amount),
+        remainingAmount: round2(row.remaining_amount),
+        status: row.status,
+        dueDate: row.due_date || undefined,
+        notes: row.notes || undefined,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
+    } catch (err: any) {
+      if (this.isResilientFallbackNeeded(err)) {
         return this.fallbackVendors.filter((v) => (!eventId || v.eventId === eventId) && (v.companyId || DEFAULT_COMPANY_ID) === target);
       }
-      console.warn('[SupabaseStore] getVendors error, fallback empty:', error.message);
+      console.warn('[SupabaseStore] getVendors network error, fallback:', err.message || err);
       return [];
     }
-    return (data || []).map((row: any) => ({
-      id: row.id,
-      companyId: row.company_id,
-      eventId: row.event_id,
-      name: row.name,
-      role: row.role,
-      phone: row.phone || undefined,
-      agreedFee: round2(row.agreed_fee),
-      paidAmount: round2(row.paid_amount),
-      remainingAmount: round2(row.remaining_amount),
-      status: row.status,
-      dueDate: row.due_date || undefined,
-      notes: row.notes || undefined,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
   }
 
   public async getVendorById(id: string): Promise<EventVendor | null> {
-    const { data, error } = await this.client.from('event_vendors').select('*').eq('id', id).maybeSingle();
-    if (error && this.isTableMissingError(error)) {
+    try {
+      const { data, error } = await this.client.from('event_vendors').select('*').eq('id', id).maybeSingle();
+      if (error && this.isResilientFallbackNeeded(error)) {
+        return this.fallbackVendors.find((v) => v.id === id) || null;
+      }
+      if (error || !data) {
+        return this.fallbackVendors.find((v) => v.id === id) || null;
+      }
+      return {
+        id: data.id,
+        companyId: data.company_id,
+        eventId: data.event_id,
+        name: data.name,
+        role: data.role,
+        phone: data.phone || undefined,
+        agreedFee: round2(data.agreed_fee),
+        paidAmount: round2(data.paid_amount),
+        remainingAmount: round2(data.remaining_amount),
+        status: data.status,
+        dueDate: data.due_date || undefined,
+        notes: data.notes || undefined,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+    } catch {
       return this.fallbackVendors.find((v) => v.id === id) || null;
     }
-    if (error || !data) {
-      return this.fallbackVendors.find((v) => v.id === id) || null;
-    }
-    return {
-      id: data.id,
-      companyId: data.company_id,
-      eventId: data.event_id,
-      name: data.name,
-      role: data.role,
-      phone: data.phone || undefined,
-      agreedFee: round2(data.agreed_fee),
-      paidAmount: round2(data.paid_amount),
-      remainingAmount: round2(data.remaining_amount),
-      status: data.status,
-      dueDate: data.due_date || undefined,
-      notes: data.notes || undefined,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-    };
   }
 
   public async saveVendor(vInput: Omit<EventVendor, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<EventVendor> {
@@ -859,62 +933,79 @@ export class SupabaseStore implements IFinanceStore {
       notes: vInput.notes || null,
       updated_at: new Date().toISOString(),
     };
-    const { data, error } = await this.client.from('event_vendors').upsert(row).select().single();
-    if (error) {
-      if (this.isTableMissingError(error)) {
-        console.warn('[SupabaseStore] Table event_vendors not in Supabase, using local memory cache');
-        const existingIdx = this.fallbackVendors.findIndex((v) => v.id === id);
-        const item: EventVendor = {
-          id,
-          companyId: vInput.companyId || DEFAULT_COMPANY_ID,
-          eventId: vInput.eventId,
-          name: vInput.name,
-          role: vInput.role,
-          phone: vInput.phone || undefined,
-          agreedFee,
-          paidAmount,
-          remainingAmount,
-          status: vInput.status || status,
-          dueDate: vInput.dueDate || undefined,
-          notes: vInput.notes || undefined,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        if (existingIdx !== -1) {
-          this.fallbackVendors[existingIdx] = { ...this.fallbackVendors[existingIdx], ...item };
-          return this.fallbackVendors[existingIdx];
+    try {
+      const { data, error } = await this.client.from('event_vendors').upsert(row).select().single();
+      if (error) {
+        if (this.isResilientFallbackNeeded(error)) {
+          return this.saveVendorFallback(id, vInput, agreedFee, paidAmount, remainingAmount, status);
         }
-        this.fallbackVendors.push(item);
-        return item;
+        throw new Error(`Ошибка сохранения подрядчика: ${error.message}`);
       }
-      throw new Error(`Ошибка сохранения подрядчика: ${error.message}`);
+      return {
+        id: data.id,
+        companyId: data.company_id,
+        eventId: data.event_id,
+        name: data.name,
+        role: data.role,
+        phone: data.phone || undefined,
+        agreedFee: round2(data.agreed_fee),
+        paidAmount: round2(data.paid_amount),
+        remainingAmount: round2(data.remaining_amount),
+        status: data.status,
+        dueDate: data.due_date || undefined,
+        notes: data.notes || undefined,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+    } catch (err: any) {
+      if (this.isResilientFallbackNeeded(err)) {
+        return this.saveVendorFallback(id, vInput, agreedFee, paidAmount, remainingAmount, status);
+      }
+      throw new Error(`Ошибка сохранения подрядчика: ${err.message || err}`);
     }
-    return {
-      id: data.id,
-      companyId: data.company_id,
-      eventId: data.event_id,
-      name: data.name,
-      role: data.role,
-      phone: data.phone || undefined,
-      agreedFee: round2(data.agreed_fee),
-      paidAmount: round2(data.paid_amount),
-      remainingAmount: round2(data.remaining_amount),
-      status: data.status,
-      dueDate: data.due_date || undefined,
-      notes: data.notes || undefined,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
+  }
+
+  private saveVendorFallback(id: string, vInput: any, agreedFee: number, paidAmount: number, remainingAmount: number, status: any): EventVendor {
+    console.warn('[SupabaseStore] Using local memory cache for event_vendors');
+    const existingIdx = this.fallbackVendors.findIndex((v) => v.id === id);
+    const item: EventVendor = {
+      id,
+      companyId: vInput.companyId || DEFAULT_COMPANY_ID,
+      eventId: vInput.eventId,
+      name: vInput.name,
+      role: vInput.role,
+      phone: vInput.phone || undefined,
+      agreedFee,
+      paidAmount,
+      remainingAmount,
+      status: vInput.status || status,
+      dueDate: vInput.dueDate || undefined,
+      notes: vInput.notes || undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
+    if (existingIdx !== -1) {
+      this.fallbackVendors[existingIdx] = { ...this.fallbackVendors[existingIdx], ...item };
+      return this.fallbackVendors[existingIdx];
+    }
+    this.fallbackVendors.push(item);
+    return item;
   }
 
   public async deleteVendor(id: string): Promise<boolean> {
-    const { error } = await this.client.from('event_vendors').delete().eq('id', id);
-    if (error && this.isTableMissingError(error)) {
+    try {
+      const { error } = await this.client.from('event_vendors').delete().eq('id', id);
+      if (error && this.isResilientFallbackNeeded(error)) {
+        const idx = this.fallbackVendors.findIndex((v) => v.id === id);
+        if (idx !== -1) this.fallbackVendors.splice(idx, 1);
+        return true;
+      }
+      return !error;
+    } catch {
       const idx = this.fallbackVendors.findIndex((v) => v.id === id);
       if (idx !== -1) this.fallbackVendors.splice(idx, 1);
       return true;
     }
-    return !error;
   }
 
   // =========================================================================
