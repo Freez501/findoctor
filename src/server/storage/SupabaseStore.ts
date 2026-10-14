@@ -27,6 +27,22 @@ const round2 = (n: number | string | undefined | null): number => Math.round((Nu
 
 export class SupabaseStore implements IFinanceStore {
   private client: SupabaseClient;
+  private fallbackMilestones: EventPaymentMilestone[] = [];
+  private fallbackBudgetItems: EventBudgetItem[] = [];
+  private fallbackVendors: EventVendor[] = [];
+
+  private isTableMissingError(error: any): boolean {
+    if (!error) return false;
+    const msg = String(error.message || '').toLowerCase();
+    const code = String(error.code || '');
+    return (
+      code === 'PGRST205' ||
+      code === '42P01' ||
+      msg.includes('could not find the table') ||
+      msg.includes('relation') ||
+      msg.includes('does not exist')
+    );
+  }
 
   constructor(supabaseUrl?: string, supabaseKey?: string, customClient?: SupabaseClient) {
     if (customClient) {
@@ -152,6 +168,8 @@ export class SupabaseStore implements IFinanceStore {
       eventId: row.event_id ?? null,
       partnerId: row.partner_id ?? null,
       partnerName: row.partner_name ?? null,
+      vendorId: row.vendor_id ?? null,
+      vendorName: row.vendor_name ?? null,
       description: row.description || '',
       transactionDate: row.transaction_date,
       isDeleted: Boolean(row.is_deleted),
@@ -553,6 +571,9 @@ export class SupabaseStore implements IFinanceStore {
     }
     const { data, error } = await query.order('due_date', { ascending: true });
     if (error) {
+      if (this.isTableMissingError(error)) {
+        return this.fallbackMilestones.filter((m) => (!eventId || m.eventId === eventId) && (m.companyId || DEFAULT_COMPANY_ID) === target);
+      }
       console.warn('[SupabaseStore] getMilestones error, fallback empty:', error.message);
       return [];
     }
@@ -574,7 +595,12 @@ export class SupabaseStore implements IFinanceStore {
 
   public async getMilestoneById(id: string): Promise<EventPaymentMilestone | null> {
     const { data, error } = await this.client.from('event_payment_milestones').select('*').eq('id', id).maybeSingle();
-    if (error || !data) return null;
+    if (error && this.isTableMissingError(error)) {
+      return this.fallbackMilestones.find((m) => m.id === id) || null;
+    }
+    if (error || !data) {
+      return this.fallbackMilestones.find((m) => m.id === id) || null;
+    }
     return {
       id: data.id,
       companyId: data.company_id,
@@ -608,6 +634,30 @@ export class SupabaseStore implements IFinanceStore {
     };
     const { data, error } = await this.client.from('event_payment_milestones').upsert(row).select().single();
     if (error) {
+      if (this.isTableMissingError(error)) {
+        console.warn('[SupabaseStore] Table event_payment_milestones not in Supabase, using local memory cache');
+        const existingIdx = this.fallbackMilestones.findIndex((m) => m.id === id);
+        const item: EventPaymentMilestone = {
+          id,
+          companyId: mInput.companyId || DEFAULT_COMPANY_ID,
+          eventId: mInput.eventId,
+          title: mInput.title,
+          dueDate: mInput.dueDate,
+          amount: round2(mInput.amount),
+          status: mInput.status || 'pending',
+          paidAmount: mInput.paidAmount ? round2(mInput.paidAmount) : undefined,
+          paidDate: mInput.paidDate || undefined,
+          notes: mInput.notes || undefined,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        if (existingIdx !== -1) {
+          this.fallbackMilestones[existingIdx] = { ...this.fallbackMilestones[existingIdx], ...item };
+          return this.fallbackMilestones[existingIdx];
+        }
+        this.fallbackMilestones.push(item);
+        return item;
+      }
       throw new Error(`Ошибка сохранения этапа оплаты: ${error.message}`);
     }
     return {
@@ -628,6 +678,11 @@ export class SupabaseStore implements IFinanceStore {
 
   public async deleteMilestone(id: string): Promise<boolean> {
     const { error } = await this.client.from('event_payment_milestones').delete().eq('id', id);
+    if (error && this.isTableMissingError(error)) {
+      const idx = this.fallbackMilestones.findIndex((m) => m.id === id);
+      if (idx !== -1) this.fallbackMilestones.splice(idx, 1);
+      return true;
+    }
     return !error;
   }
 
@@ -643,6 +698,9 @@ export class SupabaseStore implements IFinanceStore {
     }
     const { data, error } = await query;
     if (error) {
+      if (this.isTableMissingError(error)) {
+        return this.fallbackBudgetItems.filter((b) => (!eventId || b.eventId === eventId) && (b.companyId || DEFAULT_COMPANY_ID) === target);
+      }
       console.warn('[SupabaseStore] getBudgetItems error, fallback empty:', error.message);
       return [];
     }
@@ -671,6 +729,28 @@ export class SupabaseStore implements IFinanceStore {
     };
     const { data, error } = await this.client.from('event_budget_items').upsert(row).select().single();
     if (error) {
+      if (this.isTableMissingError(error)) {
+        console.warn('[SupabaseStore] Table event_budget_items not in Supabase, using local memory cache');
+        const existingIdx = this.fallbackBudgetItems.findIndex(
+          (b) => b.id === id || (b.eventId === bInput.eventId && b.categoryId === bInput.categoryId)
+        );
+        const item: EventBudgetItem = {
+          id,
+          companyId: bInput.companyId || DEFAULT_COMPANY_ID,
+          eventId: bInput.eventId,
+          categoryId: bInput.categoryId,
+          plannedAmount: round2(bInput.plannedAmount),
+          notes: bInput.notes || undefined,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        if (existingIdx !== -1) {
+          this.fallbackBudgetItems[existingIdx] = { ...this.fallbackBudgetItems[existingIdx], ...item };
+          return this.fallbackBudgetItems[existingIdx];
+        }
+        this.fallbackBudgetItems.push(item);
+        return item;
+      }
       throw new Error(`Ошибка сохранения позиции сметы: ${error.message}`);
     }
     return {
@@ -687,6 +767,11 @@ export class SupabaseStore implements IFinanceStore {
 
   public async deleteBudgetItem(id: string): Promise<boolean> {
     const { error } = await this.client.from('event_budget_items').delete().eq('id', id);
+    if (error && this.isTableMissingError(error)) {
+      const idx = this.fallbackBudgetItems.findIndex((b) => b.id === id);
+      if (idx !== -1) this.fallbackBudgetItems.splice(idx, 1);
+      return true;
+    }
     return !error;
   }
 
@@ -702,6 +787,9 @@ export class SupabaseStore implements IFinanceStore {
     }
     const { data, error } = await query;
     if (error) {
+      if (this.isTableMissingError(error)) {
+        return this.fallbackVendors.filter((v) => (!eventId || v.eventId === eventId) && (v.companyId || DEFAULT_COMPANY_ID) === target);
+      }
       console.warn('[SupabaseStore] getVendors error, fallback empty:', error.message);
       return [];
     }
@@ -725,7 +813,12 @@ export class SupabaseStore implements IFinanceStore {
 
   public async getVendorById(id: string): Promise<EventVendor | null> {
     const { data, error } = await this.client.from('event_vendors').select('*').eq('id', id).maybeSingle();
-    if (error || !data) return null;
+    if (error && this.isTableMissingError(error)) {
+      return this.fallbackVendors.find((v) => v.id === id) || null;
+    }
+    if (error || !data) {
+      return this.fallbackVendors.find((v) => v.id === id) || null;
+    }
     return {
       id: data.id,
       companyId: data.company_id,
@@ -768,6 +861,32 @@ export class SupabaseStore implements IFinanceStore {
     };
     const { data, error } = await this.client.from('event_vendors').upsert(row).select().single();
     if (error) {
+      if (this.isTableMissingError(error)) {
+        console.warn('[SupabaseStore] Table event_vendors not in Supabase, using local memory cache');
+        const existingIdx = this.fallbackVendors.findIndex((v) => v.id === id);
+        const item: EventVendor = {
+          id,
+          companyId: vInput.companyId || DEFAULT_COMPANY_ID,
+          eventId: vInput.eventId,
+          name: vInput.name,
+          role: vInput.role,
+          phone: vInput.phone || undefined,
+          agreedFee,
+          paidAmount,
+          remainingAmount,
+          status: vInput.status || status,
+          dueDate: vInput.dueDate || undefined,
+          notes: vInput.notes || undefined,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        if (existingIdx !== -1) {
+          this.fallbackVendors[existingIdx] = { ...this.fallbackVendors[existingIdx], ...item };
+          return this.fallbackVendors[existingIdx];
+        }
+        this.fallbackVendors.push(item);
+        return item;
+      }
       throw new Error(`Ошибка сохранения подрядчика: ${error.message}`);
     }
     return {
@@ -790,6 +909,11 @@ export class SupabaseStore implements IFinanceStore {
 
   public async deleteVendor(id: string): Promise<boolean> {
     const { error } = await this.client.from('event_vendors').delete().eq('id', id);
+    if (error && this.isTableMissingError(error)) {
+      const idx = this.fallbackVendors.findIndex((v) => v.id === id);
+      if (idx !== -1) this.fallbackVendors.splice(idx, 1);
+      return true;
+    }
     return !error;
   }
 
@@ -902,7 +1026,7 @@ export class SupabaseStore implements IFinanceStore {
       'id' in txInput && txInput.id
         ? txInput.id
         : `tx-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-    const row = {
+    const row: any = {
       id: txId,
       company_id: (txInput as any).companyId || DEFAULT_COMPANY_ID,
       type: txInput.type,
@@ -914,6 +1038,8 @@ export class SupabaseStore implements IFinanceStore {
       event_id: txInput.eventId ?? null,
       partner_id: (txInput as any).partnerId ?? null,
       partner_name: (txInput as any).partnerName ?? null,
+      vendor_id: (txInput as any).vendorId ?? null,
+      vendor_name: (txInput as any).vendorName ?? null,
       description: txInput.description ?? '',
       transaction_date: txInput.transactionDate || now,
       is_deleted: false,
@@ -924,6 +1050,13 @@ export class SupabaseStore implements IFinanceStore {
       updated_at: now,
     };
     let { data, error } = await this.client.from('transactions').insert(row).select('*').single();
+    if (error && (error.message?.includes('vendor_id') || error.message?.includes('column'))) {
+      delete row.vendor_id;
+      delete row.vendor_name;
+      const retry = await this.client.from('transactions').insert(row).select('*').single();
+      data = retry.data;
+      error = retry.error;
+    }
     if (error && error.message?.includes('foreign key constraint')) {
       if (error.message.includes('created_by') || error.message.includes('updated_by')) {
         row.created_by = null;
@@ -935,6 +1068,10 @@ export class SupabaseStore implements IFinanceStore {
       if (error.message.includes('partner_id')) {
         row.partner_id = null;
       }
+      if (error.message.includes('vendor_id')) {
+        delete row.vendor_id;
+        delete row.vendor_name;
+      }
       if (error.message.includes('category_id')) {
         row.category_id = txInput.type === 'income' ? 'contract_prepayment' : txInput.type === 'transfer' ? 'transfer_internal' : 'overhead';
       }
@@ -943,7 +1080,34 @@ export class SupabaseStore implements IFinanceStore {
       error = retry.error;
     }
     if (error) throw new Error(error.message);
-    return this.mapTransaction(data || row);
+
+    // If transaction is an expense bound to a vendor, update vendor's paid and remaining amounts
+    const targetVendorId = (txInput as any).vendorId;
+    if (targetVendorId && txInput.type === 'expense') {
+      try {
+        const vendor = await this.getVendorById(targetVendorId);
+        if (vendor) {
+          const newPaid = round2((vendor.paidAmount || 0) + txInput.amount);
+          const newRemaining = Math.max(0, round2((vendor.agreedFee || 0) - newPaid));
+          const newStatus = newPaid >= vendor.agreedFee && vendor.agreedFee > 0 ? 'paid' : 'partial';
+          await this.saveVendor({
+            ...vendor,
+            paidAmount: newPaid,
+            remainingAmount: newRemaining,
+            status: newStatus,
+          });
+        }
+      } catch (vErr) {
+        console.warn('[SupabaseStore] Notice: vendor balance sync warning:', vErr);
+      }
+    }
+
+    const createdTx = this.mapTransaction(data || row);
+    if (targetVendorId && !createdTx.vendorId) {
+      createdTx.vendorId = targetVendorId;
+      createdTx.vendorName = (txInput as any).vendorName || undefined;
+    }
+    return createdTx;
   }
 
   public async updateTransaction(id: string, updates: Partial<Transaction>): Promise<Transaction> {
@@ -983,7 +1147,29 @@ export class SupabaseStore implements IFinanceStore {
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) throw new Error(`Транзакция не найдена: ${id}`);
-    return this.mapTransaction(data);
+
+    const tx = this.mapTransaction(data);
+    // If deleting an expense tied to a vendor, restore remaining fee
+    if (tx.vendorId && tx.type === 'expense') {
+      try {
+        const vendor = await this.getVendorById(tx.vendorId);
+        if (vendor) {
+          const newPaid = Math.max(0, round2((vendor.paidAmount || 0) - tx.amount));
+          const newRemaining = Math.max(0, round2((vendor.agreedFee || 0) - newPaid));
+          const newStatus = newPaid >= vendor.agreedFee && vendor.agreedFee > 0 ? 'paid' : newPaid > 0 ? 'partial' : 'pending';
+          await this.saveVendor({
+            ...vendor,
+            paidAmount: newPaid,
+            remainingAmount: newRemaining,
+            status: newStatus,
+          });
+        }
+      } catch (vErr) {
+        console.warn('[SupabaseStore] Notice: vendor balance restore warning on delete:', vErr);
+      }
+    }
+
+    return tx;
   }
 
   // =========================================================================

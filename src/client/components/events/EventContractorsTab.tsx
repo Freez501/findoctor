@@ -11,7 +11,7 @@ interface EventContractorsTabProps {
 }
 
 export const EventContractorsTab: React.FC<EventContractorsTabProps> = ({ event, onVendorsUpdated }) => {
-  const { accounts, addToast, refreshAccounts, refreshTransactions } = useFinance();
+  const { accounts, categories, addToast, refreshAccounts, refreshTransactions } = useFinance();
   const [vendors, setVendors] = useState<EventVendor[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isFormOpen, setIsFormOpen] = useState<boolean>(false);
@@ -21,6 +21,7 @@ export const EventContractorsTab: React.FC<EventContractorsTabProps> = ({ event,
   const [payingVendor, setPayingVendor] = useState<EventVendor | null>(null);
   const [payAmount, setPayAmount] = useState<string>('');
   const [selectedAccountId, setSelectedAccountId] = useState<string>('cash_1');
+  const [payCategoryId, setPayCategoryId] = useState<string>('staff');
   const [isPaying, setIsPaying] = useState<boolean>(false);
 
   // Form inputs
@@ -30,7 +31,14 @@ export const EventContractorsTab: React.FC<EventContractorsTabProps> = ({ event,
   const [agreedFee, setAgreedFee] = useState<string>('');
   const [paidAmount, setPaidAmount] = useState<string>('0');
   const [dueDate, setDueDate] = useState<string>(event.eventDate || '');
+  const [createAdvanceTx, setCreateAdvanceTx] = useState<boolean>(true);
+  const [advanceAccountId, setAdvanceAccountId] = useState<string>('cash_1');
+  const [advanceCategoryId, setAdvanceCategoryId] = useState<string>('staff');
   const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  const expenseCategories = React.useMemo(() => {
+    return categories.filter((c) => c.type === 'expense' || c.type === 'both');
+  }, [categories]);
 
   const loadVendors = useCallback(async () => {
     setIsLoading(true);
@@ -71,6 +79,9 @@ export const EventContractorsTab: React.FC<EventContractorsTabProps> = ({ event,
     setAgreedFee('');
     setPaidAmount('0');
     setDueDate(event.eventDate || '');
+    setCreateAdvanceTx(true);
+    setAdvanceAccountId(accounts[0]?.id || 'cash_1');
+    setAdvanceCategoryId('staff');
     setIsFormOpen(true);
   };
 
@@ -112,15 +123,42 @@ export const EventContractorsTab: React.FC<EventContractorsTabProps> = ({ event,
         });
         addToast('Данные подрядчика обновлены', 'success');
       } else {
-        await api.createVendor(event.id, {
-          name: name.trim(),
-          role: role.trim(),
-          phone: phone.trim() || undefined,
-          agreedFee: fee,
-          paidAmount: isNaN(paid) ? 0 : paid,
-          dueDate: dueDate || undefined,
-        });
-        addToast('Подрядчик добавлен в команду проекта', 'success');
+        // If user wants to execute advance payment directly in Cash Flow / ДДС
+        if (createAdvanceTx && paid > 0) {
+          const res = await api.createVendor(event.id, {
+            name: name.trim(),
+            role: role.trim(),
+            phone: phone.trim() || undefined,
+            agreedFee: fee,
+            paidAmount: 0,
+            dueDate: dueDate || undefined,
+          });
+          const createdVendor = res.vendor;
+          // Create real expense transaction in Cash Flow
+          await api.createTransaction({
+            type: 'expense',
+            amount: paid,
+            fromAccountId: advanceAccountId,
+            eventId: event.id,
+            vendorId: createdVendor.id,
+            vendorName: createdVendor.name,
+            categoryId: advanceCategoryId,
+            description: `Аванс подрядчику: ${createdVendor.role} ${createdVendor.name}`,
+            transactionDate: new Date().toISOString(),
+          });
+          await Promise.all([refreshAccounts(), refreshTransactions()]);
+          addToast(`Подрядчик добавлен, аванс ${formatRubles(paid)} списан в ДДС`, 'success');
+        } else {
+          await api.createVendor(event.id, {
+            name: name.trim(),
+            role: role.trim(),
+            phone: phone.trim() || undefined,
+            agreedFee: fee,
+            paidAmount: isNaN(paid) ? 0 : paid,
+            dueDate: dueDate || undefined,
+          });
+          addToast('Подрядчик добавлен в команду проекта', 'success');
+        }
       }
       setIsFormOpen(false);
       await loadVendors();
@@ -148,6 +186,13 @@ export const EventContractorsTab: React.FC<EventContractorsTabProps> = ({ event,
     setPayingVendor(v);
     setPayAmount(String(v.remainingAmount));
     setSelectedAccountId(accounts[0]?.id || 'cash_1');
+    const roleLower = v.role.toLowerCase();
+    const defaultCat = roleLower.includes('звук') || roleLower.includes('dj') || roleLower.includes('декор')
+      ? 'equipment'
+      : roleLower.includes('транспорт') || roleLower.includes('логистик')
+      ? 'logistics'
+      : 'staff';
+    setPayCategoryId(defaultCat);
   };
 
   const handleExecutePayment = async (e: React.FormEvent) => {
@@ -169,7 +214,8 @@ export const EventContractorsTab: React.FC<EventContractorsTabProps> = ({ event,
         fromAccountId: selectedAccountId,
         eventId: event.id,
         vendorId: payingVendor.id,
-        categoryId: 'cat_equipment', // default to equipment or bar service
+        vendorName: payingVendor.name,
+        categoryId: payCategoryId || 'staff',
         description: `Выплата подрядчику: ${payingVendor.role} ${payingVendor.name}`,
         transactionDate: new Date().toISOString(),
       });
@@ -242,6 +288,22 @@ export const EventContractorsTab: React.FC<EventContractorsTabProps> = ({ event,
                   {accounts.map((acc) => (
                     <option key={acc.id} value={acc.id}>
                       {acc.name} ({formatRubles(acc.currentBalance)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="settings-input-group" style={{ marginBottom: '12px' }}>
+                <label className="settings-input-label">Статья расхода в ДДС *</label>
+                <select
+                  className="settings-text-input"
+                  value={payCategoryId}
+                  onChange={(e) => setPayCategoryId(e.target.value)}
+                  required
+                >
+                  {expenseCategories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
                     </option>
                   ))}
                 </select>
@@ -348,6 +410,11 @@ export const EventContractorsTab: React.FC<EventContractorsTabProps> = ({ event,
                 value={paidAmount}
                 onChange={(e) => setPaidAmount(e.target.value)}
               />
+              {parseFloat(paidAmount || '0') > parseFloat(agreedFee || '0') && parseFloat(agreedFee || '0') > 0 && (
+                <div style={{ color: '#d97706', fontSize: '0.75rem', marginTop: '4px', fontWeight: 500 }}>
+                  ⚠️ Аванс превышает гонорар на {formatRubles(parseFloat(paidAmount) - parseFloat(agreedFee))} (переплата)
+                </div>
+              )}
             </div>
 
             <div className="settings-input-group">
@@ -359,6 +426,63 @@ export const EventContractorsTab: React.FC<EventContractorsTabProps> = ({ event,
                 onChange={(e) => setDueDate(e.target.value)}
               />
             </div>
+
+            {/* Advance Cash Flow execution toggle for new vendors */}
+            {!editingVendor && parseFloat(paidAmount || '0') > 0 && (
+              <div
+                style={{
+                  gridColumn: '1 / -1',
+                  padding: '12px 14px',
+                  background: 'var(--color-bg-secondary, rgba(59, 130, 246, 0.05))',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                }}
+              >
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 500, fontSize: '0.85rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={createAdvanceTx}
+                    onChange={(e) => setCreateAdvanceTx(e.target.checked)}
+                  />
+                  <span>Списать аванс со счёта сейчас (провести операцию расхода в ДДС и Cash Flow)</span>
+                </label>
+
+                {createAdvanceTx && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginTop: '10px' }}>
+                    <div className="settings-input-group">
+                      <label className="settings-input-label">Счёт списания аванса *</label>
+                      <select
+                        className="settings-text-input"
+                        value={advanceAccountId}
+                        onChange={(e) => setAdvanceAccountId(e.target.value)}
+                        required
+                      >
+                        {accounts.map((acc) => (
+                          <option key={acc.id} value={acc.id}>
+                            {acc.name} ({formatRubles(acc.currentBalance)})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="settings-input-group">
+                      <label className="settings-input-label">Статья расхода в ДДС *</label>
+                      <select
+                        className="settings-text-input"
+                        value={advanceCategoryId}
+                        onChange={(e) => setAdvanceCategoryId(e.target.value)}
+                      >
+                        {expenseCategories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="settings-form-actions">

@@ -86,11 +86,14 @@
   flex-direction: column;
   gap: 14px;
   box-shadow: var(--shadow-sm);
-  transition: border-color 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
 }
 
 .event-card:hover {
-  border-color: #a1a1aa;
+  border-color: #3b82f6;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.12);
+  transform: translateY(-2px);
 }
 
 .event-card-top {

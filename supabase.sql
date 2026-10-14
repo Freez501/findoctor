@@ -208,6 +208,76 @@ COMMENT ON TABLE categories IS 'Справочник категорий: пря�
 COMMENT ON COLUMN categories.is_event_specific IS 'true = прямые расходы/доходы ивента; false = общехозяйственные расходы бара';
 
 -- ============================================================================
+-- 4.5. TABLE: EVENT_PAYMENT_MILESTONES (График оплат от заказчика)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS event_payment_milestones (
+    id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL DEFAULT 'company_truespace_default' REFERENCES companies(id) ON DELETE CASCADE,
+    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    due_date DATE NOT NULL,
+    amount NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
+    status TEXT NOT NULL CHECK (status IN ('pending', 'received', 'overdue')) DEFAULT 'pending',
+    paid_amount NUMERIC(12, 2) DEFAULT NULL,
+    paid_date DATE DEFAULT NULL,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DROP TRIGGER IF EXISTS trg_event_milestones_updated_at ON event_payment_milestones;
+CREATE TRIGGER trg_event_milestones_updated_at
+    BEFORE UPDATE ON event_payment_milestones
+    FOR EACH ROW
+    EXECUTE FUNCTION truespace_set_updated_at();
+
+-- ============================================================================
+-- 4.6. TABLE: EVENT_BUDGET_ITEMS (Смета мероприятия: План vs Факт)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS event_budget_items (
+    id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL DEFAULT 'company_truespace_default' REFERENCES companies(id) ON DELETE CASCADE,
+    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
+    planned_amount NUMERIC(12, 2) NOT NULL CHECK (planned_amount >= 0),
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DROP TRIGGER IF EXISTS trg_event_budget_items_updated_at ON event_budget_items;
+CREATE TRIGGER trg_event_budget_items_updated_at
+    BEFORE UPDATE ON event_budget_items
+    FOR EACH ROW
+    EXECUTE FUNCTION truespace_set_updated_at();
+
+-- ============================================================================
+-- 4.7. TABLE: EVENT_VENDORS (Подрядчики и команда на мероприятии)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS event_vendors (
+    id TEXT PRIMARY KEY,
+    company_id TEXT NOT NULL DEFAULT 'company_truespace_default' REFERENCES companies(id) ON DELETE CASCADE,
+    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL,
+    phone TEXT,
+    agreed_fee NUMERIC(12, 2) NOT NULL DEFAULT 0.00 CHECK (agreed_fee >= 0),
+    paid_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00 CHECK (paid_amount >= 0),
+    remaining_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00 CHECK (remaining_amount >= 0),
+    status TEXT NOT NULL CHECK (status IN ('pending', 'partial', 'paid')) DEFAULT 'pending',
+    due_date DATE,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DROP TRIGGER IF EXISTS trg_event_vendors_updated_at ON event_vendors;
+CREATE TRIGGER trg_event_vendors_updated_at
+    BEFORE UPDATE ON event_vendors
+    FOR EACH ROW
+    EXECUTE FUNCTION truespace_set_updated_at();
+
+-- ============================================================================
 -- 6. TABLE: TRANSACTIONS (Финансовые операции)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS transactions (
@@ -222,6 +292,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     event_id TEXT REFERENCES events(id) ON DELETE SET NULL,
     partner_id TEXT REFERENCES partners(id) ON DELETE SET NULL,
     partner_name TEXT,
+    vendor_id TEXT REFERENCES event_vendors(id) ON DELETE SET NULL,
+    vendor_name TEXT,
     description TEXT,
     transaction_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     is_deleted BOOLEAN NOT NULL DEFAULT false,
@@ -246,8 +318,10 @@ CREATE TABLE IF NOT EXISTS transactions (
     )
 );
 
--- Safe migration: drop direction check on transactions & add FKs
+-- Safe migration: drop direction check on transactions & add FKs and columns
 ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_direction_check;
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS vendor_id TEXT REFERENCES event_vendors(id) ON DELETE SET NULL;
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS vendor_name TEXT;
 DO $$
 BEGIN
     ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_created_by_fkey;
@@ -258,7 +332,7 @@ EXCEPTION WHEN OTHERS THEN
     NULL;
 END $$;
 
-COMMENT ON TABLE transactions IS 'Атомарные транзакции с привязкой к автору и компании';
+COMMENT ON TABLE transactions IS 'Атомарные транзакции с привязкой к автору, компании и подрядчику';
 
 DROP TRIGGER IF EXISTS trg_transactions_updated_at ON transactions;
 CREATE TRIGGER trg_transactions_updated_at
@@ -408,6 +482,30 @@ CREATE POLICY "Users can access their company events" ON events
     USING (truespace_user_has_company_access(company_id))
     WITH CHECK (truespace_user_has_company_access(company_id));
 
+DROP POLICY IF EXISTS "Allow all access to event_payment_milestones" ON event_payment_milestones;
+DROP POLICY IF EXISTS "Users can access their company milestones" ON event_payment_milestones;
+ALTER TABLE event_payment_milestones ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can access their company milestones" ON event_payment_milestones
+    FOR ALL
+    USING (truespace_user_has_company_access(company_id))
+    WITH CHECK (truespace_user_has_company_access(company_id));
+
+DROP POLICY IF EXISTS "Allow all access to event_budget_items" ON event_budget_items;
+DROP POLICY IF EXISTS "Users can access their company budget items" ON event_budget_items;
+ALTER TABLE event_budget_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can access their company budget items" ON event_budget_items
+    FOR ALL
+    USING (truespace_user_has_company_access(company_id))
+    WITH CHECK (truespace_user_has_company_access(company_id));
+
+DROP POLICY IF EXISTS "Allow all access to event_vendors" ON event_vendors;
+DROP POLICY IF EXISTS "Users can access their company vendors" ON event_vendors;
+ALTER TABLE event_vendors ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can access their company vendors" ON event_vendors
+    FOR ALL
+    USING (truespace_user_has_company_access(company_id))
+    WITH CHECK (truespace_user_has_company_access(company_id));
+
 DROP POLICY IF EXISTS "Allow all access to categories" ON categories;
 DROP POLICY IF EXISTS "Users can access their company categories" ON categories;
 CREATE POLICY "Users can access their company categories" ON categories
@@ -484,7 +582,7 @@ INSERT INTO accounts (id, company_id, name, type, description, initial_balance, 
 ('card_sbp', 'company_truespace_default', 'Переводы (Карта СБП)', 'card', 'Личная карта шеф-бармена для мгновенных оплат по СБП и срочных оплат такси', 65000.00, 35000.00, 'RUB', true, '#8b5cf6', 'smartphone', '2026-09-16T23:30:00Z')
 ON CONFLICT (id) DO NOTHING;
 
--- 9.2 Categories (12 категорий)
+-- 9.2 Categories (16 категорий)
 INSERT INTO categories (id, name, type, color, icon, is_event_specific, is_system) VALUES
 ('contract_prepayment', 'Предоплата по договору', 'income', '#10b981', 'file-check', true, true),
 ('contract_final', 'Финальная оплата', 'income', '#059669', 'badge-check', true, true),
@@ -492,6 +590,10 @@ INSERT INTO categories (id, name, type, color, icon, is_event_specific, is_syste
 ('tips', 'Чаевые команды', 'income', '#8b5cf6', 'sparkles', true, true),
 ('alcohol', 'Алкоголь и напитки', 'expense', '#ef4444', 'wine', true, true),
 ('staff', 'Персонал и гонорары', 'expense', '#f97316', 'users', true, true),
+('staff_dishwasher', 'Посудомойщица', 'expense', '#06b6d4', 'sparkles', true, false),
+('staff_loader', 'Грузчик', 'expense', '#f59e0b', 'truck', true, false),
+('staff_meals', 'Стафпитание (обеды, кофе)', 'expense', '#f59e0b', 'utensils', true, true),
+('transport', 'Транспорт и платные дороги', 'expense', '#3b82f6', 'car', true, true),
 ('logistics', 'Логистика и транспорт', 'expense', '#eab308', 'truck', true, true),
 ('supplies', 'Лёд и продукты', 'expense', '#06b6d4', 'snowflake', true, true),
 ('equipment', 'Аренда оборудования', 'expense', '#a855f7', 'box', true, true),

@@ -392,7 +392,19 @@ export const EventsView: React.FC = () => {
           const progressPercent = contract > 0 ? Math.min(100, Math.round((metrics.received / contract) * 100)) : 100;
 
           return (
-            <div key={ev.id} className="event-card">
+            <div
+              key={ev.id}
+              className="event-card"
+              onClick={() => setSelectedDossierEvent(ev)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setSelectedDossierEvent(ev);
+                }
+              }}
+            >
               <div className="event-card-top">
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -422,10 +434,13 @@ export const EventsView: React.FC = () => {
                 </div>
 
                 {/* Actions */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
-                    onClick={() => handleOpenEdit(ev)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenEdit(ev);
+                    }}
                     title="Редактировать мероприятие"
                     className="btn-touch-target"
                     style={{ minWidth: '44px', minHeight: '44px', color: 'var(--color-text-muted)', borderRadius: '4px', cursor: 'pointer' }}
@@ -436,7 +451,10 @@ export const EventsView: React.FC = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                       <button
                         type="button"
-                        onClick={() => handleDelete(ev.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(ev.id);
+                        }}
                         className="btn-confirm-yes"
                         style={{ fontSize: '0.7rem', padding: '3px 6px' }}
                       >
@@ -444,7 +462,10 @@ export const EventsView: React.FC = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setDeletingId(null)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeletingId(null);
+                        }}
                         className="btn-confirm-no"
                         style={{ fontSize: '0.7rem', padding: '3px 6px' }}
                       >
@@ -454,7 +475,10 @@ export const EventsView: React.FC = () => {
                   ) : (
                     <button
                       type="button"
-                      onClick={() => setDeletingId(ev.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeletingId(ev.id);
+                      }}
                       title="Удалить мероприятие"
                       className="btn-touch-target"
                       style={{ minWidth: '44px', minHeight: '44px', color: 'var(--color-text-muted)', borderRadius: '4px', cursor: 'pointer' }}
