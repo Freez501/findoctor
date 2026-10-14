@@ -102,6 +102,10 @@ export interface CreateTransactionDTO {
   partnerId?: string | null;
   /** Partner name */
   partnerName?: string | null;
+  /** Vendor ID (for event crew and vendor fee payouts) */
+  vendorId?: string | null;
+  /** Vendor name */
+  vendorName?: string | null;
   /** Optional transaction memo or description */
   description?: string;
   /** ISO 8601 date string (optional, defaults to current time) */
@@ -129,6 +133,8 @@ export interface UpdateTransactionDTO {
   eventId?: string | null;
   partnerId?: string | null;
   partnerName?: string | null;
+  vendorId?: string | null;
+  vendorName?: string | null;
   description?: string;
   transactionDate?: string;
   needsReview?: boolean;

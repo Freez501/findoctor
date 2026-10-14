@@ -12,10 +12,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, ArrowDownRight, ArrowUpRight, ArrowLeftRight, Check, Loader2, AlertCircle, Users, Briefcase, Calendar, FileText } from 'lucide-react';
-import { TransactionType, TransactionDirection } from '../../../shared/types.js';
+import { TransactionType, TransactionDirection, EventVendor } from '../../../shared/types.js';
 import { DEFAULT_EXPENSE_CATEGORY_ID, DEFAULT_INCOME_CATEGORY_ID, CATEGORY_IDS, EVENT_IDS } from '../../../shared/constants.js';
 import { useFinance } from '../../context/FinanceContext.js';
 import { useAuth } from '../../context/AuthContext.js';
+import { api } from '../../api/apiClient.js';
 import { formatRubles, formatDateRu } from '../../utils/formatters.js';
 import { NumericPad } from './NumericPad.js';
 import { CategoryChips } from './CategoryChips.js';
@@ -80,8 +81,22 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
     if (events.some((e) => e.id === EVENT_IDS.WEDDING)) return EVENT_IDS.WEDDING;
     return events[0]?.id || null;
   });
+  const [eventVendors, setEventVendors] = useState<EventVendor[]>([]);
+  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateStr());
   const [description, setDescription] = useState<string>('');
+
+  // Fetch vendors when selected event changes for operational expense
+  useEffect(() => {
+    if (selectedEventId && type === 'expense' && direction === 'operational') {
+      api.getVendors(selectedEventId)
+        .then((res) => setEventVendors(res.vendors || []))
+        .catch(() => setEventVendors([]));
+    } else {
+      setEventVendors([]);
+      setSelectedVendorId(null);
+    }
+  }, [selectedEventId, type, direction]);
 
   // UI state
   const isSubmitting = false;
@@ -263,6 +278,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
     }
 
     const selectedPartner = partners.find((p) => p.id === selectedPartnerId);
+    const selectedVendor = eventVendors.find((v) => v.id === selectedVendorId);
     const payload = {
       type,
       direction: type === 'transfer' ? ('transfer' as const) : direction,
@@ -273,6 +289,8 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
       eventId: type === 'transfer' || direction !== 'operational' ? null : selectedEventId,
       partnerId: direction === 'dividends' ? selectedPartnerId : null,
       partnerName: direction === 'dividends' && selectedPartner ? selectedPartner.name : null,
+      vendorId: type === 'expense' && direction === 'operational' ? selectedVendorId || undefined : undefined,
+      vendorName: type === 'expense' && direction === 'operational' && selectedVendor ? `${selectedVendor.role} ${selectedVendor.name}` : undefined,
       description: description.trim(),
       transactionDate: getIsoDateForSelectedDay(selectedDate),
       createdBy: currentUser?.id || undefined,
@@ -544,6 +562,54 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                 selectedEventId={selectedEventId}
                 onSelectEventId={setSelectedEventId}
               />
+            )}
+
+            {/* Vendor / Crew Selection (for Operational Event Expense) */}
+            {type === 'expense' && direction === 'operational' && selectedEventId && eventVendors.length > 0 && (
+              <div className="partner-chips-container animate-fade-in" style={{ marginTop: '10px' }}>
+                <div className="field-block-label-row">
+                  <span className="field-block-label" style={{ color: 'var(--color-accent-strong)' }}>
+                    Подрядчик (кому выплата):
+                  </span>
+                  <span className="field-block-hint">Опционально</span>
+                </div>
+                <div className="partner-chips-grid">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedVendorId(null)}
+                    className={`partner-chip ${!selectedVendorId ? 'partner-chip-selected' : ''}`}
+                  >
+                    <span>Без привязки</span>
+                  </button>
+                  {eventVendors.map((v) => {
+                    const isSelected = selectedVendorId === v.id;
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedVendorId(v.id);
+                          if (amount === 0 && v.remainingAmount > 0) {
+                            setAmount(v.remainingAmount);
+                          }
+                          if (!description || description.startsWith('Выплата:')) {
+                            setDescription(`Выплата: ${v.role} ${v.name}`);
+                          }
+                        }}
+                        className={`partner-chip ${isSelected ? 'partner-chip-selected' : ''}`}
+                      >
+                        <Users size={12} aria-hidden="true" />
+                        <span>{v.role}: {v.name}</span>
+                        {v.remainingAmount > 0 && (
+                          <span style={{ fontSize: '0.7rem', opacity: 0.85, marginLeft: '3px' }}>
+                            ({formatRubles(v.remainingAmount)})
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             )}
 
             {/* Transaction Date Selector */}

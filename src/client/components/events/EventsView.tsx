@@ -23,10 +23,12 @@ import {
   TrendingUp,
   AlertCircle,
   X,
+  FileText,
 } from 'lucide-react';
 import { CateringEvent, EventStatus } from '../../../shared/types.js';
 import { useFinance } from '../../context/FinanceContext.js';
 import { formatRubles, formatDateRu } from '../../utils/formatters.js';
+import { EventDossierModal } from './EventDossierModal.js';
 
 interface EventFormState {
   title: string;
@@ -59,6 +61,7 @@ export const EventsView: React.FC = () => {
   const [formData, setFormData] = useState<EventFormState>(INITIAL_FORM);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedDossierEvent, setSelectedDossierEvent] = useState<CateringEvent | null>(null);
 
   // Compute metrics for each event from active transactions
   const eventMetrics = useMemo(() => {
@@ -502,6 +505,16 @@ export const EventsView: React.FC = () => {
                 </div>
               </div>
 
+              {/* Event Pro Suite: Dossier & Budget Button */}
+              <button
+                type="button"
+                onClick={() => setSelectedDossierEvent(ev)}
+                className="btn-event-dossier"
+              >
+                <FileText size={15} />
+                <span>Финансовое досье и смета</span>
+              </button>
+
               {ev.notes && (
                 <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic', borderTop: '1px solid var(--color-border)', paddingTop: '6px' }}>
                   {ev.notes}
@@ -511,6 +524,15 @@ export const EventsView: React.FC = () => {
           );
         })}
       </div>
+
+      {/* Event Dossier Modal */}
+      {selectedDossierEvent && (
+        <EventDossierModal
+          event={selectedDossierEvent}
+          isOpen={Boolean(selectedDossierEvent)}
+          onClose={() => setSelectedDossierEvent(null)}
+        />
+      )}
     </div>
   );
 };
