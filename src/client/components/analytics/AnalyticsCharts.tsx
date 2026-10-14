@@ -15,7 +15,6 @@ import {
   Target,
   Filter,
   Info,
-  Sparkles,
 } from 'lucide-react';
 import { EventMarginMetrics } from '../../../shared/types.js';
 import { formatRubles, formatPercent, formatDateRu } from '../../utils/formatters.js';
@@ -145,13 +144,13 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Sparkles size={18} style={{ color: 'var(--color-accent)' }} />
+            <BarChart3 size={18} style={{ color: 'var(--color-accent)' }} />
             <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0 }}>
-              Интерактивный финансовый радар
+              Финансовые графики
             </h3>
           </div>
           <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-            Живая визуализация доходности, структуры затрат и маржинальности выездов
+            Интерактивная визуализация доходности, структуры затрат и маржинальности выездов
           </span>
         </div>
 

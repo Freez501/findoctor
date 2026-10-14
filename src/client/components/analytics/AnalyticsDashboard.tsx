@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { BarChart3, RefreshCw, AlertCircle, TrendingUp, Calendar } from 'lucide-react';
+import { BarChart3, RefreshCw, AlertCircle, TrendingUp, Calendar, PieChart } from 'lucide-react';
 import { useAnalytics, classifyMargin } from '../../hooks/useAnalytics.js';
 import { useFinance } from '../../context/FinanceContext.js';
 import { formatRubles, formatPercent } from '../../utils/formatters.js';
@@ -17,7 +17,7 @@ import { AnalyticsCharts } from './AnalyticsCharts.js';
 export const AnalyticsDashboard: React.FC = () => {
   const { metrics, overview, isLoading, error, refetch } = useAnalytics();
   const { events } = useFinance();
-  const [activeTab, setActiveTab] = useState<'margin' | 'cashflow'>('margin');
+  const [activeTab, setActiveTab] = useState<'margin' | 'charts' | 'cashflow'>('margin');
   const [selectedEventId, setSelectedEventId] = useState<string>('all');
 
   const eventStatusMap = new Map(events.map((e) => [e.id, e.status]));
@@ -85,6 +85,14 @@ export const AnalyticsDashboard: React.FC = () => {
         </button>
         <button
           type="button"
+          onClick={() => setActiveTab('charts')}
+          className={`dossier-tab-btn ${activeTab === 'charts' ? 'tab-active' : ''}`}
+        >
+          <PieChart size={16} />
+          <span>Графики</span>
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveTab('cashflow')}
           className={`dossier-tab-btn ${activeTab === 'cashflow' ? 'tab-active' : ''}`}
         >
@@ -93,9 +101,17 @@ export const AnalyticsDashboard: React.FC = () => {
         </button>
       </div>
 
-      {activeTab === 'cashflow' ? (
-        <CashFlowCalendar />
-      ) : (
+      {activeTab === 'cashflow' && <CashFlowCalendar />}
+
+      {activeTab === 'charts' && (
+        <AnalyticsCharts
+          metrics={metrics}
+          selectedEventId={selectedEventId}
+          onSelectEvent={setSelectedEventId}
+        />
+      )}
+
+      {activeTab === 'margin' && (
         <>
           {/* Aggregate Catering Overview Cards */}
           {overview && (
@@ -125,13 +141,6 @@ export const AnalyticsDashboard: React.FC = () => {
               </div>
             </div>
           )}
-
-          {/* Interactive Financial Radar & Charts */}
-          <AnalyticsCharts
-            metrics={metrics}
-            selectedEventId={selectedEventId}
-            onSelectEvent={setSelectedEventId}
-          />
 
           {/* Interactive Event Selector */}
           <div className="glass-panel" style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
