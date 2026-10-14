@@ -17,6 +17,7 @@ export const CashFlowCalendar: React.FC = () => {
   const [daysAhead, setDaysAhead] = useState<number>(30);
   const [forecast, setForecast] = useState<CashFlowForecast | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [hoveredDay, setHoveredDay] = useState<CashFlowCalendarDay | null>(null);
 
   const loadForecast = useCallback(async () => {
     setIsLoading(true);
@@ -185,6 +186,136 @@ export const CashFlowCalendar: React.FC = () => {
               </span>
             </div>
           </div>
+
+          {/* Cash Flow Dynamics Trend Chart */}
+          {forecast.days.length > 0 && (
+            <div className="cashflow-table-card" style={{ padding: '16px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h4 className="cashflow-table-title" style={{ margin: 0 }}>
+                  Прогноз динамики остатка (Cash Balance Curve)
+                </h4>
+                {hoveredDay && (
+                  <span style={{ fontSize: '0.8rem', color: hoveredDay.closingBalance < 0 ? '#dc2626' : '#059669', fontWeight: 700 }}>
+                    {formatDateRu(hoveredDay.date)}: {formatRubles(hoveredDay.closingBalance)}
+                  </span>
+                )}
+              </div>
+
+              {(() => {
+                const days = forecast.days;
+                const width = 800;
+                const height = 200;
+                const pad = { top: 20, right: 20, bottom: 35, left: 65 };
+                const balances = days.map((d) => d.closingBalance);
+                const maxVal = Math.max(...balances, totalBalance, 50000) * 1.1;
+                const minVal = Math.min(...balances, 0) * (Math.min(...balances) < 0 ? 1.2 : 1);
+                const range = maxVal - minVal || 1;
+
+                const getX = (idx: number) => pad.left + (idx / (days.length - 1 || 1)) * (width - pad.left - pad.right);
+                const getY = (val: number) => height - pad.bottom - ((val - minVal) / range) * (height - pad.top - pad.bottom);
+
+                const zeroY = getY(0);
+
+                const points = days.map((d, i) => `${getX(i)},${getY(d.closingBalance)}`).join(' ');
+                const areaPoints = `${getX(0)},${zeroY} ${points} ${getX(days.length - 1)},${zeroY}`;
+
+                return (
+                  <div style={{ position: 'relative', width: '100%', overflowX: 'auto' }}>
+                    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: 'auto', display: 'block', minWidth: '550px' }}>
+                      <defs>
+                        <linearGradient id="cfCurveGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
+                          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+                        </linearGradient>
+                      </defs>
+
+                      {/* Zero baseline */}
+                      <line
+                        x1={pad.left}
+                        y1={zeroY}
+                        x2={width - pad.right}
+                        y2={zeroY}
+                        stroke={minVal < 0 ? '#dc2626' : 'var(--color-border)'}
+                        strokeDasharray="4 4"
+                        strokeWidth="1.5"
+                      />
+                      <text x={pad.left - 8} y={zeroY + 4} textAnchor="end" fontSize="10" fill="var(--color-text-muted)">
+                        0 ₽
+                      </text>
+
+                      {/* Top baseline */}
+                      <line
+                        x1={pad.left}
+                        y1={pad.top}
+                        x2={width - pad.right}
+                        y2={pad.top}
+                        stroke="var(--color-border)"
+                        strokeDasharray="2 2"
+                        strokeWidth="1"
+                      />
+                      <text x={pad.left - 8} y={pad.top + 4} textAnchor="end" fontSize="10" fill="var(--color-text-muted)">
+                        {Math.round(maxVal / 1000)}k
+                      </text>
+
+                      {/* Area Fill */}
+                      <polygon points={areaPoints} fill="url(#cfCurveGrad)" />
+
+                      {/* Line */}
+                      <polyline
+                        points={points}
+                        fill="none"
+                        stroke={metrics.minBalance < 0 ? '#f59e0b' : '#10b981'}
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+
+                      {/* Day points */}
+                      {days.map((d, i) => {
+                        const cx = getX(i);
+                        const cy = getY(d.closingBalance);
+                        const isShortage = d.closingBalance < 0;
+                        const isSpecial = d.isShortage || d.totalIncome > 0 || d.totalExpense > 0;
+                        const isHovered = hoveredDay?.date === d.date;
+
+                        return (
+                          <g
+                            key={d.date}
+                            style={{ cursor: 'pointer' }}
+                            onMouseEnter={() => setHoveredDay(d)}
+                            onMouseLeave={() => setHoveredDay(null)}
+                          >
+                            {(isSpecial || isHovered) && (
+                              <circle
+                                cx={cx}
+                                cy={cy}
+                                r={isHovered ? 6 : isShortage ? 5 : 4}
+                                fill={isShortage ? '#dc2626' : '#10b981'}
+                                stroke="#fff"
+                                strokeWidth="2"
+                              />
+                            )}
+                            {/* X-axis date labels for every ~5 days */}
+                            {(i === 0 || i === days.length - 1 || i % Math.ceil(days.length / 6) === 0) && (
+                              <text
+                                x={cx}
+                                y={height - 12}
+                                textAnchor="middle"
+                                fontSize="10"
+                                fill="var(--color-text-muted)"
+                              >
+                                {d.date.slice(5)}
+                              </text>
+                            )}
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           {/* Timeline Table */}
           <div className="cashflow-table-card">

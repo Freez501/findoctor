@@ -1178,7 +1178,7 @@ export class SupabaseStore implements IFinanceStore {
       try {
         const vendor = await this.getVendorById(targetVendorId);
         if (vendor) {
-          const newPaid = round2((vendor.paidAmount || 0) + txInput.amount);
+          const newPaid = round2((vendor.paidAmount || 0) + Number(txInput.amount));
           const newRemaining = Math.max(0, round2((vendor.agreedFee || 0) - newPaid));
           const newStatus = newPaid >= vendor.agreedFee && vendor.agreedFee > 0 ? 'paid' : 'partial';
           await this.saveVendor({

@@ -11,6 +11,7 @@ import { AccountsGrid } from './components/accounts/AccountsGrid.js';
 import { AnalyticsDashboard } from './components/analytics/AnalyticsDashboard.js';
 import { EventsView } from './components/events/EventsView.js';
 import { TransactionHistory } from './components/history/TransactionHistory.js';
+import { ReportsView } from './components/reports/ReportsView.js';
 import { SettingsView } from './components/settings/SettingsView.js';
 import { SuperAdminView } from './components/admin/SuperAdminView.js';
 import { QuickEntryModal } from './components/entry/QuickEntryModal.js';
@@ -87,6 +88,7 @@ export const App: React.FC = () => {
           {currentTab === 'events' && <EventsView />}
           {currentTab === 'analytics' && <AnalyticsDashboard />}
           {currentTab === 'history' && <TransactionHistory />}
+          {currentTab === 'reports' && <ReportsView />}
           {currentTab === 'settings' && <SettingsView />}
           {currentTab === 'admin' && <SuperAdminView />}
         </ErrorBoundary>

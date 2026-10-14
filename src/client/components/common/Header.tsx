@@ -25,11 +25,12 @@ import {
   Crown,
   LucideIcon,
   LogOut,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useResetDemo } from '../../hooks/useResetDemo.js';
 import { useAuth } from '../../context/AuthContext.js';
 
-export type TabType = 'accounts' | 'events' | 'analytics' | 'history' | 'settings' | 'admin';
+export type TabType = 'accounts' | 'events' | 'analytics' | 'history' | 'reports' | 'settings' | 'admin';
 
 interface NavItem {
   id: TabType;
@@ -43,6 +44,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'events', label: 'Мероприятия', icon: Calendar },
   { id: 'analytics', label: 'Аналитика', icon: BarChart3 },
   { id: 'history', label: 'Журнал', icon: History },
+  { id: 'reports', label: 'Отчёты', icon: FileSpreadsheet },
   { id: 'settings', label: 'Настройки', icon: Settings },
   { id: 'admin', label: 'Супер-админ', icon: Shield, badge: '👑' },
 ];

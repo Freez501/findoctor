@@ -1,0 +1,40 @@
+/**
+ * Brilliant Event — Барный кейтеринг и финансы
+ * Interactive Financial Charts Styles (`src/client/styles/modules/charts.css`)
+ */
+
+.chart-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  background-color: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chart-mode-btn:hover {
+  color: var(--color-text);
+  background-color: var(--color-surface);
+}
+
+.chart-mode-btn.active {
+  background-color: var(--color-surface);
+  color: var(--color-accent);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+@media (max-width: 640px) {
+  .chart-mode-btn span {
+    display: none;
+  }
+  .chart-mode-btn {
+    padding: 6px 10px;
+  }
+}

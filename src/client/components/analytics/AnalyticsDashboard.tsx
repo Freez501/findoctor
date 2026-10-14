@@ -12,6 +12,7 @@ import { EventMarginSummary } from './EventMarginSummary.js';
 import { GeneralBarExpensesCard } from './GeneralBarExpensesCard.js';
 import { PartnersDashboard } from './PartnersDashboard.js';
 import { CashFlowCalendar } from './CashFlowCalendar.js';
+import { AnalyticsCharts } from './AnalyticsCharts.js';
 
 export const AnalyticsDashboard: React.FC = () => {
   const { metrics, overview, isLoading, error, refetch } = useAnalytics();
@@ -124,6 +125,13 @@ export const AnalyticsDashboard: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Interactive Financial Radar & Charts */}
+          <AnalyticsCharts
+            metrics={metrics}
+            selectedEventId={selectedEventId}
+            onSelectEvent={setSelectedEventId}
+          />
 
           {/* Interactive Event Selector */}
           <div className="glass-panel" style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
