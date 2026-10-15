@@ -43,10 +43,10 @@ describe('Financial Reports Engine Unit Tests', () => {
   ];
 
   const dummyCategories: Category[] = [
-    { id: 'cat_prepayment', name: 'Предоплата банкета', type: 'income', direction: 'operational' },
-    { id: 'cat_alcohol', name: 'Алкоголь', type: 'expense', direction: 'operational' },
-    { id: 'cat_staff', name: 'Персонал', type: 'expense', direction: 'operational' },
-    { id: 'cat_rent', name: 'Аренда склада', type: 'expense', direction: 'operational' },
+    { id: 'cat_prepayment', name: 'Предоплата банкета', type: 'income', direction: 'operational', color: '#10b981', isEventSpecific: true },
+    { id: 'cat_alcohol', name: 'Алкоголь', type: 'expense', direction: 'operational', color: '#e11d48', isEventSpecific: true },
+    { id: 'cat_staff', name: 'Персонал', type: 'expense', direction: 'operational', color: '#2563eb', isEventSpecific: true },
+    { id: 'cat_rent', name: 'Аренда склада', type: 'expense', direction: 'operational', color: '#64748b', isEventSpecific: false },
   ];
 
   const dummyEvents: CateringEvent[] = [
