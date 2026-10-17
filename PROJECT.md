@@ -1,7 +1,8 @@
 # Project: Truespace — Барный кейтеринг и финансы
 
-- **Статус:** `stage_charts_and_reports_completed` (Реализованы интерактивные графики в Аналитике: Выручка/Затраты/Прибыль, Кольцо себестоимости, Матрица маржинальности, Кривая ликвидности в календаре; создана вкладка «Отчёты» с 5 формами: ДДС, ОПиУ, Юнит-экономика, Баланс и Ведомость подрядчиков с экспортом в Excel .xlsx; 583/583 тестов green, сборка Vite + TS без ошибок)
-- **Локальная версия:** `http://localhost:5173/` (бэкенд API: `http://localhost:3001/api`)
+- **Статус:** `stage_production_deployed` (Проект опубликован на сервере FirstVDS в Москве: Node.js 22 + Caddy Reverse Proxy + Автономная локальная база `/var/www/findoctor/data/truespace.json` с фоновым зеркалом Supabase + Systemd; 583/583 тестов green)
+- **Боевая версия (Production):** `http://shved4656.fvds.ru` (IP: `153.76.170.74`)
+- **Локальная версия (Dev):** `http://localhost:5173/` (бэкенд API: `http://localhost:3001/api`)
 - **GitHub репозиторий:** `https://github.com/Freez501/findoctor.git` (ветка `main`)
 - **Тесты:** 583 / 583 passed (100% green, 33 тест-сьюта)
 - **Сборка:** Typecheck & Vite Build 100% green (0 errors)

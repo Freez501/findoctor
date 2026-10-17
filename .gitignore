@@ -11,7 +11,10 @@
 *.p12
 *.pfx
 .beget-credentials*
+beget_deploy*
+id_rsa*
 secrets/
+deploy/
 
 # ============================================
 # ЛОГИ
