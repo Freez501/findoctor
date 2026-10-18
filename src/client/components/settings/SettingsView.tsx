@@ -87,6 +87,18 @@ const ACCOUNT_ICONS = [
   { id: 'zap', label: 'Молния / Быстрые', icon: Zap },
 ];
 
+const PRODUCTION_SITE_URL = 'http://shved4656.fvds.ru';
+
+function getInviteBaseUrl(): string {
+  if (typeof window === 'undefined') return PRODUCTION_SITE_URL;
+  const host = window.location.hostname;
+  // If previewing locally (localhost / 127.0.0.1 / 192.168.x.x), always generate links pointing to the live production site
+  if (!host || host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host.startsWith('192.168.')) {
+    return PRODUCTION_SITE_URL;
+  }
+  return window.location.origin;
+}
+
 export const SettingsView: React.FC = () => {
   const {
     accounts,
@@ -1218,7 +1230,7 @@ export const SettingsView: React.FC = () => {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {invitesList.map((inv) => {
-                      const fullUrl = `${window.location.origin}/?invite=${inv.token}`;
+                      const fullUrl = `${getInviteBaseUrl()}/?invite=${inv.token}`;
                       const isCopied = copiedInviteId === inv.id;
                       const roleBadge =
                         inv.role === 'owner' ? { label: 'Совладелец', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)' } :
@@ -2025,13 +2037,13 @@ export const SettingsView: React.FC = () => {
                       <input
                         type="text"
                         readOnly
-                        value={`${window.location.origin}/?invite=${generatedInvite.token}`}
+                        value={`${getInviteBaseUrl()}/?invite=${generatedInvite.token}`}
                         className="settings-text-input"
                         style={{ fontSize: '12px', fontFamily: 'monospace' }}
                       />
                       <button
                         type="button"
-                        onClick={() => copyToClipboard(`${window.location.origin}/?invite=${generatedInvite.token}`, generatedInvite.id)}
+                        onClick={() => copyToClipboard(`${getInviteBaseUrl()}/?invite=${generatedInvite.token}`, generatedInvite.id)}
                         className="btn-form-submit"
                         style={{ padding: '0 14px', whiteSpace: 'nowrap' }}
                       >
@@ -2043,7 +2055,7 @@ export const SettingsView: React.FC = () => {
                     {/* Quick Share Buttons */}
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
                       <a
-                        href={`https://t.me/share/url?url=${encodeURIComponent(`${window.location.origin}/?invite=${generatedInvite.token}`)}&text=${encodeURIComponent(`Присоединяйся к команде «${currentCompany?.name || 'Truespace'}» в TrueSpace: `)}`}
+                        href={`https://t.me/share/url?url=${encodeURIComponent(`${getInviteBaseUrl()}/?invite=${generatedInvite.token}`)}&text=${encodeURIComponent(`Присоединяйся к команде «${currentCompany?.name || 'Truespace'}» в TrueSpace: `)}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{
@@ -2066,7 +2078,7 @@ export const SettingsView: React.FC = () => {
                       </a>
 
                       <a
-                        href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`Присоединяйся к команде «${currentCompany?.name || 'Truespace'}» в TrueSpace: ${window.location.origin}/?invite=${generatedInvite.token}`)}`}
+                        href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`Присоединяйся к команде «${currentCompany?.name || 'Truespace'}» в TrueSpace: ${getInviteBaseUrl()}/?invite=${generatedInvite.token}`)}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{
@@ -2121,7 +2133,7 @@ export const SettingsView: React.FC = () => {
                         color: '#000',
                       }}>
                         <img
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`${window.location.origin}/?invite=${generatedInvite.token}`)}`}
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`${getInviteBaseUrl()}/?invite=${generatedInvite.token}`)}`}
                           alt="QR-код для входа"
                           style={{ width: '160px', height: '160px', margin: '0 auto 8px', display: 'block' }}
                         />
