@@ -132,6 +132,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('truespace_current_user', JSON.stringify(effectiveUser));
         localStorage.setItem('truespace_user_id', effectiveUser.id);
         api.setActiveUserId(effectiveUser.id);
+      } else if (!isDemo && !userRes?.user) {
+        // Server returned no user, clear stale stored auth
+        effectiveUser = null;
+        setCurrentUser(null);
+        setIsAuthenticated(false);
+        localStorage.removeItem('truespace_logged_in');
+        localStorage.removeItem('truespace_current_user');
+        localStorage.removeItem('truespace_user_id');
+        localStorage.removeItem('truespace_company_id');
+        localStorage.removeItem('truespace_current_company');
+        api.setActiveUserId('');
       }
       if (users && users.length > 0) {
         setUsersList(users);

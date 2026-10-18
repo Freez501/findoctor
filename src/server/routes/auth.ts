@@ -41,21 +41,31 @@ export function createAuthRouter(store: IFinanceStore): Router {
   // GET /api/auth/me
   router.get('/me', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const ctx = extractAuthContext(req, devSessionUserId);
+      const isProd = process.env.NODE_ENV === 'production';
+      const ctx = extractAuthContext(req, isProd ? '' : devSessionUserId);
       const headerCompanyId = (req.headers['x-company-id'] as string) || '';
 
-      const targetUserId = ctx.userId || devSessionUserId;
-      let user = await store.getUserById(targetUserId);
+      const targetUserId = ctx.userId || (isProd ? '' : devSessionUserId);
+      let user: UserProfile | null = null;
+      if (targetUserId) {
+        user = await store.getUserById(targetUserId);
+        if (!user && !isProd) {
+          user = (await store.getUsers())[0] || null;
+        }
+      }
+
       if (!user) {
-        user = (await store.getUsers())[0] || null;
+        return res.json({
+          user: null,
+          activeCompanyId: DEFAULT_COMPANY_ID,
+        });
       }
 
       let activeCompanyId = DEFAULT_COMPANY_ID;
-      if (user) {
-        const companies = await store.getCompanies();
-        const ownedIds = companies
-          .filter((comp) => user!.isSuperAdmin || comp.ownerId === user!.id)
-          .map((comp) => comp.id);
+      const companies = await store.getCompanies();
+      const ownedIds = companies
+        .filter((comp) => user.isSuperAdmin || comp.ownerId === user.id)
+        .map((comp) => comp.id);
 
         if (headerCompanyId && ownedIds.includes(headerCompanyId)) {
           activeCompanyId = headerCompanyId;
@@ -79,7 +89,6 @@ export function createAuthRouter(store: IFinanceStore): Router {
             activeCompanyId = companies[0]?.id || DEFAULT_COMPANY_ID;
           }
         }
-      }
 
       res.json({
         user,
