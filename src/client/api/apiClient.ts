@@ -19,6 +19,7 @@ import {
   Company,
   UserProfile,
   CompanyMembership,
+  CompanyInvite,
   UserRole,
   EventPaymentMilestone,
   EventBudgetItem,
@@ -661,6 +662,46 @@ export class ApiClient {
       ...options,
       method: 'POST',
       body: JSON.stringify(data),
+      priority: 'high',
+    });
+  }
+
+  public getCompanyInvites(companyId: string, options?: RequestOptions): Promise<CompanyInvite[]> {
+    return this.request<CompanyInvite[]>(`/api/companies/${companyId}/invites`, {
+      ...options,
+      method: 'GET',
+    });
+  }
+
+  public createCompanyInvite(companyId: string, data: { role: UserRole; email?: string; fullName?: string; maxUses?: number; expiresDays?: number }, options?: RequestOptions): Promise<CompanyInvite> {
+    return this.request<CompanyInvite>(`/api/companies/${companyId}/invites`, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(data),
+      priority: 'high',
+    });
+  }
+
+  public revokeCompanyInvite(companyId: string, inviteId: string, options?: RequestOptions): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(`/api/companies/${companyId}/invites/${inviteId}`, {
+      ...options,
+      method: 'DELETE',
+      priority: 'high',
+    });
+  }
+
+  public getInviteByToken(token: string, options?: RequestOptions): Promise<{ valid: boolean; error?: string; invite?: { id: string; token: string; companyId: string; companyName: string; role: UserRole; email?: string; fullName?: string; inviterName?: string; expiresAt?: string } }> {
+    return this.request<{ valid: boolean; error?: string; invite?: { id: string; token: string; companyId: string; companyName: string; role: UserRole; email?: string; fullName?: string; inviterName?: string; expiresAt?: string } }>(`/api/auth/invites/${token}`, {
+      ...options,
+      method: 'GET',
+    });
+  }
+
+  public acceptCompanyInvite(token: string, data?: { fullName?: string; email?: string; password?: string; userId?: string }, options?: RequestOptions): Promise<{ success: boolean; user: UserProfile; company: Company; membership: CompanyMembership }> {
+    return this.request<{ success: boolean; user: UserProfile; company: Company; membership: CompanyMembership }>(`/api/auth/invites/${token}/accept`, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(data || {}),
       priority: 'high',
     });
   }

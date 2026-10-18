@@ -15,6 +15,7 @@ import {
   Company,
   UserProfile,
   CompanyMembership,
+  CompanyInvite,
   UserRole,
   EventPaymentMilestone,
   EventBudgetItem,
@@ -42,6 +43,13 @@ export interface IFinanceStore {
   saveUserProfile(user: Partial<UserProfile> & { id: string; email: string }): Promise<UserProfile>;
   getCompanyMembers(companyId: string): Promise<{ membership: CompanyMembership; user?: UserProfile }[]>;
   addCompanyMember(data: { companyId: string; userId: string; role: UserRole; invitedBy?: string }): Promise<CompanyMembership>;
+
+  // Company Invites (Links & QR)
+  getCompanyInvites(companyId?: string): Promise<CompanyInvite[]>;
+  getInviteByToken(token: string): Promise<CompanyInvite | null>;
+  createCompanyInvite(invite: Partial<CompanyInvite> & { companyId: string; role: UserRole }): Promise<CompanyInvite>;
+  revokeCompanyInvite(id: string): Promise<boolean>;
+  acceptCompanyInvite(token: string, userId: string): Promise<{ company: Company; membership: CompanyMembership; invite: CompanyInvite }>;
 
   // Accounts
   getAccounts(companyId?: string): Promise<Account[]>;

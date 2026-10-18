@@ -101,6 +101,24 @@ export interface CompanyMembership {
 }
 
 /**
+ * Modern Company Invite entity for link, QR and email invitations
+ */
+export interface CompanyInvite {
+  id: string;
+  token: string;
+  companyId: string;
+  role: UserRole;
+  email?: string;
+  fullName?: string;
+  invitedBy?: string;
+  createdAt: string;
+  expiresAt?: string;
+  usedCount: number;
+  maxUses?: number; // 0 or undefined = unlimited
+  status: 'active' | 'revoked' | 'expired';
+}
+
+/**
  * Audit author metadata for tracking who created or updated an operation
  */
 export interface AuditUser {

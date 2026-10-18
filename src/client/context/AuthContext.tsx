@@ -35,6 +35,7 @@ export interface AuthContextType {
   createCompany: (name: string, slug?: string) => Promise<Company>;
   deleteCompany: (companyId: string) => Promise<void>;
   inviteMember: (email: string, role: UserRole, fullName?: string) => Promise<void>;
+  acceptInvite: (token: string, data?: { fullName?: string; email?: string; password?: string }) => Promise<void>;
   forgotPassword: (email: string) => Promise<{ success: boolean; message: string }>;
   refreshAuthData: () => Promise<void>;
 }
@@ -416,6 +417,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await refreshAuthData();
   }, [currentCompany, refreshAuthData]);
 
+  const acceptInvite = useCallback(async (token: string, data?: { fullName?: string; email?: string; password?: string }) => {
+    const res = await api.acceptCompanyInvite(token, {
+      ...data,
+      userId: currentUser?.id,
+    });
+    localStorage.setItem('truespace_logged_in', 'true');
+    localStorage.setItem('truespace_user_id', res.user.id);
+    localStorage.setItem('truespace_current_user', JSON.stringify(res.user));
+    localStorage.removeItem('truespace_demo_mode');
+    setIsDemoMode(false);
+    setIsAuthenticated(true);
+    setCurrentUser(res.user);
+    api.setActiveCompanyId(res.company.id);
+    await refreshAuthData();
+  }, [currentUser?.id, refreshAuthData]);
+
   const forgotPassword = useCallback(async (email: string) => {
     return api.forgotPassword(email);
   }, []);
@@ -453,6 +470,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createCompany,
         deleteCompany,
         inviteMember,
+        acceptInvite,
         forgotPassword,
         refreshAuthData,
       }}

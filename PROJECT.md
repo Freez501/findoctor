@@ -4,7 +4,7 @@
 - **Боевая версия (Production):** `http://shved4656.fvds.ru` (IP: `153.76.170.74`)
 - **Локальная версия (Dev):** `http://localhost:5173/` (бэкенд API: `http://localhost:3001/api`)
 - **GitHub репозиторий:** `https://github.com/Freez501/findoctor.git` (ветка `main`)
-- **Тесты:** 583 / 583 passed (100% green, 33 тест-сьюта)
+- **Тесты:** 587 / 587 passed (100% green, 34 тест-сьюта)
 - **Сборка:** Typecheck & Vite Build 100% green (0 errors)
 
 ## Architecture
@@ -78,6 +78,7 @@
 | F27 | SaaS Directory Customization | Управление счетами, соучредителями/партнёрами и статьями расходов | M5 | USER_REQUEST 21.09 |
 | F28 | Catering Events & Receivables | Учёт договоров, оплат, дебиторки и расходов по выездным барам | M5 | USER_REQUEST 21.09 |
 | F29 | Keyboard Input & Inline Category | Ввод с клавиатуры в NumericPad (0-9, Backspace, Esc) и inline-создание статей | M5 | USER_REQUEST 21.09 |
+| F30 | Modern Staff Invite Links & QR | Приглашение сотрудников по ссылке, QR-коду, Telegram/WhatsApp и онбординг-экран за 5 секунд | M5 | USER_REQUEST 18.10 |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |

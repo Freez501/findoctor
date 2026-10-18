@@ -15,6 +15,7 @@ import {
   Company,
   UserProfile,
   CompanyMembership,
+  CompanyInvite,
   UserRole,
   EventPaymentMilestone,
   EventBudgetItem,
@@ -160,6 +161,122 @@ export class InMemoryStore implements IFinanceStore {
     };
     this.state.memberships.push(newMembership);
     return clone(newMembership);
+  }
+
+  // =========================================================================
+  // COMPANY INVITES (LINKS & QR)
+  // =========================================================================
+
+  public async getCompanyInvites(companyId?: string): Promise<CompanyInvite[]> {
+    if (!this.state.invites) this.state.invites = [];
+    const now = Date.now();
+    for (const inv of this.state.invites) {
+      if (inv.expiresAt && new Date(inv.expiresAt).getTime() < now && inv.status === 'active') {
+        inv.status = 'expired';
+      }
+    }
+    const filtered = companyId
+      ? this.state.invites.filter((inv) => inv.companyId === companyId)
+      : this.state.invites;
+    return clone(filtered);
+  }
+
+  public async getInviteByToken(token: string): Promise<CompanyInvite | null> {
+    if (!this.state.invites) this.state.invites = [];
+    const inv = this.state.invites.find((i) => i.token === token);
+    if (!inv) return null;
+
+    if (inv.expiresAt && new Date(inv.expiresAt).getTime() < Date.now() && inv.status === 'active') {
+      inv.status = 'expired';
+    }
+    if (inv.maxUses && inv.usedCount >= inv.maxUses && inv.status === 'active') {
+      inv.status = 'expired';
+    }
+    return clone(inv);
+  }
+
+  public async createCompanyInvite(
+    inviteInput: Partial<CompanyInvite> & { companyId: string; role: UserRole }
+  ): Promise<CompanyInvite> {
+    if (!this.state.invites) this.state.invites = [];
+    const now = new Date().toISOString();
+    const token = `inv_${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}`;
+    const newInvite: CompanyInvite = {
+      id: inviteInput.id || `inv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      token: inviteInput.token || token,
+      companyId: inviteInput.companyId,
+      role: inviteInput.role,
+      email: inviteInput.email?.trim().toLowerCase(),
+      fullName: inviteInput.fullName?.trim(),
+      invitedBy: inviteInput.invitedBy,
+      createdAt: now,
+      expiresAt: inviteInput.expiresAt,
+      usedCount: 0,
+      maxUses: inviteInput.maxUses,
+      status: 'active',
+    };
+    this.state.invites.push(newInvite);
+    return clone(newInvite);
+  }
+
+  public async revokeCompanyInvite(id: string): Promise<boolean> {
+    if (!this.state.invites) return false;
+    const inv = this.state.invites.find((i) => i.id === id || i.token === id);
+    if (!inv) return false;
+    inv.status = 'revoked';
+    return true;
+  }
+
+  public async acceptCompanyInvite(
+    token: string,
+    userId: string
+  ): Promise<{ company: Company; membership: CompanyMembership; invite: CompanyInvite }> {
+    if (!this.state.invites) this.state.invites = [];
+    const inv = this.state.invites.find((i) => i.token === token);
+    if (!inv) {
+      throw new Error('Приглашение не найдено или ссылка недействительна');
+    }
+    if (inv.status === 'revoked') {
+      throw new Error('Это приглашение было отозвано организатором');
+    }
+    if (inv.expiresAt && new Date(inv.expiresAt).getTime() < Date.now()) {
+      inv.status = 'expired';
+      throw new Error('Срок действия этого приглашения истёк');
+    }
+    if (inv.maxUses && inv.usedCount >= inv.maxUses) {
+      inv.status = 'expired';
+      throw new Error('Лимит использований этой ссылки исчерпан');
+    }
+
+    const company = (this.state.companies || []).find((c) => c.id === inv.companyId);
+    if (!company) {
+      throw new Error('Организация по данному приглашению не найдена');
+    }
+
+    // Check if membership already exists
+    let membership = (this.state.memberships || []).find(
+      (m) => m.companyId === inv.companyId && m.userId === userId
+    );
+
+    if (!membership) {
+      membership = await this.addCompanyMember({
+        companyId: inv.companyId,
+        userId,
+        role: inv.role,
+        invitedBy: inv.invitedBy,
+      });
+    }
+
+    inv.usedCount += 1;
+    if (inv.maxUses && inv.usedCount >= inv.maxUses) {
+      inv.status = 'expired';
+    }
+
+    return {
+      company: clone(company),
+      membership: clone(membership),
+      invite: clone(inv),
+    };
   }
 
   // =========================================================================

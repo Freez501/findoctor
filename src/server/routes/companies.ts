@@ -184,5 +184,51 @@ export function createCompaniesRouter(store: IFinanceStore): Router {
     }
   });
 
+  // GET /api/companies/:id/invites
+  router.get('/:id/invites', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const invites = await store.getCompanyInvites(req.params.id);
+      res.json(invites);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/companies/:id/invites
+  router.post('/:id/invites', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { role, email, fullName, maxUses, expiresDays } = req.body;
+      const callingUserId = (req.headers['x-user-id'] as string) || '';
+
+      const expiresAt = expiresDays && Number(expiresDays) > 0
+        ? new Date(Date.now() + Number(expiresDays) * 24 * 60 * 60 * 1000).toISOString()
+        : undefined;
+
+      const invite = await store.createCompanyInvite({
+        companyId: req.params.id,
+        role: role || 'staff',
+        email: email ? String(email).trim().toLowerCase() : undefined,
+        fullName: fullName ? String(fullName).trim() : undefined,
+        invitedBy: callingUserId || undefined,
+        maxUses: maxUses ? Number(maxUses) : undefined,
+        expiresAt,
+      });
+
+      res.status(201).json(invite);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // DELETE /api/companies/:id/invites/:inviteId
+  router.delete('/:id/invites/:inviteId', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await store.revokeCompanyInvite(req.params.inviteId);
+      res.json({ success: true, message: 'Приглашение отозвано' });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   return router;
 }

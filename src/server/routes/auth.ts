@@ -8,6 +8,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { IFinanceStore } from '../storage/interfaces.js';
 import { DEFAULT_COMPANY_ID } from '../../shared/constants.js';
+import { UserProfile } from '../../shared/types.js';
 import {
   mirrorUserProfileToCloud,
   mirrorCompanyToCloud,
@@ -169,6 +170,97 @@ export function createAuthRouter(store: IFinanceStore): Router {
       });
 
       res.status(201).json({ user, companyId: targetCompanyId, role: targetRole });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/auth/invites/:token
+  router.get('/invites/:token', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const invite = await store.getInviteByToken(req.params.token);
+      if (!invite) {
+        return res.status(404).json({ valid: false, error: 'Приглашение не найдено или ссылка повреждена' });
+      }
+      if (invite.status === 'revoked') {
+        return res.status(410).json({ valid: false, error: 'Приглашение отозвано организатором' });
+      }
+      if (invite.status === 'expired' || (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now())) {
+        return res.status(410).json({ valid: false, error: 'Срок действия приглашения истёк' });
+      }
+      if (invite.maxUses && invite.usedCount >= invite.maxUses) {
+        return res.status(410).json({ valid: false, error: 'Лимит переходов по этой ссылке исчерпан' });
+      }
+
+      const company = await store.getCompanyById(invite.companyId);
+      let inviterName: string | undefined;
+      if (invite.invitedBy) {
+        const inviter = await store.getUserById(invite.invitedBy);
+        inviterName = inviter?.fullName;
+      }
+
+      res.json({
+        valid: true,
+        invite: {
+          id: invite.id,
+          token: invite.token,
+          companyId: invite.companyId,
+          companyName: company?.name || 'Кейтеринг',
+          role: invite.role,
+          email: invite.email,
+          fullName: invite.fullName,
+          inviterName,
+          expiresAt: invite.expiresAt,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/auth/invites/:token/accept
+  router.post('/invites/:token/accept', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { email, fullName, userId } = req.body;
+      let targetUser: UserProfile | null = null;
+
+      if (userId) {
+        targetUser = await store.getUserById(userId);
+      } else if (email && typeof email === 'string') {
+        const trimmedEmail = email.trim().toLowerCase();
+        const existingUsers = await store.getUsers();
+        targetUser = existingUsers.find((u) => u.email.toLowerCase() === trimmedEmail) || null;
+
+        if (!targetUser) {
+          const newId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+          targetUser = await store.saveUserProfile({
+            id: newId,
+            email: trimmedEmail,
+            fullName: fullName?.trim() || trimmedEmail.split('@')[0],
+            isSuperAdmin: false,
+            isEmailVerified: true,
+          });
+        }
+      } else {
+        const ctx = extractAuthContext(req, devSessionUserId);
+        if (ctx.userId) {
+          targetUser = await store.getUserById(ctx.userId);
+        }
+      }
+
+      if (!targetUser) {
+        return res.status(400).json({ error: 'Укажите email или войдите в систему для принятия приглашения' });
+      }
+
+      const result = await store.acceptCompanyInvite(req.params.token, targetUser.id);
+      devSessionUserId = targetUser.id;
+
+      res.json({
+        success: true,
+        user: targetUser,
+        company: result.company,
+        membership: result.membership,
+      });
     } catch (err) {
       next(err);
     }

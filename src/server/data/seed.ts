@@ -15,6 +15,7 @@ import {
   Company,
   UserProfile,
   CompanyMembership,
+  CompanyInvite,
   EventPaymentMilestone,
   EventBudgetItem,
   EventVendor,
@@ -417,6 +418,7 @@ export interface DatabaseState {
   companies?: Company[];
   users?: UserProfile[];
   memberships?: CompanyMembership[];
+  invites?: CompanyInvite[];
   accounts: Account[];
   events: CateringEvent[];
   categories: Category[];
@@ -432,6 +434,7 @@ export function createInitialDatabaseState(): DatabaseState {
     companies: getInitialCompanies(),
     users: getInitialUsers(),
     memberships: getInitialMemberships(),
+    invites: [],
     accounts: getInitialAccounts(),
     events: getInitialEvents(),
     categories: getInitialCategories(),

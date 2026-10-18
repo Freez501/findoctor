@@ -10,7 +10,7 @@
  * All edits occur inside focused modal dialogs rather than inflating cards in the grid.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Wallet,
   Users,
@@ -35,12 +35,17 @@ import {
   LucideIcon,
   UserPlus,
   AlertTriangle,
+  Link2,
+  Copy,
+  QrCode,
+  Share2,
+  Send,
 } from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { api } from '../../api/apiClient.js';
 import { formatRubles } from '../../utils/formatters.js';
-import { Account, Category, Partner, TransactionDirection, UserRole } from '../../../shared/types.js';
+import { Account, Category, Partner, TransactionDirection, UserRole, CompanyInvite } from '../../../shared/types.js';
 
 type SettingsTab = 'accounts' | 'partners' | 'categories' | 'organization';
 
@@ -101,12 +106,74 @@ export const SettingsView: React.FC = () => {
   const [orgName, setOrgName] = useState(currentCompany?.name || '');
   const [isSavingOrg, setIsSavingOrg] = useState(false);
 
-  // Invite member state
+  // Invite member state (Links, QR, Email)
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [inviteTab, setInviteTab] = useState<'link' | 'email'>('link');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteFullName, setInviteFullName] = useState('');
-  const [inviteRole, setInviteRole] = useState<UserRole>('accountant');
+  const [inviteRole, setInviteRole] = useState<UserRole>('staff');
+  const [inviteExpiresDays] = useState<number>(7);
   const [isInviting, setIsInviting] = useState(false);
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+  const [generatedInvite, setGeneratedInvite] = useState<CompanyInvite | null>(null);
+  const [invitesList, setInvitesList] = useState<CompanyInvite[]>([]);
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
+  const [showQrCode, setShowQrCode] = useState(false);
+
+  const fetchInvites = useCallback(async () => {
+    if (!currentCompany) return;
+    try {
+      const list = await api.getCompanyInvites(currentCompany.id);
+      setInvitesList(list.filter((i) => i.status === 'active'));
+    } catch {
+      // ignore
+    }
+  }, [currentCompany?.id]);
+
+  useEffect(() => {
+    if (activeTab === 'organization' && currentCompany?.id) {
+      fetchInvites();
+    }
+  }, [activeTab, currentCompany?.id, fetchInvites]);
+
+  const handleGenerateLink = async () => {
+    if (!currentCompany) return;
+    setIsGeneratingLink(true);
+    try {
+      const inv = await api.createCompanyInvite(currentCompany.id, {
+        role: inviteRole,
+        expiresDays: inviteExpiresDays > 0 ? inviteExpiresDays : undefined,
+      });
+      setGeneratedInvite(inv);
+      await fetchInvites();
+      addToast('Ссылка-приглашение создана!', 'success');
+    } catch (err: any) {
+      addToast(err.message || 'Ошибка создания ссылки', 'error');
+    } finally {
+      setIsGeneratingLink(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedInviteId(id);
+    addToast('Ссылка скопирована в буфер обмена!', 'success');
+    setTimeout(() => {
+      setCopiedInviteId(null);
+    }, 2500);
+  };
+
+  const handleRevokeInvite = async (inviteId: string) => {
+    if (!currentCompany) return;
+    try {
+      await api.revokeCompanyInvite(currentCompany.id, inviteId);
+      addToast('Ссылка-приглашение отозвана', 'success');
+      if (generatedInvite?.id === inviteId) setGeneratedInvite(null);
+      await fetchInvites();
+    } catch (err: any) {
+      addToast(err.message || 'Ошибка отзыва ссылки', 'error');
+    }
+  };
 
   // Delete company modal state
   const [isDeleteCompanyModalOpen, setIsDeleteCompanyModalOpen] = useState(false);
@@ -1133,6 +1200,134 @@ export const SettingsView: React.FC = () => {
                   })
                 )}
               </div>
+
+              {/* Active Invite Links Block */}
+              {invitesList.length > 0 && (
+                <div style={{ marginTop: '12px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Link2 size={15} style={{ color: '#d97706' }} />
+                      <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>
+                        Активные ссылки-приглашения ({invitesList.length})
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
+                      Сотрудники могут подключаться без ожидания писем
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {invitesList.map((inv) => {
+                      const fullUrl = `${window.location.origin}/?invite=${inv.token}`;
+                      const isCopied = copiedInviteId === inv.id;
+                      const roleBadge =
+                        inv.role === 'owner' ? { label: 'Совладелец', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)' } :
+                        inv.role === 'accountant' ? { label: 'Бухгалтер', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.12)' } :
+                        { label: 'Бармен / Сотрудник', color: '#10b981', bg: 'rgba(16, 185, 129, 0.12)' };
+
+                      return (
+                        <div
+                          key={inv.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 14px',
+                            borderRadius: '8px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                            border: '1px solid var(--border)',
+                            gap: '12px',
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              backgroundColor: roleBadge.bg,
+                              color: roleBadge.color,
+                            }}>
+                              {roleBadge.label}
+                            </span>
+                            <span style={{ fontSize: '12px', color: 'var(--foreground)', fontFamily: 'monospace' }}>
+                              .../?invite={inv.token.substring(0, 10)}...
+                            </span>
+                            <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
+                              • использовано: {inv.usedCount}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(fullUrl, inv.id)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '5px 10px',
+                                borderRadius: '6px',
+                                border: '1px solid var(--border)',
+                                backgroundColor: isCopied ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                                color: isCopied ? '#10b981' : 'var(--foreground)',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {isCopied ? <Check size={12} /> : <Copy size={12} />}
+                              <span>{isCopied ? 'Скопировано!' : 'Скопировать'}</span>
+                            </button>
+
+                            <a
+                              href={`https://t.me/share/url?url=${encodeURIComponent(fullUrl)}&text=${encodeURIComponent(`Приглашаю в команду кейтеринга «${currentCompany?.name || 'Truespace'}» в TrueSpace: `)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Отправить в Telegram"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '6px',
+                                backgroundColor: 'rgba(0, 136, 204, 0.15)',
+                                color: '#0088cc',
+                                border: '1px solid rgba(0, 136, 204, 0.3)',
+                                textDecoration: 'none',
+                              }}
+                            >
+                              <Send size={13} />
+                            </a>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRevokeInvite(inv.id)}
+                              title="Отозвать ссылку"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '6px',
+                                backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                                color: '#ef4444',
+                                border: '1px solid rgba(239, 68, 68, 0.2)',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 4. Danger Zone: Delete Organization */}
@@ -1680,126 +1875,337 @@ export const SettingsView: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleInviteMember} className="settings-modal-form">
-              <div className="settings-input-group">
-                <label className="settings-input-label">Email сотрудника</label>
-                <input
-                  type="email"
-                  required
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  className="settings-text-input"
-                  placeholder="colleague@example.com"
-                  autoFocus
-                />
+            <div style={{ padding: '0 24px', marginBottom: '16px' }}>
+              <div style={{
+                display: 'flex',
+                gap: '6px',
+                backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                padding: '4px',
+                borderRadius: '8px',
+                border: '1px solid var(--border)',
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setInviteTab('link')}
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    backgroundColor: inviteTab === 'link' ? 'var(--primary, #3b82f6)' : 'transparent',
+                    color: inviteTab === 'link' ? '#fff' : 'var(--muted-foreground)',
+                  }}
+                >
+                  <Link2 size={14} />
+                  <span>Ссылка и QR-код</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInviteTab('email')}
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    backgroundColor: inviteTab === 'email' ? 'var(--primary, #3b82f6)' : 'transparent',
+                    color: inviteTab === 'email' ? '#fff' : 'var(--muted-foreground)',
+                  }}
+                >
+                  <Send size={14} />
+                  <span>По Email</span>
+                </button>
               </div>
+            </div>
 
-              <div className="settings-input-group">
-                <label className="settings-input-label">Имя и фамилия</label>
-                <input
-                  type="text"
-                  value={inviteFullName}
-                  onChange={(e) => setInviteFullName(e.target.value)}
-                  className="settings-text-input"
-                  placeholder="например: Евгений Петров"
-                />
-              </div>
+            {inviteTab === 'link' ? (
+              <div className="settings-modal-form" style={{ paddingTop: 0 }}>
+                {/* Role selection for Link */}
+                <div className="settings-input-group">
+                  <label className="settings-input-label">Роль для приглашённого по ссылке</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div
+                      onClick={() => setInviteRole('staff')}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: `1.5px solid ${inviteRole === 'staff' ? '#10b981' : 'var(--border)'}`,
+                        backgroundColor: inviteRole === 'staff' ? 'rgba(16, 185, 129, 0.08)' : 'transparent',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+                        <span style={{ fontWeight: 600, fontSize: '13px', color: inviteRole === 'staff' ? '#10b981' : 'var(--foreground)' }}>
+                          Сотрудник / Бармен на выезде
+                        </span>
+                        <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.12)' }}>
+                          Популярно
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
+                        Быстрый ввод чеков, расходов и чаевых со смартфона без доступа к остаткам счетов и марже.
+                      </div>
+                    </div>
 
-              <div className="settings-input-group">
-                <label className="settings-input-label">Роль и уровень доступа</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {/* Option 1: Accountant */}
-                  <div
-                    onClick={() => setInviteRole('accountant')}
-                    style={{
-                      padding: '12px 14px',
-                      borderRadius: '8px',
-                      border: `1.5px solid ${inviteRole === 'accountant' ? '#3b82f6' : 'var(--border)'}`,
-                      backgroundColor: inviteRole === 'accountant' ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span style={{ fontWeight: 600, fontSize: '13px', color: inviteRole === 'accountant' ? '#3b82f6' : 'var(--foreground)' }}>
-                        Бухгалтер / Финменеджер
-                      </span>
-                      <span style={{ fontSize: '11px', color: '#3b82f6', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(59, 130, 246, 0.12)' }}>
-                        Рекомендуется
-                      </span>
+                    <div
+                      onClick={() => setInviteRole('accountant')}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: `1.5px solid ${inviteRole === 'accountant' ? '#3b82f6' : 'var(--border)'}`,
+                        backgroundColor: inviteRole === 'accountant' ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+                        <span style={{ fontWeight: 600, fontSize: '13px', color: inviteRole === 'accountant' ? '#3b82f6' : 'var(--foreground)' }}>
+                          Бухгалтер / Финменеджер
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
+                        Просмотр всех счетов, отчётов, внесение и проверка операций.
+                      </div>
                     </div>
-                    <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', lineHeight: 1.4 }}>
-                      Просмотр всех счетов, отчётов, внесение и редактирование операций. Запрет на удаление операций.
-                    </div>
-                  </div>
 
-                  {/* Option 2: Staff */}
-                  <div
-                    onClick={() => setInviteRole('staff')}
-                    style={{
-                      padding: '12px 14px',
-                      borderRadius: '8px',
-                      border: `1.5px solid ${inviteRole === 'staff' ? '#10b981' : 'var(--border)'}`,
-                      backgroundColor: inviteRole === 'staff' ? 'rgba(16, 185, 129, 0.08)' : 'transparent',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span style={{ fontWeight: 600, fontSize: '13px', color: inviteRole === 'staff' ? '#10b981' : 'var(--foreground)' }}>
-                        Сотрудник / Бармен на выезде
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', lineHeight: 1.4 }}>
-                      Только быстрый ввод операций (расходы, закупки, чаевые). Без доступа к остаткам счетов, сейфу и маржинальности.
-                    </div>
-                  </div>
-
-                  {/* Option 3: Owner */}
-                  <div
-                    onClick={() => setInviteRole('owner')}
-                    style={{
-                      padding: '12px 14px',
-                      borderRadius: '8px',
-                      border: `1.5px solid ${inviteRole === 'owner' ? '#f59e0b' : 'var(--border)'}`,
-                      backgroundColor: inviteRole === 'owner' ? 'rgba(245, 158, 11, 0.08)' : 'transparent',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span style={{ fontWeight: 600, fontSize: '13px', color: inviteRole === 'owner' ? '#f59e0b' : 'var(--foreground)' }}>
-                        Совладелец / Главный финдиректор
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', lineHeight: 1.4 }}>
-                      Полный доступ ко всей системе, управление организацией, командой и право безвозвратного удаления операций.
+                    <div
+                      onClick={() => setInviteRole('owner')}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: `1.5px solid ${inviteRole === 'owner' ? '#f59e0b' : 'var(--border)'}`,
+                        backgroundColor: inviteRole === 'owner' ? 'rgba(245, 158, 11, 0.08)' : 'transparent',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+                        <span style={{ fontWeight: 600, fontSize: '13px', color: inviteRole === 'owner' ? '#f59e0b' : 'var(--foreground)' }}>
+                          Совладелец / Главный финдиректор
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
+                        Полный доступ ко всей системе, управление компанией и дивидендами.
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="settings-modal-footer">
-                <div />
-                <div className="settings-modal-footer-right">
+                {/* Generated Link Display */}
+                {generatedInvite ? (
+                  <div style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '10px',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Check size={14} /> Ссылка готова для отправки:
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        type="text"
+                        readOnly
+                        value={`${window.location.origin}/?invite=${generatedInvite.token}`}
+                        className="settings-text-input"
+                        style={{ fontSize: '12px', fontFamily: 'monospace' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(`${window.location.origin}/?invite=${generatedInvite.token}`, generatedInvite.id)}
+                        className="btn-form-submit"
+                        style={{ padding: '0 14px', whiteSpace: 'nowrap' }}
+                      >
+                        {copiedInviteId === generatedInvite.id ? <Check size={14} /> : <Copy size={14} />}
+                        <span>{copiedInviteId === generatedInvite.id ? 'Скопировано!' : 'Копировать'}</span>
+                      </button>
+                    </div>
+
+                    {/* Quick Share Buttons */}
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                      <a
+                        href={`https://t.me/share/url?url=${encodeURIComponent(`${window.location.origin}/?invite=${generatedInvite.token}`)}&text=${encodeURIComponent(`Присоединяйся к команде «${currentCompany?.name || 'Truespace'}» в TrueSpace: `)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          flex: 1,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          backgroundColor: '#0088cc',
+                          color: '#fff',
+                          textDecoration: 'none',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                        }}
+                      >
+                        <Send size={14} />
+                        <span>В Telegram</span>
+                      </a>
+
+                      <a
+                        href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`Присоединяйся к команде «${currentCompany?.name || 'Truespace'}» в TrueSpace: ${window.location.origin}/?invite=${generatedInvite.token}`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          flex: 1,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          backgroundColor: '#25d366',
+                          color: '#fff',
+                          textDecoration: 'none',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                        }}
+                      >
+                        <Share2 size={14} />
+                        <span>В WhatsApp</span>
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowQrCode(!showQrCode)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border)',
+                          backgroundColor: showQrCode ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                          color: showQrCode ? '#f59e0b' : 'var(--foreground)',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <QrCode size={14} />
+                        <span>{showQrCode ? 'Скрыть QR' : 'QR-код'}</span>
+                      </button>
+                    </div>
+
+                    {/* QR Code Card */}
+                    {showQrCode && (
+                      <div style={{
+                        marginTop: '8px',
+                        textAlign: 'center',
+                        padding: '16px',
+                        borderRadius: '8px',
+                        backgroundColor: '#fff',
+                        color: '#000',
+                      }}>
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`${window.location.origin}/?invite=${generatedInvite.token}`)}`}
+                          alt="QR-код для входа"
+                          style={{ width: '160px', height: '160px', margin: '0 auto 8px', display: 'block' }}
+                        />
+                        <div style={{ fontSize: '11px', color: '#666', fontWeight: 500 }}>
+                          Бармен наводит камеру смартфона прямо на площадке и мгновенно входит в команду!
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
                   <button
                     type="button"
-                    onClick={() => setIsInviteModalOpen(false)}
-                    className="btn-form-cancel"
-                  >
-                    Отмена
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isInviting || !inviteEmail.trim()}
+                    disabled={isGeneratingLink}
+                    onClick={handleGenerateLink}
                     className="btn-form-submit"
+                    style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
                   >
-                    {isInviting ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
-                    <span>{isInviting ? 'Отправка...' : 'Пригласить'}</span>
+                    {isGeneratingLink ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />}
+                    <span>{isGeneratingLink ? 'Генерация ссылки...' : 'Создать ссылку-приглашение'}</span>
                   </button>
+                )}
+
+                <div className="settings-modal-footer">
+                  <div />
+                  <div className="settings-modal-footer-right">
+                    <button
+                      type="button"
+                      onClick={() => setIsInviteModalOpen(false)}
+                      className="btn-form-cancel"
+                    >
+                      Закрыть
+                    </button>
+                  </div>
                 </div>
               </div>
-            </form>
+            ) : (
+              /* Tab 2: Classic Email Invite */
+              <form onSubmit={handleInviteMember} className="settings-modal-form" style={{ paddingTop: 0 }}>
+                <div className="settings-input-group">
+                  <label className="settings-input-label">Email сотрудника</label>
+                  <input
+                    type="email"
+                    required
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    className="settings-text-input"
+                    placeholder="colleague@example.com"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="settings-input-group">
+                  <label className="settings-input-label">Имя и фамилия (опционально)</label>
+                  <input
+                    type="text"
+                    value={inviteFullName}
+                    onChange={(e) => setInviteFullName(e.target.value)}
+                    className="settings-text-input"
+                    placeholder="например: Евгений Петров"
+                  />
+                </div>
+
+                <div className="settings-modal-footer">
+                  <div />
+                  <div className="settings-modal-footer-right">
+                    <button
+                      type="button"
+                      onClick={() => setIsInviteModalOpen(false)}
+                      className="btn-form-cancel"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isInviting || !inviteEmail.trim()}
+                      className="btn-form-submit"
+                    >
+                      {isInviting ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+                      <span>{isInviting ? 'Отправка...' : 'Отправить на почту'}</span>
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

@@ -14,6 +14,7 @@ import {
   Company,
   UserProfile,
   CompanyMembership,
+  CompanyInvite,
   UserRole,
   EventPaymentMilestone,
   EventBudgetItem,
@@ -30,6 +31,7 @@ export class SupabaseStore implements IFinanceStore {
   private fallbackMilestones: EventPaymentMilestone[] = [];
   private fallbackBudgetItems: EventBudgetItem[] = [];
   private fallbackVendors: EventVendor[] = [];
+  private fallbackInvites: CompanyInvite[] = [];
 
   private isResilientFallbackNeeded(error: any): boolean {
     if (!error) return false;
@@ -331,6 +333,151 @@ export class SupabaseStore implements IFinanceStore {
       invitedBy: r.invited_by || undefined,
       createdAt: r.created_at || now,
     };
+  }
+
+  // =========================================================================
+  // COMPANY INVITES (LINKS & QR)
+  // =========================================================================
+
+  public async getCompanyInvites(companyId?: string): Promise<CompanyInvite[]> {
+    try {
+      let query = this.client.from('company_invites').select('*');
+      if (companyId) query = query.eq('company_id', companyId);
+      const { data, error } = await query;
+      if (error && this.isResilientFallbackNeeded(error)) {
+        return this.fallbackInvites.filter((i) => !companyId || i.companyId === companyId);
+      }
+      if (error) throw error;
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        token: row.token,
+        companyId: row.company_id,
+        role: row.role,
+        email: row.email,
+        fullName: row.full_name,
+        invitedBy: row.invited_by,
+        createdAt: row.created_at,
+        expiresAt: row.expires_at,
+        usedCount: Number(row.used_count) || 0,
+        maxUses: row.max_uses ? Number(row.max_uses) : undefined,
+        status: row.status || 'active',
+      }));
+    } catch {
+      return this.fallbackInvites.filter((i) => !companyId || i.companyId === companyId);
+    }
+  }
+
+  public async getInviteByToken(token: string): Promise<CompanyInvite | null> {
+    try {
+      const { data, error } = await this.client.from('company_invites').select('*').eq('token', token).maybeSingle();
+      if (error && this.isResilientFallbackNeeded(error)) {
+        return this.fallbackInvites.find((i) => i.token === token) || null;
+      }
+      if (error || !data) {
+        return this.fallbackInvites.find((i) => i.token === token) || null;
+      }
+      return {
+        id: data.id,
+        token: data.token,
+        companyId: data.company_id,
+        role: data.role,
+        email: data.email,
+        fullName: data.full_name,
+        invitedBy: data.invited_by,
+        createdAt: data.created_at,
+        expiresAt: data.expires_at,
+        usedCount: Number(data.used_count) || 0,
+        maxUses: data.max_uses ? Number(data.max_uses) : undefined,
+        status: data.status || 'active',
+      };
+    } catch {
+      return this.fallbackInvites.find((i) => i.token === token) || null;
+    }
+  }
+
+  public async createCompanyInvite(inviteInput: Partial<CompanyInvite> & { companyId: string; role: UserRole }): Promise<CompanyInvite> {
+    const token = `inv_${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}`;
+    const invite: CompanyInvite = {
+      id: inviteInput.id || `inv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      token: inviteInput.token || token,
+      companyId: inviteInput.companyId,
+      role: inviteInput.role,
+      email: inviteInput.email?.trim().toLowerCase(),
+      fullName: inviteInput.fullName?.trim(),
+      invitedBy: inviteInput.invitedBy,
+      createdAt: new Date().toISOString(),
+      expiresAt: inviteInput.expiresAt,
+      usedCount: 0,
+      maxUses: inviteInput.maxUses,
+      status: 'active',
+    };
+    try {
+      const { error } = await this.client.from('company_invites').insert({
+        id: invite.id,
+        token: invite.token,
+        company_id: invite.companyId,
+        role: invite.role,
+        email: invite.email,
+        full_name: invite.fullName,
+        invited_by: invite.invitedBy,
+        created_at: invite.createdAt,
+        expires_at: invite.expiresAt,
+        used_count: invite.usedCount,
+        max_uses: invite.maxUses,
+        status: invite.status,
+      });
+      if (error) {
+        this.fallbackInvites.push(invite);
+      }
+    } catch {
+      this.fallbackInvites.push(invite);
+    }
+    return invite;
+  }
+
+  public async revokeCompanyInvite(id: string): Promise<boolean> {
+    try {
+      await this.client.from('company_invites').update({ status: 'revoked' }).or(`id.eq.${id},token.eq.${id}`);
+    } catch {}
+    const local = this.fallbackInvites.find((i) => i.id === id || i.token === id);
+    if (local) local.status = 'revoked';
+    return true;
+  }
+
+  public async acceptCompanyInvite(token: string, userId: string): Promise<{ company: Company; membership: CompanyMembership; invite: CompanyInvite }> {
+    const invite = await this.getInviteByToken(token);
+    if (!invite) throw new Error('Приглашение не найдено или ссылка недействительна');
+    if (invite.status === 'revoked') throw new Error('Это приглашение было отозвано организатором');
+    if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now()) throw new Error('Срок действия этого приглашения истёк');
+    if (invite.maxUses && invite.usedCount >= invite.maxUses) throw new Error('Лимит использований этой ссылки исчерпан');
+
+    const company = await this.getCompanyById(invite.companyId);
+    if (!company) throw new Error('Организация не найдена');
+
+    const members = await this.getCompanyMembers(invite.companyId);
+    let membership = members.find((m) => m.membership.userId === userId)?.membership;
+    if (!membership) {
+      membership = await this.addCompanyMember({
+        companyId: invite.companyId,
+        userId,
+        role: invite.role,
+        invitedBy: invite.invitedBy,
+      });
+    }
+
+    invite.usedCount += 1;
+    if (invite.maxUses && invite.usedCount >= invite.maxUses) {
+      invite.status = 'expired';
+    }
+
+    try {
+      await this.client.from('company_invites').update({
+        used_count: invite.usedCount,
+        status: invite.status,
+      }).eq('id', invite.id);
+    } catch {}
+
+    return { company, membership, invite };
   }
 
   // =========================================================================

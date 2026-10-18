@@ -16,6 +16,7 @@ import {
   Company,
   UserProfile,
   CompanyMembership,
+  CompanyInvite,
   UserRole,
   EventPaymentMilestone,
   EventBudgetItem,
@@ -55,6 +56,7 @@ export class JsonFileStore extends InMemoryStore implements IFinanceStore {
             if (!Array.isArray(parsed.companies)) parsed.companies = seed.companies;
             if (!Array.isArray(parsed.users)) parsed.users = seed.users;
             if (!Array.isArray(parsed.memberships)) parsed.memberships = seed.memberships;
+            if (!Array.isArray(parsed.invites)) parsed.invites = [];
             if (!Array.isArray(parsed.milestones)) parsed.milestones = seed.milestones;
             if (!Array.isArray(parsed.budgetItems)) parsed.budgetItems = seed.budgetItems;
             if (!Array.isArray(parsed.vendors)) parsed.vendors = seed.vendors;
@@ -136,6 +138,24 @@ export class JsonFileStore extends InMemoryStore implements IFinanceStore {
 
   public override async addCompanyMember(data: { companyId: string; userId: string; role: UserRole; invitedBy?: string }): Promise<CompanyMembership> {
     const result = await super.addCompanyMember(data);
+    await this.persist();
+    return result;
+  }
+
+  public override async createCompanyInvite(inviteInput: Partial<CompanyInvite> & { companyId: string; role: UserRole }): Promise<CompanyInvite> {
+    const result = await super.createCompanyInvite(inviteInput);
+    await this.persist();
+    return result;
+  }
+
+  public override async revokeCompanyInvite(id: string): Promise<boolean> {
+    const result = await super.revokeCompanyInvite(id);
+    if (result) await this.persist();
+    return result;
+  }
+
+  public override async acceptCompanyInvite(token: string, userId: string): Promise<{ company: Company; membership: CompanyMembership; invite: CompanyInvite }> {
+    const result = await super.acceptCompanyInvite(token, userId);
     await this.persist();
     return result;
   }
