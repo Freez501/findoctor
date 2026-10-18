@@ -1,6 +1,6 @@
 # Project: Truespace — Барный кейтеринг и финансы
 
-- **Статус:** `stage_production_deployed` (Проект опубликован на сервере FirstVDS в Москве: Git-репозиторий синхронизирован локально, на GitHub и на сервере; сайт зарегистрирован в панели ISPmanager; Node.js 22 + Nginx Reverse Proxy; Автономная локальная база данных в РФ `/var/www/findoctor/data/truespace.json` + MySQL `findoctor` в ISPmanager с визуальным доступом в phpMyAdmin по 152-ФЗ; 587/587 тестов green)
+- **Статус:** `stage_production_deployed` (Проект опубликован на сервере FirstVDS в Москве: полный репозиторий в папке сайта ISPmanager, база MySQL `findoctor` связана с сайтом, прямой вход в веб-интерфейс phpMyAdmin работает без ошибок, Caddy HTTPS настроен, Node.js сервис активен; 587/587 тестов green)
 - **Боевая версия (Production):** `http://shved4656.fvds.ru` (IP: `153.76.170.74`)
 - **Локальная версия (Dev):** `http://localhost:5173/` (бэкенд API: `http://localhost:3001/api`)
 - **GitHub репозиторий:** `https://github.com/Freez501/findoctor.git` (ветка `main`, CI/CD готов)
