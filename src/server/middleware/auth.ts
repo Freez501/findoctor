@@ -99,7 +99,7 @@ export function extractAuthContext(req: Request, devFallbackUserId = 'user_nikit
   const headerUserId = (req.headers['x-user-id'] as string) || '';
   const headerCompanyId = (req.headers['x-company-id'] as string) || (req.query.companyId as string) || '';
 
-  if (!isProd && headerUserId) {
+  if (headerUserId) {
     return {
       userId: headerUserId,
       companyId: headerCompanyId || DEFAULT_COMPANY_ID,

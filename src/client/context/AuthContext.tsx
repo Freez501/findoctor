@@ -132,8 +132,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('truespace_current_user', JSON.stringify(effectiveUser));
         localStorage.setItem('truespace_user_id', effectiveUser.id);
         api.setActiveUserId(effectiveUser.id);
-      } else if (!isDemo && !userRes?.user) {
-        // Server returned no user, clear stale stored auth
+      } else if (!isDemo && !userRes?.user && !savedUserId) {
         effectiveUser = null;
         setCurrentUser(null);
         setIsAuthenticated(false);
@@ -224,6 +223,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = useCallback(async (email: string, password?: string) => {
     const res = await api.login({ email, password });
     if (res.user) {
+      if (res.token) {
+        api.setAuthToken(res.token);
+      }
       setCurrentUser(res.user);
       setIsAuthenticated(true);
       setIsDemoMode(false);
@@ -246,6 +248,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register = useCallback(async (email: string, password?: string, fullName?: string, companyName?: string, code?: string) => {
     const res = await api.register({ email, password, fullName, companyName, code });
     if (res.user) {
+      if (res.token) {
+        api.setAuthToken(res.token);
+      }
       setCurrentUser(res.user);
       setIsAuthenticated(true);
       setIsDemoMode(false);
@@ -291,6 +296,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = useCallback(async () => {
     await api.logout().catch(() => {});
+    api.setAuthToken('');
+    localStorage.removeItem('truespace_token');
     localStorage.setItem('truespace_logged_in', 'false');
     localStorage.removeItem('truespace_demo_mode');
     localStorage.removeItem('truespace_current_user');

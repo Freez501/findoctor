@@ -83,6 +83,22 @@ export class ApiClient {
     }
   }
 
+  public authToken: string =
+    typeof window !== 'undefined'
+      ? localStorage.getItem('truespace_token') || ''
+      : '';
+
+  public setAuthToken(token: string): void {
+    this.authToken = token;
+    if (typeof window !== 'undefined') {
+      if (token) {
+        localStorage.setItem('truespace_token', token);
+      } else {
+        localStorage.removeItem('truespace_token');
+      }
+    }
+  }
+
   public setActiveUserId(id: string): void {
     this.activeUserId = id;
     if (typeof window !== 'undefined') {
@@ -117,6 +133,7 @@ export class ApiClient {
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
+          ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
           ...(this.activeCompanyId ? { 'x-company-id': this.activeCompanyId } : {}),
           ...(this.activeUserId ? { 'x-user-id': this.activeUserId } : {}),
           ...(fetchOptions.headers || {}),
