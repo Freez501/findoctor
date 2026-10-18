@@ -166,8 +166,38 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string, id: string) => {
+    let copied = false;
+
+    // 1. Modern secure clipboard API
+    if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      try {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+    }
+
+    // 2. HTTP non-secure context fallback (document.execCommand)
+    if (!copied && typeof document !== 'undefined') {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        textarea.setAttribute('readonly', '');
+        document.body.appendChild(textarea);
+        textarea.select();
+        textarea.setSelectionRange(0, 99999);
+        copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+      } catch {
+        // ignore
+      }
+    }
+
     setCopiedInviteId(id);
     addToast('Ссылка скопирована в буфер обмена!', 'success');
     setTimeout(() => {
@@ -2038,8 +2068,10 @@ export const SettingsView: React.FC = () => {
                         type="text"
                         readOnly
                         value={`${getInviteBaseUrl()}/?invite=${generatedInvite.token}`}
+                        onClick={(e) => (e.target as HTMLInputElement).select()}
+                        title="Нажмите, чтобы выделить всё"
                         className="settings-text-input"
-                        style={{ fontSize: '12px', fontFamily: 'monospace' }}
+                        style={{ fontSize: '12px', fontFamily: 'monospace', cursor: 'pointer' }}
                       />
                       <button
                         type="button"
