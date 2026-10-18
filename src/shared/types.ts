@@ -84,6 +84,8 @@ export interface UserProfile {
   avatarUrl?: string;
   isSuperAdmin: boolean;
   isEmailVerified?: boolean;
+  companyId?: string;
+  companyName?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -94,7 +96,10 @@ export interface UserProfile {
 export interface CompanyMembership {
   id: string;
   companyId: string;
+  companyName?: string;
   userId: string;
+  userEmail?: string;
+  userName?: string;
   role: UserRole;
   invitedBy?: string;
   createdAt: string;
@@ -134,6 +139,8 @@ export interface Partner {
   id: string;
   /** Multi-tenant company identifier */
   companyId?: string;
+  /** Human-readable company name for filtering and displays */
+  companyName?: string;
   /** Partner display name */
   name: string;
   /** Role or title in the business (e.g. Соучредитель, Инвестор, Шеф-бармен) */
@@ -158,6 +165,8 @@ export interface Account {
   id: string;
   /** Multi-tenant company identifier */
   companyId?: string;
+  /** Human-readable company name for filtering and displays */
+  companyName?: string;
   /** Human-readable display name (e.g. "Нал 1 (Касса на площадке)") */
   name: string;
   /** Account category type */
@@ -194,6 +203,8 @@ export interface CateringEvent {
   id: string;
   /** Multi-tenant company identifier */
   companyId?: string;
+  /** Human-readable company name for filtering and displays */
+  companyName?: string;
   /** Event title / name */
   title: string;
   /** Client / customer name */
@@ -230,6 +241,8 @@ export interface Category {
   id: string;
   /** Multi-tenant company identifier */
   companyId?: string;
+  /** Human-readable company name for filtering and displays */
+  companyName?: string;
   /** Category display name in Russian */
   name: string;
   /** Permitted transaction type */
@@ -260,6 +273,8 @@ export interface Transaction {
   id: string;
   /** Multi-tenant company identifier */
   companyId?: string;
+  /** Human-readable company name for filtering and displays */
+  companyName?: string;
   /** Operation type: income, expense, or transfer */
   type: TransactionType;
   /** Operational direction */
@@ -457,7 +472,9 @@ export type MilestoneStatus = 'pending' | 'received' | 'overdue';
 export interface EventPaymentMilestone {
   id: string;
   companyId?: string;
+  companyName?: string;
   eventId: string;
+  eventTitle?: string;
   title: string;
   dueDate: string; // YYYY-MM-DD
   amount: number;
@@ -475,8 +492,11 @@ export interface EventPaymentMilestone {
 export interface EventBudgetItem {
   id: string;
   companyId?: string;
+  companyName?: string;
   eventId: string;
+  eventTitle?: string;
   categoryId: string;
+  categoryName?: string;
   plannedAmount: number;
   notes?: string;
   createdAt?: string;
@@ -491,7 +511,9 @@ export type VendorPayoutStatus = 'pending' | 'partial' | 'paid';
 export interface EventVendor {
   id: string;
   companyId?: string;
+  companyName?: string;
   eventId: string;
+  eventTitle?: string;
   name: string;
   role: string;
   phone?: string;
