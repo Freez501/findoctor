@@ -359,12 +359,37 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
 
             <div>
               <label className="modal-label">Мероприятие</label>
+              {Boolean(eventId && eventId !== 'general' && !events.some((ev) => ev.id === eventId)) && (
+                <div style={{
+                  padding: '6px 10px',
+                  backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: '#b45309',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  marginBottom: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}>
+                  ⚠️ Связанное мероприятие удалено. Выберите актуальный проект или переведите в «Общие расходы бара».
+                </div>
+              )}
               <select
                 value={eventId}
                 onChange={(e) => setEventId(e.target.value)}
                 className="modal-select"
+                style={{
+                  borderColor: Boolean(eventId && eventId !== 'general' && !events.some((ev) => ev.id === eventId)) ? '#f59e0b' : undefined,
+                }}
               >
-                <option value="general">Общие расходы бара</option>
+                <option value="general">Общие расходы бара (без ивента)</option>
+                {Boolean(eventId && eventId !== 'general' && !events.some((ev) => ev.id === eventId)) && (
+                  <option value={eventId} disabled>
+                    ⚠️ Удалённое мероприятие (требуется переназначить)
+                  </option>
+                )}
                 {events.map((ev) => (
                   <option key={ev.id} value={ev.id}>
                     {ev.title}

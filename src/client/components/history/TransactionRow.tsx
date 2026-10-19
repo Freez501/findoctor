@@ -36,9 +36,10 @@ export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelect
     return foundUser ? foundUser.fullName || foundUser.email : raw;
   })();
 
+  const isEventDeleted = Boolean(transaction.eventId && !eventMap.has(transaction.eventId));
   const categoryName = catMap.get(transaction.categoryId) || (transaction.categoryId === 'uncategorized' ? 'Без статьи' : 'Операция');
-  const eventTitle = transaction.eventId ? eventMap.get(transaction.eventId) || 'Мероприятие' : 'Общие расходы';
-  const needsReview = Boolean(transaction.needsReview || transaction.categoryId === 'uncategorized');
+  const eventTitle = transaction.eventId ? eventMap.get(transaction.eventId) || 'Ивент удалён' : 'Общие расходы';
+  const needsReview = Boolean(transaction.needsReview || transaction.categoryId === 'uncategorized' || isEventDeleted);
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -64,10 +65,11 @@ export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelect
       onClick={() => onClick?.(transaction)}
       style={{
         cursor: 'pointer',
-        backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.08)' : undefined,
-        borderColor: isSelected ? 'rgba(59, 130, 246, 0.4)' : undefined,
+        backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.08)' : isEventDeleted ? 'rgba(245, 158, 11, 0.04)' : undefined,
+        borderColor: isSelected ? 'rgba(59, 130, 246, 0.4)' : isEventDeleted ? 'rgba(245, 158, 11, 0.4)' : undefined,
+        borderLeft: isEventDeleted ? '4px solid #f59e0b' : undefined,
       }}
-      title="Нажмите, чтобы отредактировать статью, мероприятие или сумму"
+      title={isEventDeleted ? '⚠️ Связанное мероприятие удалено! Нажмите, чтобы переназначить статью или перевести в общие расходы' : 'Нажмите, чтобы отредактировать статью, мероприятие или сумму'}
     >
       {/* Left Icon & Meta */}
       <div className="compact-tx-left">
@@ -109,12 +111,28 @@ export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelect
         <div className="compact-tx-content">
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             <span className="compact-tx-category">{categoryName}</span>
-            {needsReview && (
+            {isEventDeleted ? (
+              <span
+                className="compact-tx-review-badge"
+                style={{
+                  backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                  color: '#b45309',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+                title="Мероприятие было удалено. Нажмите для переназначения статьи."
+              >
+                ⚠️ Ивент удалён
+              </span>
+            ) : needsReview ? (
               <span className="compact-tx-review-badge">
                 ⚠️ Не разобрано
               </span>
-            )}
-            {transaction.eventId && (
+            ) : null}
+            {transaction.eventId && !isEventDeleted && (
               <span className="compact-tx-event-tag">
                 {eventTitle}
               </span>

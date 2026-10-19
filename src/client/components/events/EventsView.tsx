@@ -55,12 +55,13 @@ const INITIAL_FORM: EventFormState = {
 };
 
 export const EventsView: React.FC = () => {
-  const { events, transactions, createEvent, updateEvent, deleteEvent } = useFinance();
+  const { events, transactions, createEvent, updateEvent, deleteEvent, deleteBatchTransactions } = useFinance();
   const [isFormOpen, setIsFormOpen] = useState<boolean>(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [formData, setFormData] = useState<EventFormState>(INITIAL_FORM);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [eventToDelete, setEventToDelete] = useState<{ event: CateringEvent; linkedTxs: Transaction[] } | null>(null);
+  const [isDeletingEvent, setIsDeletingEvent] = useState<boolean>(false);
   const [selectedDossierEvent, setSelectedDossierEvent] = useState<CateringEvent | null>(null);
 
   // Compute metrics for each event from active transactions
@@ -176,9 +177,24 @@ export const EventsView: React.FC = () => {
     handleCloseForm();
   };
 
-  const handleDelete = async (id: string) => {
-    await deleteEvent(id);
-    setDeletingId(null);
+  const handleDeleteEventOnly = async () => {
+    if (!eventToDelete) return;
+    setIsDeletingEvent(true);
+    await deleteEvent(eventToDelete.event.id);
+    setIsDeletingEvent(false);
+    setEventToDelete(null);
+  };
+
+  const handleDeleteEventAndTransactions = async () => {
+    if (!eventToDelete) return;
+    setIsDeletingEvent(true);
+    const txIds = eventToDelete.linkedTxs.map((t) => t.id);
+    if (txIds.length > 0) {
+      await deleteBatchTransactions(txIds);
+    }
+    await deleteEvent(eventToDelete.event.id);
+    setIsDeletingEvent(false);
+    setEventToDelete(null);
   };
 
   const getStatusBadge = (status: EventStatus) => {
@@ -447,45 +463,19 @@ export const EventsView: React.FC = () => {
                   >
                     <Edit2 size={15} />
                   </button>
-                  {deletingId === ev.id ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(ev.id);
-                        }}
-                        className="btn-confirm-yes"
-                        style={{ fontSize: '0.7rem', padding: '3px 6px' }}
-                      >
-                        Да
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeletingId(null);
-                        }}
-                        className="btn-confirm-no"
-                        style={{ fontSize: '0.7rem', padding: '3px 6px' }}
-                      >
-                        Нет
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeletingId(ev.id);
-                      }}
-                      title="Удалить мероприятие"
-                      className="btn-touch-target"
-                      style={{ minWidth: '44px', minHeight: '44px', color: 'var(--color-text-muted)', borderRadius: '4px', cursor: 'pointer' }}
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const linked = transactions.filter((t) => !t.isDeleted && t.eventId === ev.id);
+                      setEventToDelete({ event: ev, linkedTxs: linked });
+                    }}
+                    title="Удалить мероприятие"
+                    className="btn-touch-target"
+                    style={{ minWidth: '44px', minHeight: '44px', color: 'var(--color-text-muted)', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    <Trash2 size={15} />
+                  </button>
                 </div>
               </div>
 
@@ -556,6 +546,169 @@ export const EventsView: React.FC = () => {
           isOpen={Boolean(selectedDossierEvent)}
           onClose={() => setSelectedDossierEvent(null)}
         />
+      )}
+
+      {/* Delete Event Confirmation Modal */}
+      {eventToDelete && (
+        <div
+          className="modal-backdrop"
+          style={{ zIndex: 1200 }}
+          onClick={() => !isDeletingEvent && setEventToDelete(null)}
+        >
+          <div
+            className="modal-container"
+            style={{ maxWidth: '480px' }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '50%',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    color: '#ef4444',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Trash2 size={17} />
+                </div>
+                <div>
+                  <h3 className="modal-title" style={{ fontSize: '1.05rem', margin: 0 }}>
+                    Удаление мероприятия
+                  </h3>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                    «{eventToDelete.event.title}»
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => !isDeletingEvent && setEventToDelete(null)}
+                disabled={isDeletingEvent}
+                aria-label="Закрыть"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingTop: '10px' }}>
+              {eventToDelete.linkedTxs.length > 0 ? (
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                    fontSize: '0.85rem',
+                    color: '#b45309',
+                    lineHeight: '1.45',
+                  }}
+                >
+                  <div style={{ fontWeight: 700, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <AlertCircle size={15} />
+                    <span>Связано операций: {eventToDelete.linkedTxs.length} шт.</span>
+                  </div>
+                  <div>
+                    К этому проекту привязаны финансовые движения. Выберите, что сделать с операциями: удалить их с пересчётом балансов или оставить в Журнале как общие расходы/доходы.
+                  </div>
+                </div>
+              ) : (
+                <p style={{ fontSize: '0.9rem', color: 'var(--color-text)', margin: 0 }}>
+                  Вы уверены, что хотите удалить мероприятие? Привязанных операций нет.
+                </p>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+                {eventToDelete.linkedTxs.length > 0 ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={isDeletingEvent}
+                      onClick={handleDeleteEventAndTransactions}
+                      style={{
+                        padding: '11px 14px',
+                        backgroundColor: '#dc2626',
+                        color: '#fff',
+                        borderRadius: 'var(--radius-sm)',
+                        fontWeight: 600,
+                        fontSize: '0.875rem',
+                        cursor: 'pointer',
+                        border: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <Trash2 size={16} />
+                      {isDeletingEvent ? 'Удаление...' : `Удалить мероприятие и все ${eventToDelete.linkedTxs.length} операции`}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isDeletingEvent}
+                      onClick={handleDeleteEventOnly}
+                      style={{
+                        padding: '11px 14px',
+                        backgroundColor: 'var(--color-bg-subtle, rgba(0,0,0,0.04))',
+                        color: 'var(--color-text)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontWeight: 600,
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                        textAlign: 'center',
+                      }}
+                    >
+                      Оставить операции в журнале (отвязать от ивента)
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isDeletingEvent}
+                    onClick={handleDeleteEventOnly}
+                    style={{
+                      padding: '11px 14px',
+                      backgroundColor: '#dc2626',
+                      color: '#fff',
+                      borderRadius: 'var(--radius-sm)',
+                      fontWeight: 600,
+                      fontSize: '0.875rem',
+                      cursor: 'pointer',
+                      border: 'none',
+                    }}
+                  >
+                    {isDeletingEvent ? 'Удаление...' : 'Да, удалить мероприятие'}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  disabled={isDeletingEvent}
+                  onClick={() => setEventToDelete(null)}
+                  style={{
+                    padding: '8px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--color-text-muted)',
+                    fontSize: '0.825rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Отмена
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
