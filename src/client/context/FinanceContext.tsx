@@ -649,6 +649,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const res = await api.deleteEvent(id);
         if (res.success) {
           setEvents((cur) => cur.filter((e) => e.id !== id));
+          refreshTransactions().catch(() => {});
+          refreshAccounts().catch(() => {});
           addToast('Мероприятие удалено', 'info');
           return { success: true };
         }
@@ -659,7 +661,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return { success: false, error: msg };
       }
     },
-    [addToast]
+    [addToast, refreshTransactions, refreshAccounts]
   );
 
   // 5. Reset Demo Data

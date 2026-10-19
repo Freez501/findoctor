@@ -27,7 +27,41 @@ export const App: React.FC = () => {
   const { isAuthenticated, enterDemoMode } = useAuth();
   const [showAuthScreen, setShowAuthScreen] = useState<boolean>(false);
   const [authInitialMode, setAuthInitialMode] = useState<'login' | 'register'>('login');
-  const [currentTab, setCurrentTab] = useState<TabType>('accounts');
+  const getInitialTab = (): TabType => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0] as TabType;
+      const validTabs: TabType[] = ['accounts', 'events', 'analytics', 'history', 'reports', 'settings', 'admin'];
+      if (validTabs.includes(hash)) return hash;
+      const saved = localStorage.getItem('truespace_active_tab') as TabType;
+      if (validTabs.includes(saved)) return saved;
+    }
+    return 'accounts';
+  };
+
+  const [currentTab, setCurrentTabState] = useState<TabType>(getInitialTab);
+
+  const setCurrentTab = React.useCallback((tab: TabType) => {
+    setCurrentTabState(tab);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('truespace_active_tab', tab);
+        window.history.replaceState(null, '', `#${tab}`);
+      } catch {}
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const handleHash = () => {
+      const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0] as TabType;
+      const validTabs: TabType[] = ['accounts', 'events', 'analytics', 'history', 'reports', 'settings', 'admin'];
+      if (validTabs.includes(hash)) {
+        setCurrentTabState(hash);
+      }
+    };
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, []);
+
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>(undefined);
 

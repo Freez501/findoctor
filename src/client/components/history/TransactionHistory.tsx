@@ -132,7 +132,7 @@ export function filterTransactions(txs: Transaction[], filters: FilterState): Tr
 }
 
 export const TransactionHistory: React.FC = () => {
-  const { transactions, accounts, isLoading, deleteBatchTransactions, updateBatchTransactions } = useFinance();
+  const { transactions, accounts, events, isLoading, deleteBatchTransactions, updateBatchTransactions, refreshTransactions } = useFinance();
   const [filters, setFilters] = useState<FilterState>({
     accountId: 'all',
     eventId: 'all',
@@ -144,6 +144,31 @@ export const TransactionHistory: React.FC = () => {
     startDate: '',
     endDate: '',
   });
+
+  // Always fetch fresh transactions from server on journal mount
+  React.useEffect(() => {
+    refreshTransactions();
+  }, [refreshTransactions]);
+
+  // Auto-reset filters if selected event no longer exists
+  React.useEffect(() => {
+    if (filters.eventId !== 'all' && filters.eventId !== 'general') {
+      const exists = events.some((e) => e.id === filters.eventId);
+      if (!exists) {
+        setFilters((prev) => ({ ...prev, eventId: 'all' }));
+      }
+    }
+  }, [events, filters.eventId]);
+
+  // Auto-reset filters if selected account no longer exists
+  React.useEffect(() => {
+    if (filters.accountId !== 'all') {
+      const exists = accounts.some((a) => a.id === filters.accountId);
+      if (!exists) {
+        setFilters((prev) => ({ ...prev, accountId: 'all' }));
+      }
+    }
+  }, [accounts, filters.accountId]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);

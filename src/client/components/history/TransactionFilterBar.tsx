@@ -221,7 +221,7 @@ export const TransactionFilterBar: React.FC<Props> = ({
           <div className="filter-select-wrapper">
             <Briefcase size={13} className="filter-select-icon" aria-hidden="true" />
             <select
-              value={selectedEventId}
+              value={selectedEventId === 'all' || selectedEventId === 'general' || events.some((e) => e.id === selectedEventId) ? selectedEventId : 'all'}
               onChange={(e) => onSelectEvent(e.target.value)}
               className="filter-custom-select"
               aria-label="Фильтр по мероприятию"

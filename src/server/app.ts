@@ -77,6 +77,14 @@ export function createApp(options?: AppOptions): Express {
   app.use(express.urlencoded({ extended: true }));
   app.use(authMiddleware);
 
+  // Prevent browser caching of dynamic financial API data
+  app.use('/api', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    next();
+  });
+
   // Request logger in dev
   if (process.env.NODE_ENV !== 'test') {
     app.use((req, res, next) => {
