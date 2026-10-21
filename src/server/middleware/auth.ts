@@ -95,11 +95,12 @@ export function extractAuthContext(req: Request, devFallbackUserId = 'user_nikit
     }
   }
 
-  const isProd = process.env.NODE_ENV === 'production';
+  const isTest = process.env.NODE_ENV === 'test';
   const headerUserId = (req.headers['x-user-id'] as string) || '';
   const headerCompanyId = (req.headers['x-company-id'] as string) || (req.query.companyId as string) || '';
 
-  if (headerUserId) {
+  // Only in automated test environment, allow mock headers or test fallback
+  if (isTest && headerUserId) {
     return {
       userId: headerUserId,
       companyId: headerCompanyId || DEFAULT_COMPANY_ID,
@@ -107,11 +108,11 @@ export function extractAuthContext(req: Request, devFallbackUserId = 'user_nikit
     };
   }
 
-  if (!isProd) {
+  if (isTest && devFallbackUserId) {
     return {
       userId: devFallbackUserId,
       companyId: headerCompanyId || DEFAULT_COMPANY_ID,
-      isAuthenticated: Boolean(devFallbackUserId),
+      isAuthenticated: true,
     };
   }
 

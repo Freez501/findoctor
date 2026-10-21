@@ -43,17 +43,14 @@ export function createAuthRouter(store: IFinanceStore): Router {
   // GET /api/auth/me
   router.get('/me', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const isProd = process.env.NODE_ENV === 'production';
-      const ctx = extractAuthContext(req, isProd ? '' : devSessionUserId);
+      const isTest = process.env.NODE_ENV === 'test';
+      const ctx = extractAuthContext(req, isTest ? devSessionUserId : '');
       const headerCompanyId = (req.headers['x-company-id'] as string) || '';
 
-      const targetUserId = ctx.userId || (isProd ? '' : devSessionUserId);
+      const targetUserId = ctx.userId;
       let user: UserProfile | null = null;
       if (targetUserId) {
         user = await store.getUserById(targetUserId);
-        if (!user && !isProd) {
-          user = (await store.getUsers())[0] || null;
-        }
       }
 
       if (!user) {
@@ -101,11 +98,30 @@ export function createAuthRouter(store: IFinanceStore): Router {
     }
   });
 
-  // GET /api/auth/users
-  router.get('/users', async (_req: Request, res: Response, next: NextFunction) => {
+  // GET /api/auth/users (filtered by tenant company members, unless SuperAdmin)
+  router.get('/users', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const users = await store.getUsers();
-      res.json(users);
+      const isTest = process.env.NODE_ENV === 'test';
+      const ctx = extractAuthContext(req, isTest ? devSessionUserId : '');
+      const callingUser = ctx.userId ? await store.getUserById(ctx.userId) : null;
+      const allUsers = await store.getUsers();
+
+      if (isTest || callingUser?.isSuperAdmin) {
+        return res.json(allUsers);
+      }
+
+      if (callingUser) {
+        const userCompanyId = ctx.companyId;
+        if (userCompanyId) {
+          const members = await store.getCompanyMembers(userCompanyId);
+          const memberIds = new Set(members.map((m) => m.membership.userId));
+          memberIds.add(callingUser.id);
+          return res.json(allUsers.filter((u) => memberIds.has(u.id)));
+        }
+        return res.json([callingUser]);
+      }
+
+      res.json([]);
     } catch (err) {
       next(err);
     }

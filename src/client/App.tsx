@@ -24,7 +24,7 @@ import { InviteAcceptView } from './components/auth/InviteAcceptView.js';
 import { useAuth } from './context/AuthContext.js';
 
 export const App: React.FC = () => {
-  const { isAuthenticated, enterDemoMode } = useAuth();
+  const { isAuthenticated, enterDemoMode, isSuperAdmin } = useAuth();
   const [showAuthScreen, setShowAuthScreen] = useState<boolean>(false);
   const [authInitialMode, setAuthInitialMode] = useState<'login' | 'register'>('login');
   const getInitialTab = (): TabType => {
@@ -165,7 +165,28 @@ export const App: React.FC = () => {
           {currentTab === 'history' && <TransactionHistory />}
           {currentTab === 'reports' && <ReportsView />}
           {currentTab === 'settings' && <SettingsView />}
-          {currentTab === 'admin' && <SuperAdminView />}
+          {currentTab === 'admin' && (
+            isSuperAdmin ? (
+              <SuperAdminView />
+            ) : (
+              <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                <div style={{ maxWidth: '420px', margin: '0 auto', background: 'var(--card-bg, #ffffff)', border: '1px solid var(--border)', borderRadius: '16px', padding: '32px 24px', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px', color: 'var(--foreground)' }}>Доступ ограничен</h3>
+                  <p style={{ fontSize: '14px', color: 'var(--muted-foreground)', marginBottom: '20px', lineHeight: 1.5 }}>
+                    Панель управления платформой доступна исключительно суперадминистраторам.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn-form-submit"
+                    style={{ width: '100%', justifyContent: 'center' }}
+                    onClick={() => setCurrentTab('accounts')}
+                  >
+                    Вернуться к счетам
+                  </button>
+                </div>
+              </div>
+            )
+          )}
         </ErrorBoundary>
       </main>
 

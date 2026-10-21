@@ -22,6 +22,7 @@ import {
   X,
   Trash2,
   KeyRound,
+  ShieldAlert,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
 import { UserRole, Company, UserProfile } from '../../../shared/types.js';
@@ -31,6 +32,7 @@ type AdminTab = 'companies' | 'team';
 export const SuperAdminView: React.FC = () => {
   const {
     currentUser,
+    isSuperAdmin,
     usersList,
     currentCompany,
     companiesList,
@@ -224,6 +226,28 @@ export const SuperAdminView: React.FC = () => {
       setIsCreatingCo(false);
     }
   };
+
+  if (!isSuperAdmin) {
+    return (
+      <div className="saas-admin-container animate-fade-in" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <div style={{ maxWidth: '420px', margin: '0 auto', background: 'var(--card-bg, #ffffff)', border: '1px solid var(--border)', borderRadius: '16px', padding: '32px 24px', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
+          <ShieldAlert size={48} color="#ef4444" style={{ margin: '0 auto 16px' }} />
+          <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '8px', color: 'var(--foreground)' }}>Доступ ограничен</h2>
+          <p style={{ fontSize: '14px', color: 'var(--muted-foreground)', marginBottom: '24px', lineHeight: 1.5 }}>
+            Панель управления платформой доступна только суперадминистраторам.
+          </p>
+          <button
+            type="button"
+            className="btn-form-submit"
+            style={{ width: '100%', justifyContent: 'center' }}
+            onClick={() => { window.location.hash = '#accounts'; }}
+          >
+            Вернуться к счетам
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="saas-admin-container animate-fade-in">

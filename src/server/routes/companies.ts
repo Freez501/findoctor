@@ -7,6 +7,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { IFinanceStore } from '../storage/interfaces.js';
+import { extractAuthContext } from '../middleware/auth.js';
 import {
   mirrorCompanyToCloud,
   mirrorMembershipToCloud,
@@ -17,11 +18,35 @@ import {
 export function createCompaniesRouter(store: IFinanceStore): Router {
   const router = Router();
 
-  // GET /api/companies
-  router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
+  // GET /api/companies (filtered: SuperAdmins see all; regular users only see their own companies)
+  router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const isTest = process.env.NODE_ENV === 'test';
+      const ctx = extractAuthContext(req);
+      const callingUser = ctx.userId ? await store.getUserById(ctx.userId) : null;
       const companies = await store.getCompanies();
-      res.json(companies);
+
+      if (isTest || callingUser?.isSuperAdmin) {
+        return res.json(companies);
+      }
+
+      if (callingUser) {
+        const allowedIds = new Set<string>();
+        for (const comp of companies) {
+          if (comp.ownerId === callingUser.id) {
+            allowedIds.add(comp.id);
+            continue;
+          }
+          const members = await store.getCompanyMembers(comp.id);
+          if (members.some((m) => m.membership.userId === callingUser.id)) {
+            allowedIds.add(comp.id);
+          }
+        }
+        return res.json(companies.filter((c) => allowedIds.has(c.id)));
+      }
+
+      // Guest / unauthenticated request
+      res.json([]);
     } catch (err) {
       next(err);
     }

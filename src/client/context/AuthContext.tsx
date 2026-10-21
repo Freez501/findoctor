@@ -134,7 +134,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('truespace_current_user', JSON.stringify(effectiveUser));
         localStorage.setItem('truespace_user_id', effectiveUser.id);
         api.setActiveUserId(effectiveUser.id);
-      } else if (!isDemo && !userRes?.user && !savedUserId) {
+      } else if (!isDemo && !userRes?.user) {
         effectiveUser = null;
         setCurrentUser(null);
         setIsAuthenticated(false);
@@ -144,6 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('truespace_company_id');
         localStorage.removeItem('truespace_current_company');
         api.setActiveUserId('');
+        api.setAuthToken('');
       }
       if (users && users.length > 0) {
         setUsersList(users);
@@ -388,19 +389,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('truespace_company_id', co.id);
       api.setActiveCompanyId(co.id);
 
-      // If current user is not superAdmin and does not own or belong to this company,
-      // switch to the owner of this company so the user sees the company with proper permissions!
-      if (!currentUser?.isSuperAdmin && co.ownerId && currentUser?.id !== co.ownerId) {
-        const ownerUser = usersList.find((u) => u.id === co.ownerId);
-        if (ownerUser) {
-          setCurrentUser(ownerUser);
-          localStorage.setItem('truespace_current_user', JSON.stringify(ownerUser));
-          localStorage.setItem('truespace_user_id', ownerUser.id);
-          api.setActiveUserId(ownerUser.id);
-          await api.switchUser(ownerUser.id).catch(() => {});
-        }
-      }
-
       try {
         const members = await api.getCompanyMembers(co.id);
         setCompanyMembers(members);
@@ -409,7 +397,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       window.location.reload();
     }
-  }, [companiesList, currentUser, usersList]);
+  }, [companiesList]);
 
   const createCompany = useCallback(async (name: string, slug?: string): Promise<Company> => {
     const created = await api.createCompany({
