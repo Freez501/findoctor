@@ -1,10 +1,10 @@
 # Project: Truespace — Барный кейтеринг и финансы
 
-- **Статус:** `stage_production_deployed` (Проект опубликован на сервере FirstVDS: база MySQL `findoctor` является основной боевой базой; панель SaaS очищена от Supabase; продление триала/оплаты компаний сохраняется в MySQL; тестовые компании скрыты из списка; переработана вкладка «Команда и профили» в фирменном стиле FINDOCTOR; добавлена вкладка настроек «Профиль и пароль» с возможностью смены Email и пароля для каждого пользователя)
+- **Статус:** `stage_production_deployed` (Проект опубликован на сервере FirstVDS: база MySQL `findoctor` является основной боевой базой; панель SaaS модернизирована: баннер SuperAdmin в стиле Quiet Luxury, табличный структурированный список участников команды, двухколоночное модальное окно настроек профиля и корпоративная двухфакторная безопасность для смены Email и пароля)
 - **Боевая версия (Production):** `http://shved4656.fvds.ru` (IP: `153.76.170.74`)
 - **Локальная версия (Dev):** `http://localhost:5173/` (бэкенд API: `http://localhost:3001/api`)
 - **GitHub репозиторий:** `https://github.com/Freez501/findoctor.git` (ветка `main`, CI/CD готов)
-- **Тесты:** 587 / 587 passed (100% green, 34 тест-сьюта)
+- **Тесты:** 589 / 589 passed (100% green, 34 тест-сьюта)
 - **Сборка:** Typecheck & Vite Build 100% green (0 errors)
 
 ## Architecture
@@ -79,6 +79,7 @@
 | F28 | Catering Events & Receivables | Учёт договоров, оплат, дебиторки и расходов по выездным барам | M5 | USER_REQUEST 21.09 |
 | F29 | Keyboard Input & Inline Category | Ввод с клавиатуры в NumericPad (0-9, Backspace, Esc) и inline-создание статей | M5 | USER_REQUEST 21.09 |
 | F30 | Modern Staff Invite Links & QR | Приглашение сотрудников по ссылке, QR-коду, Telegram/WhatsApp и онбординг-экран за 5 секунд | M5 | USER_REQUEST 18.10 |
+| F31 | Executive Admin UI & 2-Step Auth | Редизайн админки (баннер Quiet Luxury, таблица команды, 2-колоночное модальное окно профиля, двухфакторная смена email и пароля) | M5 | USER_REQUEST 21.10 |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |

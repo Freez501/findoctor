@@ -657,11 +657,47 @@ export class ApiClient {
     });
   }
 
-  public changePassword(userId: string, newPassword: string, currentPassword?: string, options?: RequestOptions): Promise<{ success: boolean; message: string }> {
+  public changePassword(userId: string, newPassword: string, currentPassword?: string, code?: string, options?: RequestOptions): Promise<{ success: boolean; message: string }> {
     return this.request<{ success: boolean; message: string }>('/api/auth/change-password', {
       ...options,
       method: 'POST',
-      body: JSON.stringify({ userId, newPassword, currentPassword }),
+      body: JSON.stringify({ userId, newPassword, currentPassword, code }),
+      priority: 'high',
+    });
+  }
+
+  public requestEmailChangeCode(userId: string, currentPassword: string, options?: RequestOptions): Promise<{ success: boolean; message: string; previewCode?: string }> {
+    return this.request<{ success: boolean; message: string; previewCode?: string }>('/api/auth/security/request-email-change', {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify({ userId, currentPassword }),
+      priority: 'high',
+    });
+  }
+
+  public verifyOldEmailCode(userId: string, code: string, newEmail: string, options?: RequestOptions): Promise<{ success: boolean; message: string; previewCode?: string }> {
+    return this.request<{ success: boolean; message: string; previewCode?: string }>('/api/auth/security/verify-old-email-code', {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify({ userId, code, newEmail }),
+      priority: 'high',
+    });
+  }
+
+  public confirmNewEmail(userId: string, newEmail: string, code: string, options?: RequestOptions): Promise<{ success: boolean; user: UserProfile; message: string }> {
+    return this.request<{ success: boolean; user: UserProfile; message: string }>('/api/auth/security/confirm-new-email', {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify({ userId, newEmail, code }),
+      priority: 'high',
+    });
+  }
+
+  public requestPasswordCode(userId: string, currentPassword: string, options?: RequestOptions): Promise<{ success: boolean; message: string; previewCode?: string }> {
+    return this.request<{ success: boolean; message: string; previewCode?: string }>('/api/auth/security/request-password-code', {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify({ userId, currentPassword }),
       priority: 'high',
     });
   }

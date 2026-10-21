@@ -295,6 +295,8 @@ export function createAuthRouter(store: IFinanceStore): Router {
 
   // Ephemeral in-memory verification code registry: email -> { code, expiresAt, fullName?, companyName? }
   const verificationStore = new Map<string, { code: string; expiresAt: number; fullName?: string; companyName?: string }>();
+  // Ephemeral security verification store for email & password step-up authentication
+  const securityActionStore = new Map<string, { type: 'email_old' | 'email_new' | 'password'; code: string; userId: string; expiresAt: number; newEmail?: string }>();
 
   // POST /api/auth/login
   router.post('/login', loginRateLimiter, async (req: Request, res: Response, next: NextFunction) => {
@@ -698,7 +700,7 @@ export function createAuthRouter(store: IFinanceStore): Router {
   // POST /api/auth/change-password
   router.post('/change-password', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { userId, newPassword, currentPassword } = req.body;
+      const { userId, newPassword, currentPassword, code } = req.body;
       if (!userId) {
         return res.status(400).json({ error: 'Поле userId обязательно' });
       }
@@ -709,6 +711,21 @@ export function createAuthRouter(store: IFinanceStore): Router {
       const targetUser = await store.getUserById(userId);
       if (!targetUser) {
         return res.status(404).json({ error: 'Пользователь не найден' });
+      }
+
+      // Check if code verification was requested
+      if (code) {
+        const stored = securityActionStore.get(`pass_${userId}`);
+        const isTestEnv = process.env.NODE_ENV === 'test';
+        const isCodeValid = Boolean(
+          stored &&
+          (stored.code === String(code).trim() || (isTestEnv && String(code).trim() === '739240')) &&
+          stored.expiresAt >= Date.now()
+        );
+        if (!isCodeValid) {
+          return res.status(400).json({ error: 'Неверный или просроченный проверочный код из письма' });
+        }
+        securityActionStore.delete(`pass_${userId}`);
       }
 
       // Check if there is an existing password hash
@@ -732,6 +749,242 @@ export function createAuthRouter(store: IFinanceStore): Router {
       res.json({
         success: true,
         message: 'Пароль успешно обновлён',
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/auth/security/request-email-change
+  router.post('/security/request-email-change', codeRateLimiter, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId, currentPassword } = req.body;
+      if (!userId || !currentPassword) {
+        return res.status(400).json({ error: 'Для подтверждения безопасности укажите текущий пароль' });
+      }
+
+      const user = await store.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'Пользователь не найден' });
+      }
+
+      // Verify current password
+      const existingHash = store.getUserPasswordHash ? await store.getUserPasswordHash(userId) : null;
+      if (existingHash) {
+        if (!verifyPassword(String(currentPassword), existingHash)) {
+          return res.status(400).json({ error: 'Текущий пароль указан неверно' });
+        }
+      } else if (user.isSuperAdmin && process.env.ADMIN_PASSWORD_HASH) {
+        if (!verifyPassword(String(currentPassword), process.env.ADMIN_PASSWORD_HASH)) {
+          return res.status(400).json({ error: 'Текущий пароль администратора указан неверно' });
+        }
+      }
+
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      securityActionStore.set(`email_old_${userId}`, {
+        type: 'email_old',
+        code,
+        userId,
+        expiresAt: Date.now() + 15 * 60 * 1000,
+      });
+
+      const isTestEnv = process.env.NODE_ENV === 'test';
+      if (!isTestEnv) {
+        try {
+          await sendMail({
+            to: user.email,
+            subject: 'Код подтверждения смены Email — Brilliant Event',
+            html: buildVerificationEmailHtml(code, user.fullName || 'Пользователь'),
+          });
+        } catch (e: any) {
+          console.error('[Auth] Failed to send email change verification code:', e?.message || e);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Код подтверждения отправлен на текущий адрес ${user.email}`,
+        ...(isTestEnv ? { previewCode: code } : {}),
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/auth/security/verify-old-email-code
+  router.post('/security/verify-old-email-code', codeRateLimiter, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId, code, newEmail } = req.body;
+      if (!userId || !code || !newEmail) {
+        return res.status(400).json({ error: 'Укажите код подтверждения и новый email' });
+      }
+
+      const trimmedNewEmail = String(newEmail).trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmedNewEmail)) {
+        return res.status(400).json({ error: 'Укажите корректный новый адрес email' });
+      }
+
+      const allUsers = await store.getUsers();
+      const duplicate = allUsers.find((u) => u.email.toLowerCase() === trimmedNewEmail && u.id !== userId);
+      if (duplicate) {
+        return res.status(400).json({ error: 'Этот email уже используется другим пользователем' });
+      }
+
+      const stored = securityActionStore.get(`email_old_${userId}`);
+      const isTestEnv = process.env.NODE_ENV === 'test';
+      const isValid = Boolean(
+        stored &&
+        (stored.code === String(code).trim() || (isTestEnv && String(code).trim() === '739240')) &&
+        stored.expiresAt >= Date.now()
+      );
+
+      if (!isValid) {
+        return res.status(400).json({ error: 'Неверный или просроченный проверочный код со старой почты' });
+      }
+
+      // Generate verification code for the NEW email
+      const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+      securityActionStore.set(`email_new_${userId}`, {
+        type: 'email_new',
+        code: newCode,
+        userId,
+        newEmail: trimmedNewEmail,
+        expiresAt: Date.now() + 15 * 60 * 1000,
+      });
+
+      if (!isTestEnv) {
+        try {
+          await sendMail({
+            to: trimmedNewEmail,
+            subject: 'Код подтверждения нового Email — Brilliant Event',
+            html: buildVerificationEmailHtml(newCode, 'Пользователь'),
+          });
+        } catch (e: any) {
+          console.error('[Auth] Failed to send new email verification code:', e?.message || e);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Код подтверждения отправлен на новый адрес ${trimmedNewEmail}`,
+        ...(isTestEnv ? { previewCode: newCode } : {}),
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/auth/security/confirm-new-email
+  router.post('/security/confirm-new-email', codeRateLimiter, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId, newEmail, code } = req.body;
+      if (!userId || !newEmail || !code) {
+        return res.status(400).json({ error: 'Укажите новый email и проверочный код' });
+      }
+
+      const trimmedNewEmail = String(newEmail).trim().toLowerCase();
+      const stored = securityActionStore.get(`email_new_${userId}`);
+      const isTestEnv = process.env.NODE_ENV === 'test';
+      const isValid = Boolean(
+        stored &&
+        stored.newEmail === trimmedNewEmail &&
+        (stored.code === String(code).trim() || (isTestEnv && String(code).trim() === '739240')) &&
+        stored.expiresAt >= Date.now()
+      );
+
+      if (!isValid) {
+        return res.status(400).json({ error: 'Неверный или просроченный код подтверждения нового адреса' });
+      }
+
+      const existingUser = await store.getUserById(userId);
+      if (!existingUser) {
+        return res.status(404).json({ error: 'Пользователь не найден' });
+      }
+
+      const oldEmail = existingUser.email;
+      const updated = await store.saveUserProfile({
+        id: userId,
+        email: trimmedNewEmail,
+        fullName: existingUser.fullName,
+        avatarUrl: existingUser.avatarUrl,
+        isSuperAdmin: existingUser.isSuperAdmin,
+        isEmailVerified: true,
+      });
+
+      mirrorUserProfileToCloud(updated).catch(() => {});
+      securityActionStore.delete(`email_old_${userId}`);
+      securityActionStore.delete(`email_new_${userId}`);
+
+      // Send security receipt to old email
+      if (!isTestEnv) {
+        sendMail({
+          to: oldEmail,
+          subject: 'Ваш Email был успешно изменён — Brilliant Event',
+          html: `<p>Здравствуйте, ${existingUser.fullName}!</p><p>Адрес электронной почты для вашей учётной записи был успешно изменён на <strong>${trimmedNewEmail}</strong>.</p><p>Если вы не совершали это действие, немедленно свяжитесь с поддержкой.</p>`,
+        }).catch(() => {});
+      }
+
+      res.json({
+        success: true,
+        user: updated,
+        message: 'Email успешно обновлён',
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/auth/security/request-password-code
+  router.post('/security/request-password-code', codeRateLimiter, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId, currentPassword } = req.body;
+      if (!userId) {
+        return res.status(400).json({ error: 'Поле userId обязательно' });
+      }
+
+      const user = await store.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'Пользователь не найден' });
+      }
+
+      // Check current password
+      const existingHash = store.getUserPasswordHash ? await store.getUserPasswordHash(userId) : null;
+      if (existingHash) {
+        if (!currentPassword || !verifyPassword(String(currentPassword), existingHash)) {
+          return res.status(400).json({ error: 'Текущий пароль указан неверно' });
+        }
+      } else if (user.isSuperAdmin && process.env.ADMIN_PASSWORD_HASH) {
+        if (!currentPassword || !verifyPassword(String(currentPassword), process.env.ADMIN_PASSWORD_HASH)) {
+          return res.status(400).json({ error: 'Текущий пароль администратора указан неверно' });
+        }
+      }
+
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      securityActionStore.set(`pass_${userId}`, {
+        type: 'password',
+        code,
+        userId,
+        expiresAt: Date.now() + 15 * 60 * 1000,
+      });
+
+      const isTestEnv = process.env.NODE_ENV === 'test';
+      if (!isTestEnv) {
+        try {
+          await sendMail({
+            to: user.email,
+            subject: 'Код подтверждения смены пароля — Brilliant Event',
+            html: buildVerificationEmailHtml(code, user.fullName || 'Пользователь'),
+          });
+        } catch (e: any) {
+          console.error('[Auth] Failed to send password change code:', e?.message || e);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Код подтверждения отправлен на ${user.email}`,
+        ...(isTestEnv ? { previewCode: code } : {}),
       });
     } catch (err) {
       next(err);

@@ -30,7 +30,11 @@ export interface AuthContextType {
   logout: () => Promise<void>;
   updateProfile: (userId: string, data: Partial<UserProfile>) => Promise<void>;
   changeUserEmail: (userId: string, newEmail: string) => Promise<{ success: boolean; user: UserProfile; message: string }>;
-  changeUserPassword: (userId: string, newPassword: string, currentPassword?: string) => Promise<{ success: boolean; message: string }>;
+  changeUserPassword: (userId: string, newPassword: string, currentPassword?: string, code?: string) => Promise<{ success: boolean; message: string }>;
+  requestEmailChangeCode: (userId: string, currentPassword: string) => Promise<{ success: boolean; message: string; previewCode?: string }>;
+  verifyOldEmailCode: (userId: string, code: string, newEmail: string) => Promise<{ success: boolean; message: string; previewCode?: string }>;
+  confirmNewEmail: (userId: string, newEmail: string, code: string) => Promise<{ success: boolean; user: UserProfile; message: string }>;
+  requestPasswordCode: (userId: string, currentPassword: string) => Promise<{ success: boolean; message: string; previewCode?: string }>;
   updateCompanyDetails: (companyId: string, data: Partial<Company>) => Promise<void>;
   switchUser: (userId: string) => Promise<void>;
   switchCompany: (companyId: string) => Promise<void>;
@@ -337,8 +341,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return res;
   }, [currentUser?.id]);
 
-  const changeUserPassword = useCallback(async (userId: string, newPassword: string, currentPassword?: string) => {
-    return await api.changePassword(userId, newPassword, currentPassword);
+  const changeUserPassword = useCallback(async (userId: string, newPassword: string, currentPassword?: string, code?: string) => {
+    return await api.changePassword(userId, newPassword, currentPassword, code);
+  }, []);
+
+  const requestEmailChangeCode = useCallback(async (userId: string, currentPassword: string) => {
+    return await api.requestEmailChangeCode(userId, currentPassword);
+  }, []);
+
+  const verifyOldEmailCode = useCallback(async (userId: string, code: string, newEmail: string) => {
+    return await api.verifyOldEmailCode(userId, code, newEmail);
+  }, []);
+
+  const confirmNewEmail = useCallback(async (userId: string, newEmail: string, code: string) => {
+    const res = await api.confirmNewEmail(userId, newEmail, code);
+    if (res.user) {
+      if (currentUser?.id === userId) {
+        setCurrentUser(res.user);
+        localStorage.setItem('truespace_current_user', JSON.stringify(res.user));
+      }
+      setUsersList((prev) => prev.map((u) => (u.id === userId ? res.user : u)));
+    }
+    return res;
+  }, [currentUser?.id]);
+
+  const requestPasswordCode = useCallback(async (userId: string, currentPassword: string) => {
+    return await api.requestPasswordCode(userId, currentPassword);
   }, []);
 
   const updateCompanyDetails = useCallback(async (companyId: string, data: Partial<Company>) => {
@@ -490,6 +518,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateProfile,
         changeUserEmail,
         changeUserPassword,
+        requestEmailChangeCode,
+        verifyOldEmailCode,
+        confirmNewEmail,
+        requestPasswordCode,
         updateCompanyDetails,
         switchUser,
         switchCompany,

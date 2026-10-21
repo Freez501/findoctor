@@ -83,4 +83,72 @@ describe('Security P0, SupabaseStore & Architecture P1/P2 Verification', () => {
     expect(accounts).toHaveLength(1);
     expect(accounts[0].currentBalance).toBe(250.55);
   });
+
+  describe('Enterprise Step-up Security Verification (Email & Password)', () => {
+    it('executes full two-step email change flow with old & new email verification', async () => {
+      // 1. Request email change without password -> 400
+      const missingPass = await request(app)
+        .post('/api/auth/security/request-email-change')
+        .send({ userId: 'user_vlad' });
+      expect(missingPass.status).toBe(400);
+
+      // 2. Request email change with valid password -> 200 + returns previewCode
+      const step1 = await request(app)
+        .post('/api/auth/security/request-email-change')
+        .send({ userId: 'user_vlad', currentPassword: 'password123' });
+      expect(step1.status).toBe(200);
+      expect(step1.body.success).toBe(true);
+      const oldCode = step1.body.previewCode;
+      expect(oldCode).toBeDefined();
+
+      // 3. Verify old email code with wrong code -> 400
+      const badCode = await request(app)
+        .post('/api/auth/security/verify-old-email-code')
+        .send({ userId: 'user_vlad', code: '000000', newEmail: 'vlad.new@truespace.ru' });
+      expect(badCode.status).toBe(400);
+
+      // 4. Verify old email code with correct code -> 200 + returns previewCode for new email
+      const step2 = await request(app)
+        .post('/api/auth/security/verify-old-email-code')
+        .send({ userId: 'user_vlad', code: oldCode, newEmail: 'vlad.new@truespace.ru' });
+      expect(step2.status).toBe(200);
+      expect(step2.body.success).toBe(true);
+      const newCode = step2.body.previewCode;
+      expect(newCode).toBeDefined();
+
+      // 5. Confirm new email with correct code -> 200 and updates user email
+      const step3 = await request(app)
+        .post('/api/auth/security/confirm-new-email')
+        .send({ userId: 'user_vlad', newEmail: 'vlad.new@truespace.ru', code: newCode });
+      expect(step3.status).toBe(200);
+      expect(step3.body.success).toBe(true);
+      expect(step3.body.user.email).toBe('vlad.new@truespace.ru');
+
+      // Verify in store
+      const updatedUser = await store.getUserById('user_vlad');
+      expect(updatedUser?.email).toBe('vlad.new@truespace.ru');
+    });
+
+    it('handles password change verification code request and step-up password change', async () => {
+      // 1. Request password code
+      const codeReq = await request(app)
+        .post('/api/auth/security/request-password-code')
+        .send({ userId: 'user_vlad', currentPassword: 'anyPassword' });
+      expect(codeReq.status).toBe(200);
+      expect(codeReq.body.success).toBe(true);
+      const passCode = codeReq.body.previewCode;
+      expect(passCode).toBeDefined();
+
+      // 2. Change password with valid code
+      const changeRes = await request(app)
+        .post('/api/auth/change-password')
+        .send({
+          userId: 'user_vlad',
+          newPassword: 'BrandNewSecurePassword123!',
+          code: passCode,
+        });
+      expect(changeRes.status).toBe(200);
+      expect(changeRes.body.success).toBe(true);
+    });
+  });
 });

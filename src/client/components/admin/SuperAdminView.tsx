@@ -21,8 +21,9 @@ import {
   Edit2,
   X,
   Trash2,
-  KeyRound,
   ShieldAlert,
+  Lock,
+  Laptop,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
 import { UserRole, Company, UserProfile } from '../../../shared/types.js';
@@ -41,8 +42,11 @@ export const SuperAdminView: React.FC = () => {
     deleteCompany,
     inviteMember,
     updateProfile,
-    changeUserEmail,
     changeUserPassword,
+    requestEmailChangeCode,
+    verifyOldEmailCode,
+    confirmNewEmail,
+    requestPasswordCode,
     updateCompanyDetails,
     refreshAuthData,
   } = useAuth();
@@ -89,67 +93,219 @@ export const SuperAdminView: React.FC = () => {
     );
   }, [companiesList]);
 
-  // Edit Profile / Password Modal
+  // Edit Profile & Security 2-Column Modal
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [modalTab, setModalTab] = useState<'profile' | 'security' | 'sessions'>('security');
+
+  // Profile Tab States
   const [editUserName, setEditUserName] = useState('');
-  const [editUserEmail, setEditUserEmail] = useState('');
-  const [editUserPassword, setEditUserPassword] = useState('');
+  const [editUserPosition, setEditUserPosition] = useState('');
+  const [editUserPhone, setEditUserPhone] = useState('');
   const [isSavingUser, setIsSavingUser] = useState(false);
   const [editUserFeedback, setEditUserFeedback] = useState<string | null>(null);
 
-  // Edit Company Modal
-  const [editingCompany, setEditingCompany] = useState<Company | null>(null);
-  const [editCompanyName, setEditCompanyName] = useState('');
-  const [isSavingCompany, setIsSavingCompany] = useState(false);
-  const [editCompanyFeedback, setEditCompanyFeedback] = useState<string | null>(null);
+  // Security Tab States — Email Flow
+  const [isEmailFlowOpen, setIsEmailFlowOpen] = useState(false);
+  const [emailStep, setEmailStep] = useState<'step1_old' | 'step2_new'>('step1_old');
+  const [currentPassForEmail, setCurrentPassForEmail] = useState('');
+  const [oldEmailCode, setOldEmailCode] = useState(['', '', '', '', '', '']);
+  const [newEmailInput, setNewEmailInput] = useState('');
+  const [newEmailCode, setNewEmailCode] = useState(['', '', '', '', '', '']);
+  const [isSendingOldCode, setIsSendingOldCode] = useState(false);
+  const [isSendingNewCode, setIsSendingNewCode] = useState(false);
+  const [isFinalizingEmail, setIsFinalizingEmail] = useState(false);
+  const [emailFeedback, setEmailFeedback] = useState<string | null>(null);
 
-  // Quick Billing Action feedback
-  const [billingFeedback, setBillingFeedback] = useState<{ companyId: string; message: string } | null>(null);
+  // Security Tab States — Password Flow
+  const [isPassFlowOpen, setIsPassFlowOpen] = useState(false);
+  const [currentPass, setCurrentPass] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [repeatPass, setRepeatPass] = useState('');
+  const [passCode, setPassCode] = useState(['', '', '', '', '', '']);
+  const [isSendingPassCode, setIsSendingPassCode] = useState(false);
+  const [isFinalizingPass, setIsFinalizingPass] = useState(false);
+  const [passFeedback, setPassFeedback] = useState<string | null>(null);
 
-  const openEditUser = (user: UserProfile) => {
-    setEditingUser(user);
-    setEditUserName(user.fullName || '');
-    setEditUserEmail(user.email || '');
-    setEditUserPassword('');
-    setEditUserFeedback(null);
+  const resetSecurityFlows = () => {
+    setIsEmailFlowOpen(false);
+    setEmailStep('step1_old');
+    setCurrentPassForEmail('');
+    setOldEmailCode(['', '', '', '', '', '']);
+    setNewEmailInput('');
+    setNewEmailCode(['', '', '', '', '', '']);
+    setEmailFeedback(null);
+
+    setIsPassFlowOpen(false);
+    setCurrentPass('');
+    setNewPass('');
+    setRepeatPass('');
+    setPassCode(['', '', '', '', '', '']);
+    setPassFeedback(null);
   };
 
-  const handleSaveUser = async (e: React.FormEvent) => {
+  const openEditUser = (user: UserProfile, initialTab: 'profile' | 'security' | 'sessions' = 'security') => {
+    setEditingUser(user);
+    setModalTab(initialTab);
+    setEditUserName(user.fullName || '');
+    setEditUserPosition((user as any).position || (user.isSuperAdmin ? 'Владелец бизнеса (Superadmin)' : 'Партнёр компании'));
+    setEditUserPhone((user as any).phone || '+7 (999) 000-00-00');
+    setEditUserFeedback(null);
+    resetSecurityFlows();
+  };
+
+  const closeEditUserModal = () => {
+    setEditingUser(null);
+    setEditUserFeedback(null);
+    resetSecurityFlows();
+  };
+
+  const handleCodeBoxInput = (
+    index: number,
+    value: string,
+    currentArray: string[],
+    setArray: React.Dispatch<React.SetStateAction<string[]>>,
+    containerId: string
+  ) => {
+    const digit = value.slice(-1);
+    const updated = [...currentArray];
+    updated[index] = digit;
+    setArray(updated);
+    if (digit && index < 5) {
+      const container = document.getElementById(containerId);
+      if (container) {
+        const inputs = container.querySelectorAll<HTMLInputElement>('.code-box-input');
+        inputs[index + 1]?.focus();
+      }
+    }
+  };
+
+  // Handlers for Profile saving
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
     setIsSavingUser(true);
     setEditUserFeedback(null);
     try {
-      const emailChanged = editUserEmail.trim().toLowerCase() !== editingUser.email.toLowerCase();
-      const nameChanged = editUserName.trim() !== (editingUser.fullName || '');
-
-      if (emailChanged) {
-        await changeUserEmail(editingUser.id, editUserEmail.trim().toLowerCase());
-      }
-      if (nameChanged) {
-        await updateProfile(editingUser.id, {
-          fullName: editUserName.trim(),
-        });
-      }
-      if (editUserPassword.trim()) {
-        if (editUserPassword.trim().length < 6) {
-          throw new Error('Пароль должен содержать минимум 6 символов');
-        }
-        await changeUserPassword(editingUser.id, editUserPassword.trim());
-      }
+      await updateProfile(editingUser.id, {
+        fullName: editUserName.trim(),
+      });
       await refreshAuthData();
-      setEditUserFeedback('✅ Данные пользователя успешно сохранены');
-      setTimeout(() => {
-        setEditingUser(null);
-        setEditUserFeedback(null);
-        setEditUserPassword('');
-      }, 700);
+      setEditUserFeedback('✅ Личные данные успешно сохранены');
+      setTimeout(() => setEditUserFeedback(null), 3000);
     } catch (err: any) {
-      setEditUserFeedback(`Ошибка: ${err.message || 'Не удалось обновить данные'}`);
+      setEditUserFeedback(`Ошибка: ${err.message || 'Не удалось сохранить профиль'}`);
     } finally {
       setIsSavingUser(false);
     }
   };
+
+  // Handlers for Email change
+  const handleSendOldEmailCode = async () => {
+    if (!editingUser || !currentPassForEmail) return;
+    setIsSendingOldCode(true);
+    setEmailFeedback(null);
+    try {
+      await requestEmailChangeCode(editingUser.id, currentPassForEmail);
+      setEmailFeedback(`✅ Код отправлен на текущий адрес ${editingUser.email}`);
+    } catch (err: any) {
+      setEmailFeedback(`Ошибка: ${err.message || 'Не удалось отправить код'}`);
+    } finally {
+      setIsSendingOldCode(false);
+    }
+  };
+
+  const handleVerifyOldCodeAndProceed = async () => {
+    if (!editingUser) return;
+    const code = oldEmailCode.join('').trim();
+    if (code.length !== 6) {
+      setEmailFeedback('Ошибка: введите полный 6-значный проверочный код');
+      return;
+    }
+    setEmailStep('step2_new');
+    setEmailFeedback(null);
+  };
+
+  const handleSendNewEmailCode = async () => {
+    if (!editingUser || !newEmailInput.includes('@')) return;
+    setIsSendingNewCode(true);
+    setEmailFeedback(null);
+    try {
+      await verifyOldEmailCode(editingUser.id, oldEmailCode.join('').trim(), newEmailInput.trim().toLowerCase());
+      setEmailFeedback(`✅ Код подтверждения отправлен на ${newEmailInput}`);
+    } catch (err: any) {
+      setEmailFeedback(`Ошибка: ${err.message || 'Не удалось отправить код'}`);
+    } finally {
+      setIsSendingNewCode(false);
+    }
+  };
+
+  const handleConfirmNewEmail = async () => {
+    if (!editingUser) return;
+    const code = newEmailCode.join('').trim();
+    if (code.length !== 6) {
+      setEmailFeedback('Ошибка: введите полный 6-значный проверочный код с нового адреса');
+      return;
+    }
+    setIsFinalizingEmail(true);
+    setEmailFeedback(null);
+    try {
+      await confirmNewEmail(editingUser.id, newEmailInput.trim().toLowerCase(), code);
+      await refreshAuthData();
+      setEditUserFeedback(`✅ Email успешно изменён на ${newEmailInput.trim().toLowerCase()}`);
+      resetSecurityFlows();
+    } catch (err: any) {
+      setEmailFeedback(`Ошибка: ${err.message || 'Не удалось завершить смену Email'}`);
+    } finally {
+      setIsFinalizingEmail(false);
+    }
+  };
+
+  // Handlers for Password change
+  const handleSendPassCode = async () => {
+    if (!editingUser || !currentPass) return;
+    setIsSendingPassCode(true);
+    setPassFeedback(null);
+    try {
+      await requestPasswordCode(editingUser.id, currentPass);
+      setPassFeedback(`✅ Код подтверждения отправлен на ваш адрес ${editingUser.email}`);
+    } catch (err: any) {
+      setPassFeedback(`Ошибка: ${err.message || 'Не удалось отправить код'}`);
+    } finally {
+      setIsSendingPassCode(false);
+    }
+  };
+
+  const handleConfirmPasswordChange = async () => {
+    if (!editingUser) return;
+    if (newPass.length < 6) {
+      setPassFeedback('Ошибка: пароль должен содержать минимум 6 символов');
+      return;
+    }
+    if (newPass !== repeatPass) {
+      setPassFeedback('Ошибка: пароли не совпадают');
+      return;
+    }
+    const code = passCode.join('').trim();
+    setIsFinalizingPass(true);
+    setPassFeedback(null);
+    try {
+      await changeUserPassword(editingUser.id, newPass, currentPass, code || undefined);
+      await refreshAuthData();
+      setEditUserFeedback('✅ Пароль успешно обновлён');
+      resetSecurityFlows();
+    } catch (err: any) {
+      setPassFeedback(`Ошибка: ${err.message || 'Не удалось обновить пароль'}`);
+    } finally {
+      setIsFinalizingPass(false);
+    }
+  };
+
+  // Company editing & billing state
+  const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+  const [editCompanyName, setEditCompanyName] = useState('');
+  const [isSavingCompany, setIsSavingCompany] = useState(false);
+  const [editCompanyFeedback, setEditCompanyFeedback] = useState<string | null>(null);
+  const [billingFeedback, setBillingFeedback] = useState<{ companyId: string; message: string } | null>(null);
 
   const openEditCompany = (company: Company) => {
     setEditingCompany(company);
@@ -260,41 +416,52 @@ export const SuperAdminView: React.FC = () => {
             </div>
             <div>
               <div className="saas-title-row">
-                <h2 className="saas-title">Админ-панель платформы</h2>
-                <span className="saas-badge-pill">Управление платформой и биллингом</span>
+                <h2 className="saas-title">Панель управления платформой</h2>
+                <span className="saas-badge-pill">FINDOCTOR ENTERPRISE</span>
               </div>
               <p className="saas-subtitle">
-                Управление организациями, продление триалов, контроль оплат и профили пользователей
+                Централизованный биллинг, управление доступами компаний и безопасность
               </p>
             </div>
           </div>
 
           {/* User Profile Info Box */}
           <div className="saas-profile-box">
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                background: '#363330',
+                border: '1px solid #d97706',
+                color: '#fbbf24',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '13px',
+                fontWeight: 700,
+                flexShrink: 0,
+              }}
+            >
+              {currentUser?.fullName?.slice(0, 2).toUpperCase() || 'ФН'}
+            </div>
             <div className="saas-user-info">
-              <span className="saas-user-title">Администратор платформы:</span>
-              <div className="saas-user-name" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="saas-user-title">Администратор платформы</span>
+              <div className="saas-user-name">
                 <strong>{currentUser?.fullName || 'Администратор'}</strong>
-                <span className="saas-role-crown">👑 Главный админ</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                <span className="saas-company-tag" style={{ color: 'var(--muted-foreground)' }}>
-                  Email: {currentUser?.email || 'admin@gmail.com'}
-                </span>
-                {currentUser && (
-                  <button
-                    type="button"
-                    onClick={() => openEditUser(currentUser)}
-                    className="btn-action-ghost"
-                    style={{ padding: '2px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                    title="Настроить имя, email или пароль"
-                  >
-                    <Edit2 size={11} />
-                    <span>Настроить профиль</span>
-                  </button>
-                )}
               </div>
             </div>
+            {currentUser && (
+              <button
+                type="button"
+                onClick={() => openEditUser(currentUser, 'security')}
+                className="btn-gold-action"
+                title="Настройки безопасности и смена пароля"
+              >
+                <ShieldAlert size={12} />
+                <span>Безопасность</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -328,87 +495,69 @@ export const SuperAdminView: React.FC = () => {
         </button>
       </div>
 
-      {/* TAB 2: TEAM & CO-FOUNDERS */}
       {/* TAB 2: TEAM & USERS */}
       {activeTab === 'team' && (
         <div className="saas-section-grid">
-          {/* Members List */}
-          <div className="saas-card">
-            <div className="saas-card-header">
-              <div className="saas-card-title-group">
+          {/* Members Structured Table */}
+          <div className="saas-table-card">
+            <div className="saas-table-header">
+              <div className="saas-table-title">
                 <Users size={18} className="text-accent" />
-                <h3 className="saas-card-title">
-                  Пользователи платформы ({usersList.length})
-                </h3>
+                <span>Команда и пользователи платформы ({usersList.length})</span>
               </div>
             </div>
 
-            <div className="saas-card-body">
-              <div className="saas-members-grid">
-                {usersList.map((usr) => {
-                  const isCurrent = usr.id === currentUser?.id;
-                  const isSuper = usr.isSuperAdmin;
+            <div>
+              {usersList.map((usr) => {
+                const isCurrent = usr.id === currentUser?.id;
+                const isSuper = usr.isSuperAdmin;
 
-                  // Find company this user belongs to
-                  const userCo = companiesList.find((c) => c.ownerId === usr.id) ||
-                    companiesList.find((c) => (usr as any).companyId === c.id);
-                  const companyName = userCo?.name || (usr as any).companyName || (isSuper ? 'Платформа (Админ)' : 'Организация');
+                // Find company this user belongs to
+                const userCo = companiesList.find((c) => c.ownerId === usr.id) ||
+                  companiesList.find((c) => (usr as any).companyId === c.id);
+                const companyName = userCo?.name || (usr as any).companyName || (isSuper ? 'Платформа (Админ)' : 'Организация');
 
-                  return (
-                    <div key={usr.id} className="saas-member-card">
-                      <div className="saas-member-avatar-col">
-                        <div
-                          className={`saas-member-avatar ${
-                            isSuper ? 'saas-avatar-crown' : ''
-                          }`}
-                        >
-                          {isSuper ? '👑' : (usr.fullName || usr.email || 'U')[0].toUpperCase()}
-                        </div>
+                const initials = (usr.fullName || usr.email || 'U').slice(0, 2).toUpperCase();
+
+                return (
+                  <div key={usr.id} className="saas-member-row">
+                    <div className="saas-member-identity">
+                      <div className={`saas-avatar-box ${isSuper ? 'saas-avatar-crown' : 'saas-avatar-blue'}`}>
+                        {isSuper ? '👑' : initials}
                       </div>
-
-                      <div className="saas-member-details">
-                        <div className="saas-member-name-row">
-                          <span className="saas-member-name">
-                            {usr.fullName || usr.email.split('@')[0]}
-                          </span>
+                      <div className="saas-member-text-col">
+                        <div className="saas-member-name-text">
+                          <span>{usr.fullName || usr.email.split('@')[0]}</span>
                           {isCurrent && <span className="saas-badge-you">Это вы</span>}
                         </div>
-                        <span className="saas-member-email">{usr.email}</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-                          <span className="saas-member-role-badge">
-                            {isSuper ? '👑 Суперадминистратор' : 'Владелец бизнеса'}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: '0.72rem',
-                              color: 'var(--muted-foreground, #78716c)',
-                              background: 'var(--muted, #f4f3f1)',
-                              padding: '2px 7px',
-                              borderRadius: '6px',
-                              border: '1px solid var(--border, #e7e5e2)',
-                            }}
-                          >
-                            🏢 {companyName}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
-                        <button
-                          type="button"
-                          onClick={() => openEditUser(usr)}
-                          className="btn-action-ghost"
-                          style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-                          title="Редактировать имя, email или пароль"
-                        >
-                          <Edit2 size={13} />
-                          <span>Настроить</span>
-                        </button>
+                        <span className="saas-member-email-text">{usr.email}</span>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+
+                    <div>
+                      <span className={isSuper ? 'saas-pill-gold' : 'saas-pill-blue'}>
+                        {isSuper ? '👑 Владелец бизнеса' : 'Партнёр / Сооснователь'}
+                      </span>
+                    </div>
+
+                    <div className="saas-company-pill">
+                      <span>🏢 {companyName}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button
+                        type="button"
+                        onClick={() => openEditUser(usr)}
+                        className="btn-member-action"
+                        title="Редактировать имя, email или пароль"
+                      >
+                        <Edit2 size={12} />
+                        <span>Настроить</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -818,102 +967,521 @@ export const SuperAdminView: React.FC = () => {
         </div>
       )}
 
-      {/* Modal: Edit User Profile */}
+      {/* Modal: 2-Column User Profile & Security Center */}
       {editingUser && (
-        <div className="modal-backdrop animate-fade-in" onClick={() => setEditingUser(null)} role="presentation">
+        <div className="modal-backdrop animate-fade-in" onClick={closeEditUserModal} role="presentation">
           <div
-            className="quick-entry-bottom-sheet animate-slide-up"
-            style={{ maxWidth: '440px', margin: 'auto' }}
+            className="modal-dialog-2col animate-slide-up"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
+            aria-modal="true"
           >
-            <div className="modal-header-row">
-              <div>
-                <h3 className="modal-title">Настройка профиля сотрудника</h3>
-                <p className="modal-subtitle">Изменение отображаемого имени и контактного email</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditingUser(null)}
-                className="btn-modal-close"
-                aria-label="Закрыть"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {editUserFeedback && (
-              <div
-                className={`saas-alert ${editUserFeedback.startsWith('Ошибка') ? 'saas-alert-error' : 'saas-alert-success'}`}
-                style={{ marginTop: '12px' }}
-              >
-                <span>{editUserFeedback}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSaveUser} className="saas-form" style={{ marginTop: '16px' }}>
-              <div className="saas-field-group">
-                <label className="saas-label">Имя и фамилия / Должность</label>
-                <input
-                  type="text"
-                  required
-                  value={editUserName}
-                  onChange={(e) => setEditUserName(e.target.value)}
-                  className="saas-input"
-                  placeholder="Например, Никита или Влад"
-                />
-              </div>
-
-              <div className="saas-field-group">
-                <label className="saas-label">Рабочий Email</label>
-                <input
-                  type="email"
-                  required
-                  value={editUserEmail}
-                  onChange={(e) => setEditUserEmail(e.target.value)}
-                  className="saas-input"
-                  placeholder="user@truespace.ru"
-                />
-              </div>
-
-              <div className="saas-field-group">
-                <label className="saas-label">
-                  <span>Новый пароль</span>
-                  <span className="saas-label-hint">Оставьте пустым, если не меняется</span>
-                </label>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <input
-                    type="password"
-                    value={editUserPassword}
-                    onChange={(e) => setEditUserPassword(e.target.value)}
-                    className="saas-input"
-                    placeholder="Минимум 6 символов"
-                    autoComplete="new-password"
-                  />
-                  <div style={{ position: 'absolute', right: '12px', color: 'var(--muted-foreground)', pointerEvents: 'none' }}>
-                    <KeyRound size={15} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="saas-form-actions" style={{ marginTop: '20px' }}>
+            {/* Left Sidebar */}
+            <div className="modal-sidebar-menu">
+              <div className="sidebar-menu-list">
+                <div className="sidebar-menu-label">Настройки аккаунта</div>
                 <button
                   type="button"
-                  onClick={() => setEditingUser(null)}
-                  className="btn-action-outline"
+                  onClick={() => { resetSecurityFlows(); setModalTab('profile'); }}
+                  className={`sidebar-menu-item ${modalTab === 'profile' ? 'active' : ''}`}
                 >
-                  Отмена
+                  <Users size={14} />
+                  <span>Личные данные</span>
                 </button>
                 <button
-                  type="submit"
-                  disabled={isSavingUser}
-                  className="btn-primary-gradient"
+                  type="button"
+                  onClick={() => { resetSecurityFlows(); setModalTab('security'); }}
+                  className={`sidebar-menu-item ${modalTab === 'security' ? 'active' : ''}`}
                 >
-                  <Check size={14} />
-                  <span>{isSavingUser ? 'Сохранение...' : 'Сохранить изменения'}</span>
+                  <Lock size={14} />
+                  <span>Безопасность и пароль</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { resetSecurityFlows(); setModalTab('sessions'); }}
+                  className={`sidebar-menu-item ${modalTab === 'sessions' ? 'active' : ''}`}
+                >
+                  <Laptop size={14} />
+                  <span>Активные сессии</span>
                 </button>
               </div>
-            </form>
+
+              <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', paddingLeft: '10px' }}>
+                Пользователь: <code>{editingUser.id}</code>
+              </div>
+            </div>
+
+            {/* Right Content Column */}
+            <div className="modal-content-column">
+              <div>
+                <div className="modal-content-top">
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--foreground)' }}>
+                      {modalTab === 'profile' && 'Личные данные профиля'}
+                      {modalTab === 'security' && 'Безопасность и пароль'}
+                      {modalTab === 'sessions' && 'Активные сессии'}
+                    </h3>
+                    <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: 'var(--muted-foreground)' }}>
+                      {modalTab === 'profile' && 'Управление именем и должностью сотрудника'}
+                      {modalTab === 'security' && 'Управление рабочим адресом почты и учетными данными'}
+                      {modalTab === 'sessions' && 'Устройства, на которых выполнен вход в систему'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeEditUserModal}
+                    className="btn-modal-close"
+                    aria-label="Закрыть"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {editUserFeedback && (
+                  <div
+                    className={`saas-alert ${editUserFeedback.startsWith('Ошибка') ? 'saas-alert-error' : 'saas-alert-success'}`}
+                    style={{ marginBottom: '14px' }}
+                  >
+                    {editUserFeedback.startsWith('Ошибка') ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />}
+                    <span>{editUserFeedback}</span>
+                  </div>
+                )}
+
+                {/* TAB 1: PROFILE */}
+                {modalTab === 'profile' && (
+                  <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div className="saas-field-group">
+                      <label className="saas-label">Имя и фамилия</label>
+                      <input
+                        type="text"
+                        required
+                        value={editUserName}
+                        onChange={(e) => setEditUserName(e.target.value)}
+                        className="saas-input"
+                        placeholder="Например, Алексей Смирнов"
+                      />
+                    </div>
+
+                    <div className="saas-field-group">
+                      <label className="saas-label">Должность в компании</label>
+                      <input
+                        type="text"
+                        value={editUserPosition}
+                        onChange={(e) => setEditUserPosition(e.target.value)}
+                        className="saas-input"
+                        placeholder="Например, Старший бармен или Сооснователь"
+                      />
+                    </div>
+
+                    <div className="saas-field-group">
+                      <label className="saas-label">Контактный телефон</label>
+                      <input
+                        type="text"
+                        value={editUserPhone}
+                        onChange={(e) => setEditUserPhone(e.target.value)}
+                        className="saas-input"
+                        placeholder="+7 (999) 000-00-00"
+                      />
+                    </div>
+
+                    <div className="saas-field-group">
+                      <label className="saas-label">Основная организация</label>
+                      <input
+                        type="text"
+                        value={currentCompany?.name || 'Организация'}
+                        readOnly
+                        style={{ background: 'var(--muted, #f4f3f1)', cursor: 'not-allowed' }}
+                        className="saas-input"
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                      <button
+                        type="button"
+                        onClick={closeEditUserModal}
+                        className="btn-action-outline"
+                      >
+                        Отмена
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSavingUser}
+                        className="btn-primary-gradient"
+                      >
+                        <Check size={14} />
+                        <span>{isSavingUser ? 'Сохранение...' : 'Сохранить личные данные'}</span>
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* TAB 2: SECURITY & PASSWORDS */}
+                {modalTab === 'security' && (
+                  <div>
+                    {/* Card 1: Email Change with Dual-Verification Protection */}
+                    <div className="sec-card-box">
+                      <div className="sec-card-head-row">
+                        <div>
+                          <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--foreground)' }}>Основной адрес Email</div>
+                          <div style={{ fontSize: '12.5px', color: 'var(--muted-foreground)', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <strong>{editingUser.email}</strong>
+                            <span style={{ fontSize: '11px', color: '#059669', background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '1px 6px', borderRadius: '4px' }}>
+                              ✅ Подтверждён
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isEmailFlowOpen) {
+                              resetSecurityFlows();
+                            } else {
+                              resetSecurityFlows();
+                              setIsEmailFlowOpen(true);
+                            }
+                          }}
+                          className="btn-action-small"
+                        >
+                          {isEmailFlowOpen ? 'Свернуть' : 'Изменить email'}
+                        </button>
+                      </div>
+
+                      {/* Expandable Flow: Step 1 (Old Email Verification) */}
+                      {isEmailFlowOpen && emailStep === 'step1_old' && (
+                        <div className="flow-step-box">
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700, color: '#92400e', background: '#fef3c7', border: '1px solid #fde68a', padding: '2px 8px', borderRadius: '4px', width: 'fit-content' }}>
+                            Шаг 1 из 2: Подтверждение текущего владельца
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--muted-foreground)', lineHeight: 1.4 }}>
+                            Для защиты от угона аккаунта введите ваш текущий пароль и запросите защитный код на текущую почту <strong>{editingUser.email}</strong>.
+                          </div>
+
+                          <div className="saas-field-group">
+                            <label className="saas-label">Текущий пароль</label>
+                            <input
+                              type="password"
+                              value={currentPassForEmail}
+                              onChange={(e) => setCurrentPassForEmail(e.target.value)}
+                              placeholder="Введите текущий пароль"
+                              className="saas-input"
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={handleSendOldEmailCode}
+                              disabled={isSendingOldCode || !currentPassForEmail}
+                              className="btn-action-small"
+                            >
+                              {isSendingOldCode ? 'Отправка...' : 'Выслать код на старую почту'}
+                            </button>
+                          </div>
+
+                          {emailFeedback && (
+                            <div style={{ fontSize: '12px', color: emailFeedback.startsWith('Ошибка') ? '#dc2626' : '#059669' }}>
+                              {emailFeedback}
+                            </div>
+                          )}
+
+                          <div id="old-code-box-container" style={{ marginTop: '4px' }}>
+                            <span style={{ fontSize: '11.5px', color: 'var(--muted-foreground)', display: 'block', marginBottom: '5px' }}>
+                              Введите 6-значный код из письма:
+                            </span>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              {oldEmailCode.map((val, idx) => (
+                                <input
+                                  key={idx}
+                                  type="text"
+                                  maxLength={1}
+                                  value={val}
+                                  onChange={(e) => handleCodeBoxInput(idx, e.target.value, oldEmailCode, setOldEmailCode, 'old-code-box-container')}
+                                  className="code-box-input"
+                                />
+                              ))}
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                              <button
+                                type="button"
+                                onClick={handleVerifyOldCodeAndProceed}
+                                disabled={oldEmailCode.join('').length !== 6}
+                                className="btn-primary-gradient"
+                                style={{ padding: '6px 14px', fontSize: '12px' }}
+                              >
+                                Подтвердить и ввести новый Email →
+                              </button>
+                              <button
+                                type="button"
+                                onClick={resetSecurityFlows}
+                                className="btn-action-outline"
+                                style={{ padding: '6px 12px', fontSize: '12px' }}
+                              >
+                                Отмена
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Expandable Flow: Step 2 (New Email Verification) */}
+                      {isEmailFlowOpen && emailStep === 'step2_new' && (
+                        <div className="flow-step-box">
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700, color: '#1d4ed8', background: '#eff6ff', border: '1px solid #bfdbfe', padding: '2px 8px', borderRadius: '4px', width: 'fit-content' }}>
+                            Шаг 2 из 2: Привязка нового адреса
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--muted-foreground)', lineHeight: 1.4 }}>
+                            Старый адрес подтверждён! Теперь укажите новый рабочий Email и подтвердите доступ к нему.
+                          </div>
+
+                          <div className="saas-field-group">
+                            <label className="saas-label">Новый адрес Email</label>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <input
+                                type="email"
+                                value={newEmailInput}
+                                onChange={(e) => setNewEmailInput(e.target.value)}
+                                placeholder="например, partner@findoctor.ru"
+                                className="saas-input"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleSendNewEmailCode}
+                                disabled={isSendingNewCode || !newEmailInput.includes('@')}
+                                className="btn-action-small"
+                              >
+                                {isSendingNewCode ? 'Отправка...' : 'Выслать код'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {emailFeedback && (
+                            <div style={{ fontSize: '12px', color: emailFeedback.startsWith('Ошибка') ? '#dc2626' : '#059669' }}>
+                              {emailFeedback}
+                            </div>
+                          )}
+
+                          <div id="new-code-box-container" style={{ marginTop: '4px' }}>
+                            <span style={{ fontSize: '11.5px', color: 'var(--muted-foreground)', display: 'block', marginBottom: '5px' }}>
+                              Введите код подтверждения с нового адреса:
+                            </span>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              {newEmailCode.map((val, idx) => (
+                                <input
+                                  key={idx}
+                                  type="text"
+                                  maxLength={1}
+                                  value={val}
+                                  onChange={(e) => handleCodeBoxInput(idx, e.target.value, newEmailCode, setNewEmailCode, 'new-code-box-container')}
+                                  className="code-box-input"
+                                />
+                              ))}
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                              <button
+                                type="button"
+                                onClick={handleConfirmNewEmail}
+                                disabled={isFinalizingEmail || newEmailCode.join('').length !== 6}
+                                className="btn-primary-gradient"
+                                style={{ padding: '6px 14px', fontSize: '12px' }}
+                              >
+                                {isFinalizingEmail ? 'Сохранение...' : 'Завершить смену Email'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={resetSecurityFlows}
+                                className="btn-action-outline"
+                                style={{ padding: '6px 12px', fontSize: '12px' }}
+                              >
+                                Отмена
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Card 2: Password Change */}
+                    <div className="sec-card-box">
+                      <div className="sec-card-head-row">
+                        <div>
+                          <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--foreground)' }}>Пароль учётной записи</div>
+                          <div style={{ fontSize: '12.5px', color: 'var(--muted-foreground)', marginTop: '3px' }}>
+                            •••••••••••••••• (активен)
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isPassFlowOpen) {
+                              resetSecurityFlows();
+                            } else {
+                              resetSecurityFlows();
+                              setIsPassFlowOpen(true);
+                            }
+                          }}
+                          className="btn-action-small"
+                        >
+                          {isPassFlowOpen ? 'Свернуть' : 'Сменить пароль'}
+                        </button>
+                      </div>
+
+                      {/* Expandable Password Form */}
+                      {isPassFlowOpen && (
+                        <div className="flow-step-box">
+                          <div className="saas-field-group">
+                            <label className="saas-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span>Текущий пароль</span>
+                              <span
+                                style={{ fontSize: '11.5px', color: '#2563eb', cursor: 'pointer', textDecoration: 'underline' }}
+                                onClick={() => alert('Для сброса пароля выйдите из аккаунта и на странице входа нажмите «Забыли пароль?» — код сброса придёт на ваш email.')}
+                              >
+                                Забыли пароль?
+                              </span>
+                            </label>
+                            <input
+                              type="password"
+                              value={currentPass}
+                              onChange={(e) => setCurrentPass(e.target.value)}
+                              placeholder="Введите текущий пароль"
+                              className="saas-input"
+                            />
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                            <div className="saas-field-group">
+                              <label className="saas-label">Новый пароль</label>
+                              <input
+                                type="password"
+                                value={newPass}
+                                onChange={(e) => setNewPass(e.target.value)}
+                                placeholder="Минимум 6 символов"
+                                className="saas-input"
+                              />
+                            </div>
+                            <div className="saas-field-group">
+                              <label className="saas-label">Повторите пароль</label>
+                              <input
+                                type="password"
+                                value={repeatPass}
+                                onChange={(e) => setRepeatPass(e.target.value)}
+                                placeholder="Повторите новый"
+                                className="saas-input"
+                              />
+                            </div>
+                          </div>
+
+                          <div style={{ padding: '10px', background: 'var(--muted, #f4f3f1)', borderRadius: '6px', border: '1px solid var(--border, #e7e5e2)' }}>
+                            <div style={{ fontSize: '11.5px', color: 'var(--foreground)', fontWeight: 600, marginBottom: '4px' }}>
+                              🛡️ Защита от взлома: подтверждение через почту
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginBottom: '8px' }}>
+                              На ваш email <strong>{editingUser.email}</strong> будет отправлен 6-значный проверочный код.
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                type="button"
+                                onClick={handleSendPassCode}
+                                disabled={isSendingPassCode || !currentPass}
+                                className="btn-action-small"
+                              >
+                                {isSendingPassCode ? 'Отправка...' : 'Выслать код подтверждения'}
+                              </button>
+                            </div>
+
+                            {passFeedback && (
+                              <div style={{ fontSize: '12px', marginTop: '6px', color: passFeedback.startsWith('Ошибка') ? '#dc2626' : '#059669' }}>
+                                {passFeedback}
+                              </div>
+                            )}
+
+                            <div id="pass-code-box-container" style={{ marginTop: '8px' }}>
+                              <span style={{ fontSize: '11px', color: 'var(--muted-foreground)', display: 'block', marginBottom: '4px' }}>
+                                Код из письма:
+                              </span>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                {passCode.map((val, idx) => (
+                                  <input
+                                    key={idx}
+                                    type="text"
+                                    maxLength={1}
+                                    value={val}
+                                    onChange={(e) => handleCodeBoxInput(idx, e.target.value, passCode, setPassCode, 'pass-code-box-container')}
+                                    className="code-box-input"
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={handleConfirmPasswordChange}
+                              disabled={isFinalizingPass || !newPass || newPass !== repeatPass}
+                              className="btn-primary-gradient"
+                              style={{ padding: '6px 14px', fontSize: '12px' }}
+                            >
+                              {isFinalizingPass ? 'Обновление...' : 'Обновить пароль'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={resetSecurityFlows}
+                              className="btn-action-outline"
+                              style={{ padding: '6px 12px', fontSize: '12px' }}
+                            >
+                              Отмена
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 3: SESSIONS */}
+                {modalTab === 'sessions' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ padding: '12px 14px', border: '1px solid var(--border, #e7e5e2)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 600 }}>Windows 11 • Google Chrome</div>
+                        <div style={{ fontSize: '11.5px', color: 'var(--muted-foreground)' }}>IP: 127.0.0.1 • Активно прямо сейчас</div>
+                      </div>
+                      <span style={{ fontSize: '11px', background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', padding: '2px 8px', borderRadius: '9999px', fontWeight: 600 }}>
+                        Текущая сессия
+                      </span>
+                    </div>
+
+                    <div style={{ padding: '12px 14px', border: '1px solid var(--border, #e7e5e2)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 600 }}>Mobile Safari • iOS Device</div>
+                        <div style={{ fontSize: '11.5px', color: 'var(--muted-foreground)' }}>В сети сегодня</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => alert('Сессия на мобильном устройстве завершена')}
+                        className="btn-action-small"
+                        style={{ color: '#dc2626' }}
+                      >
+                        Отозвать
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Bottom Actions */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '16px', borderTop: '1px solid var(--border, #e7e5e2)', marginTop: '20px' }}>
+                <button
+                  type="button"
+                  onClick={closeEditUserModal}
+                  className="btn-action-outline"
+                >
+                  Закрыть
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
