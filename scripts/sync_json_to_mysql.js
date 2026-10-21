@@ -50,12 +50,14 @@ async function main() {
     console.log(`[Sync] Migrating ${data.companies.length} companies...`);
     for (const c of data.companies) {
       await connection.query(`
-        INSERT INTO companies (id, name, slug, plan, is_active, owner_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO companies (id, name, slug, plan, trial_ends_at, paid_until, is_active, owner_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
           name = VALUES(name),
           slug = VALUES(slug),
           plan = VALUES(plan),
+          trial_ends_at = VALUES(trial_ends_at),
+          paid_until = VALUES(paid_until),
           is_active = VALUES(is_active),
           owner_id = VALUES(owner_id),
           updated_at = VALUES(updated_at)
@@ -64,6 +66,8 @@ async function main() {
         c.name,
         c.slug || '',
         c.plan || 'pro',
+        c.trialEndsAt || null,
+        c.paidUntil || null,
         c.isActive !== false ? 1 : 0,
         c.ownerId || null,
         c.createdAt || new Date().toISOString(),

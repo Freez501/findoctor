@@ -8,7 +8,7 @@
  * 3. Team & Co-founder Permissions (Nikita as SuperAdmin, Vlad as Co-founder, staff invites)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -17,16 +17,13 @@ import {
   UserPlus,
   ArrowRight,
   Crown,
-  Copy,
   Check,
-  Download,
-  Upload,
   Edit2,
   X,
   Trash2,
+  KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
-import { api } from '../../api/apiClient.js';
 import { UserRole, Company, UserProfile } from '../../../shared/types.js';
 
 type AdminTab = 'companies' | 'team';
@@ -37,12 +34,13 @@ export const SuperAdminView: React.FC = () => {
     usersList,
     currentCompany,
     companiesList,
-    companyMembers,
     switchCompany,
     createCompany,
     deleteCompany,
     inviteMember,
     updateProfile,
+    changeUserEmail,
+    changeUserPassword,
     updateCompanyDetails,
     refreshAuthData,
   } = useAuth();
@@ -82,10 +80,18 @@ export const SuperAdminView: React.FC = () => {
     }
   };
 
-  // Edit Profile Modal
+  // Filter out platform and test companies
+  const clientCompanies = useMemo(() => {
+    return companiesList.filter(
+      (co) => co.id !== 'company_truespace_default' && co.id !== 'company_platform_admin' && co.slug !== 'truespace-catering'
+    );
+  }, [companiesList]);
+
+  // Edit Profile / Password Modal
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [editUserName, setEditUserName] = useState('');
   const [editUserEmail, setEditUserEmail] = useState('');
+  const [editUserPassword, setEditUserPassword] = useState('');
   const [isSavingUser, setIsSavingUser] = useState(false);
   const [editUserFeedback, setEditUserFeedback] = useState<string | null>(null);
 
@@ -95,10 +101,14 @@ export const SuperAdminView: React.FC = () => {
   const [isSavingCompany, setIsSavingCompany] = useState(false);
   const [editCompanyFeedback, setEditCompanyFeedback] = useState<string | null>(null);
 
+  // Quick Billing Action feedback
+  const [billingFeedback, setBillingFeedback] = useState<{ companyId: string; message: string } | null>(null);
+
   const openEditUser = (user: UserProfile) => {
     setEditingUser(user);
     setEditUserName(user.fullName || '');
     setEditUserEmail(user.email || '');
+    setEditUserPassword('');
     setEditUserFeedback(null);
   };
 
@@ -108,17 +118,32 @@ export const SuperAdminView: React.FC = () => {
     setIsSavingUser(true);
     setEditUserFeedback(null);
     try {
-      await updateProfile(editingUser.id, {
-        fullName: editUserName.trim(),
-        email: editUserEmail.trim(),
-      });
-      setEditUserFeedback('✅ Профиль успешно обновлён');
+      const emailChanged = editUserEmail.trim().toLowerCase() !== editingUser.email.toLowerCase();
+      const nameChanged = editUserName.trim() !== (editingUser.fullName || '');
+
+      if (emailChanged) {
+        await changeUserEmail(editingUser.id, editUserEmail.trim().toLowerCase());
+      }
+      if (nameChanged) {
+        await updateProfile(editingUser.id, {
+          fullName: editUserName.trim(),
+        });
+      }
+      if (editUserPassword.trim()) {
+        if (editUserPassword.trim().length < 6) {
+          throw new Error('Пароль должен содержать минимум 6 символов');
+        }
+        await changeUserPassword(editingUser.id, editUserPassword.trim());
+      }
+      await refreshAuthData();
+      setEditUserFeedback('✅ Данные пользователя успешно сохранены');
       setTimeout(() => {
         setEditingUser(null);
         setEditUserFeedback(null);
-      }, 600);
+        setEditUserPassword('');
+      }, 700);
     } catch (err: any) {
-      setEditUserFeedback(`Ошибка: ${err.message || 'Не удалось обновить профиль'}`);
+      setEditUserFeedback(`Ошибка: ${err.message || 'Не удалось обновить данные'}`);
     } finally {
       setIsSavingUser(false);
     }
@@ -151,18 +176,6 @@ export const SuperAdminView: React.FC = () => {
     }
   };
 
-  // Supabase compact status & pull state
-  const [cloudStatus, setCloudStatus] = useState<{ isConfigured: boolean; mode: string; message: string }>({
-    isConfigured: false,
-    mode: 'local',
-    message: 'Загрузка статуса подключения...',
-  });
-  const [isPulling, setIsPulling] = useState<boolean>(false);
-  const [isPushing, setIsPushing] = useState<boolean>(false);
-  const [pullResult, setPullResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [isCopiedSql, setIsCopiedSql] = useState<boolean>(false);
-  const [copyingSql, setCopyingSql] = useState<boolean>(false);
-
   // Invite state
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
@@ -175,109 +188,6 @@ export const SuperAdminView: React.FC = () => {
   const [newCompanyPlan, setNewCompanyPlan] = useState<'free' | 'starter' | 'pro'>('pro');
   const [isCreatingCo, setIsCreatingCo] = useState(false);
   const [companyFeedback, setCompanyFeedback] = useState<string | null>(null);
-
-  // Load initial Supabase status
-  const loadSupabaseStatus = async () => {
-    try {
-      const res = await api.getSupabaseStatus();
-      setCloudStatus(res);
-    } catch {
-      setCloudStatus({
-        isConfigured: false,
-        mode: 'local',
-        message: 'Автономный локальный режим (data/truespace.json)',
-      });
-    }
-  };
-
-  useEffect(() => {
-    loadSupabaseStatus();
-  }, []);
-
-  // Handle Copy SQL
-  const handleCopySql = async () => {
-    setCopyingSql(true);
-    try {
-      const res = await api.getSupabaseSql();
-      if (res.success && res.sql) {
-        await navigator.clipboard.writeText(res.sql);
-        setIsCopiedSql(true);
-        setTimeout(() => setIsCopiedSql(false), 4000);
-      } else {
-        alert('Файл supabase.sql скопирован в корневую папку проекта.');
-      }
-    } catch (err: any) {
-      alert(`Ошибка копирования: ${err.message}`);
-    } finally {
-      setCopyingSql(false);
-    }
-  };
-
-  // Handle Push local data to Supabase
-  const handlePushToSupabase = async () => {
-    if (!window.confirm('Выгрузить все локальные данные (организации, сотрудники, счета, операции) в облако Supabase?')) {
-      return;
-    }
-
-    setIsPushing(true);
-    setPullResult(null);
-    try {
-      const res = await api.syncToSupabase();
-      if (res.success) {
-        setPullResult({
-          success: true,
-          message: `${res.message} (Организаций: ${res.counts?.companies || 0}, Счетов: ${res.counts?.accounts || 0}, Операций: ${res.counts?.transactions || 0})`,
-        });
-      } else {
-        setPullResult({
-          success: false,
-          message: res.error || 'Ошибка выгрузки в Supabase',
-        });
-      }
-    } catch (err: any) {
-      setPullResult({
-        success: false,
-        message: err.message || 'Ошибка связи с сервером',
-      });
-    } finally {
-      setIsPushing(false);
-    }
-  };
-
-  // Handle Pull data from Supabase
-  const handlePullFromSupabase = async () => {
-    if (!window.confirm('Загрузить все данные из облака Supabase? Это обновит локальные счета, операции и мероприятия на этом устройстве до актуального состояния из облака.')) {
-      return;
-    }
-
-    setIsPulling(true);
-    setPullResult(null);
-    try {
-      const res = await api.pullFromSupabase();
-
-      if (res.success) {
-        setPullResult({
-          success: true,
-          message: `${res.message} (Счетов: ${res.counts?.accounts || 0}, Операций: ${res.counts?.transactions || 0}, Мероприятий: ${res.counts?.events || 0}). Страница сейчас обновится...`,
-        });
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
-      } else {
-        setPullResult({
-          success: false,
-          message: res.error || 'Ошибка загрузки данных из Supabase',
-        });
-      }
-    } catch (err: any) {
-      setPullResult({
-        success: false,
-        message: err.message || 'Ошибка связи с сервером',
-      });
-    } finally {
-      setIsPulling(false);
-    }
-  };
 
   // Handle invite member
   const handleInviteSubmit = async (e: React.FormEvent) => {
@@ -330,7 +240,7 @@ export const SuperAdminView: React.FC = () => {
                 <span className="saas-badge-pill">Управление платформой и биллингом</span>
               </div>
               <p className="saas-subtitle">
-                Управление организациями, продление триалов, контроль оплат и база данных Supabase
+                Управление организациями, продление триалов, контроль оплат и профили пользователей
               </p>
             </div>
           </div>
@@ -353,7 +263,7 @@ export const SuperAdminView: React.FC = () => {
                     onClick={() => openEditUser(currentUser)}
                     className="btn-action-ghost"
                     style={{ padding: '2px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                    title="Настроить имя и email"
+                    title="Настроить имя, email или пароль"
                   >
                     <Edit2 size={11} />
                     <span>Настроить профиль</span>
@@ -365,85 +275,11 @@ export const SuperAdminView: React.FC = () => {
         </div>
       </div>
 
-      {/* Compact Cloud & SaaS Status Pill */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px',
-          padding: '12px 18px',
-          background: 'var(--card-bg, #ffffff)',
-          borderRadius: '12px',
-          border: '1px solid var(--border-color, #e7e5e4)',
-          marginBottom: '16px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
-          <span
-            style={{
-              width: '9px',
-              height: '9px',
-              borderRadius: '50%',
-              background: cloudStatus.isConfigured ? '#10b981' : '#f59e0b',
-              display: 'inline-block',
-            }}
-          />
-          <span style={{ fontWeight: 600 }}>
-            {cloudStatus.isConfigured ? '🟢 База Supabase Cloud активна' : '🟡 Автономный локальный режим'}
-          </span>
-          <span style={{ color: 'var(--muted-foreground, #78716c)', fontSize: '12px' }}>
-            {cloudStatus.isConfigured ? '• Синхронизируется автоматически' : '• data/truespace.json'}
-          </span>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button
-            type="button"
-            onClick={handlePushToSupabase}
-            disabled={isPushing}
-            className="btn-action-primary"
-            style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            title="Выгрузить все локальные компании, пользователей и счета в Supabase"
-          >
-            <Upload size={13} />
-            <span>{isPushing ? 'Выгрузка...' : '📤 Выгрузить в Supabase'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handlePullFromSupabase}
-            disabled={isPulling}
-            className="btn-action-outline"
-            style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            title="Загрузить свежие данные из Supabase в приложение"
-          >
-            <Download size={13} />
-            <span>{isPulling ? 'Загрузка...' : '📥 Загрузить из Supabase'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleCopySql}
-            disabled={copyingSql}
-            className="btn-action-ghost"
-            style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            title="Скопировать SQL код для Supabase"
-          >
-            {isCopiedSql ? <Check size={13} style={{ color: '#10b981' }} /> : <Copy size={13} />}
-            <span>{isCopiedSql ? 'Скопировано' : '📋 Скопировать SQL'}</span>
-          </button>
-        </div>
-      </div>
-
-      {pullResult && (
-        <div
-          className={`saas-alert ${pullResult.success ? 'saas-alert-success' : 'saas-alert-error'}`}
-          style={{ marginBottom: '16px' }}
-        >
-          {pullResult.success ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
-          <span>{pullResult.message}</span>
+      {/* Quick feedback banner for billing actions */}
+      {billingFeedback && (
+        <div className="saas-alert saas-alert-success animate-fade-in" style={{ marginBottom: '16px' }}>
+          <CheckCircle2 size={16} />
+          <span>{billingFeedback.message}</span>
         </div>
       )}
 
@@ -455,7 +291,7 @@ export const SuperAdminView: React.FC = () => {
           className={`saas-tab-item ${activeTab === 'companies' ? 'saas-tab-item-active' : ''}`}
         >
           <Building2 size={17} />
-          <span>Организации и компании ({companiesList.length})</span>
+          <span>Организации и компании ({clientCompanies.length})</span>
         </button>
 
         <button
@@ -464,11 +300,12 @@ export const SuperAdminView: React.FC = () => {
           className={`saas-tab-item ${activeTab === 'team' ? 'saas-tab-item-active' : ''}`}
         >
           <Users size={17} />
-          <span>Команда и профили ({companyMembers.length || 2})</span>
+          <span>Команда и пользователи ({usersList.length})</span>
         </button>
       </div>
 
       {/* TAB 2: TEAM & CO-FOUNDERS */}
+      {/* TAB 2: TEAM & USERS */}
       {activeTab === 'team' && (
         <div className="saas-section-grid">
           {/* Members List */}
@@ -477,60 +314,68 @@ export const SuperAdminView: React.FC = () => {
               <div className="saas-card-title-group">
                 <Users size={18} className="text-accent" />
                 <h3 className="saas-card-title">
-                  Участники организации «{currentCompany?.name}»
+                  Пользователи платформы ({usersList.length})
                 </h3>
               </div>
             </div>
 
             <div className="saas-card-body">
               <div className="saas-members-grid">
-                {companyMembers.map((m) => {
-                  const isCurrent = m.membership.userId === currentUser?.id;
-                  const isSuper = m.membership.role === 'super_admin';
-                  const isOwner = m.membership.role === 'owner';
+                {usersList.map((usr) => {
+                  const isCurrent = usr.id === currentUser?.id;
+                  const isSuper = usr.isSuperAdmin;
 
-                  const roleTitle: Record<string, string> = {
-                    super_admin: 'Суперадминистратор платформы',
-                    owner: 'Владелец / Сооснователь',
-                    admin: 'Администратор',
-                    staff: 'Сотрудник / Бармен',
-                  };
+                  // Find company this user belongs to
+                  const userCo = companiesList.find((c) => c.ownerId === usr.id) ||
+                    companiesList.find((c) => (usr as any).companyId === c.id);
+                  const companyName = userCo?.name || (usr as any).companyName || (isSuper ? 'Платформа (Админ)' : 'Организация');
 
                   return (
-                    <div key={m.membership.id} className="saas-member-card">
+                    <div key={usr.id} className="saas-member-card">
                       <div className="saas-member-avatar-col">
                         <div
                           className={`saas-member-avatar ${
-                            isSuper ? 'saas-avatar-crown' : isOwner ? 'saas-avatar-gold' : ''
+                            isSuper ? 'saas-avatar-crown' : ''
                           }`}
                         >
-                          {isSuper ? '👑' : isOwner ? '🍸' : (m.user?.fullName || 'U')[0].toUpperCase()}
+                          {isSuper ? '👑' : (usr.fullName || usr.email || 'U')[0].toUpperCase()}
                         </div>
                       </div>
 
                       <div className="saas-member-details">
                         <div className="saas-member-name-row">
                           <span className="saas-member-name">
-                            {m.user?.fullName || m.membership.userId}
+                            {usr.fullName || usr.email.split('@')[0]}
                           </span>
                           {isCurrent && <span className="saas-badge-you">Это вы</span>}
                         </div>
-                        <span className="saas-member-email">{m.user?.email || 'Локальный профиль'}</span>
-                        <span className="saas-member-role-badge">
-                          {roleTitle[m.membership.role] || m.membership.role}
-                        </span>
+                        <span className="saas-member-email">{usr.email}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                          <span className="saas-member-role-badge">
+                            {isSuper ? '👑 Суперадминистратор' : 'Владелец бизнеса'}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '0.72rem',
+                              color: 'var(--muted-foreground, #78716c)',
+                              background: 'var(--muted, #f4f3f1)',
+                              padding: '2px 7px',
+                              borderRadius: '6px',
+                              border: '1px solid var(--border, #e7e5e2)',
+                            }}
+                          >
+                            🏢 {companyName}
+                          </span>
+                        </div>
                       </div>
 
                       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
                         <button
                           type="button"
-                          onClick={() => {
-                            const u = m.user || usersList.find((usr) => usr.id === m.membership.userId);
-                            if (u) openEditUser(u);
-                          }}
+                          onClick={() => openEditUser(usr)}
                           className="btn-action-ghost"
                           style={{ padding: '6px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-                          title="Редактировать имя и email сотрудника"
+                          title="Редактировать имя, email или пароль"
                         >
                           <Edit2 size={13} />
                           <span>Настроить</span>
@@ -635,7 +480,7 @@ export const SuperAdminView: React.FC = () => {
 
             <div className="saas-card-body">
               <div className="saas-companies-grid">
-                {companiesList.map((co) => {
+                {clientCompanies.map((co) => {
                   const isCurrent = co.id === currentCompany?.id;
                   const isSystem = Boolean((co as any).isSystem || co.id === 'company_platform_admin');
 
@@ -744,8 +589,10 @@ export const SuperAdminView: React.FC = () => {
                             type="button"
                             onClick={async () => {
                               const newDate = new Date(Date.now() + 14 * 86400000).toISOString();
-                              await updateCompanyDetails(co.id, { trialEndsAt: newDate, plan: 'pro' });
+                              await updateCompanyDetails(co.id, { trialEndsAt: newDate, paidUntil: null, plan: 'pro' });
                               await refreshAuthData();
+                              setBillingFeedback({ companyId: co.id, message: `✅ Для «${co.name}» активирован пробный период на 14 дней` });
+                              setTimeout(() => setBillingFeedback(null), 4000);
                             }}
                             className="btn-action-ghost saas-admin-action-btn"
                             title="Установить 14 дней пробного периода с сегодняшнего дня"
@@ -756,8 +603,10 @@ export const SuperAdminView: React.FC = () => {
                             type="button"
                             onClick={async () => {
                               const newDate = new Date(Date.now() + 30 * 86400000).toISOString();
-                              await updateCompanyDetails(co.id, { trialEndsAt: newDate, plan: 'pro' });
+                              await updateCompanyDetails(co.id, { trialEndsAt: newDate, paidUntil: null, plan: 'pro' });
                               await refreshAuthData();
+                              setBillingFeedback({ companyId: co.id, message: `✅ Для «${co.name}» активирован пробный период на 30 дней` });
+                              setTimeout(() => setBillingFeedback(null), 4000);
                             }}
                             className="btn-action-ghost saas-admin-action-btn"
                             title="Установить 30 дней пробного периода"
@@ -770,6 +619,8 @@ export const SuperAdminView: React.FC = () => {
                               const newDate = new Date(Date.now() + 365 * 86400000).toISOString();
                               await updateCompanyDetails(co.id, { paidUntil: newDate, trialEndsAt: null, plan: 'pro' });
                               await refreshAuthData();
+                              setBillingFeedback({ companyId: co.id, message: `✅ Для «${co.name}» оформлен доступ на 1 год` });
+                              setTimeout(() => setBillingFeedback(null), 4000);
                             }}
                             className="btn-action-ghost saas-admin-action-btn-success"
                             title="Отметить как оплаченную подписку на 1 год"
@@ -782,6 +633,8 @@ export const SuperAdminView: React.FC = () => {
                               const newDate = new Date(Date.now() + 100 * 365 * 86400000).toISOString();
                               await updateCompanyDetails(co.id, { paidUntil: newDate, trialEndsAt: null, plan: 'pro' });
                               await refreshAuthData();
+                              setBillingFeedback({ companyId: co.id, message: `✅ Для «${co.name}» активирован бессрочный VIP-доступ` });
+                              setTimeout(() => setBillingFeedback(null), 4000);
                             }}
                             className="btn-action-ghost saas-admin-action-btn-warning"
                             title="Бессрочный VIP-доступ для сооснователей или спецклиентов"
@@ -794,11 +647,28 @@ export const SuperAdminView: React.FC = () => {
                               onClick={async () => {
                                 await updateCompanyDetails(co.id, { trialEndsAt: null });
                                 await refreshAuthData();
+                                setBillingFeedback({ companyId: co.id, message: `Пробный период для «${co.name}» снят` });
+                                setTimeout(() => setBillingFeedback(null), 4000);
                               }}
                               className="btn-action-ghost saas-admin-action-btn-danger"
                               title="Снять пробный период прямо сейчас"
                             >
                               Снять триал
+                            </button>
+                          )}
+                          {co.paidUntil && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await updateCompanyDetails(co.id, { paidUntil: null });
+                                await refreshAuthData();
+                                setBillingFeedback({ companyId: co.id, message: `Оплаченный доступ для «${co.name}» аннулирован` });
+                                setTimeout(() => setBillingFeedback(null), 4000);
+                              }}
+                              className="btn-action-ghost saas-admin-action-btn-danger"
+                              title="Аннулировать оплаченный период"
+                            >
+                              Снять оплату
                             </button>
                           )}
                         </div>
@@ -980,6 +850,26 @@ export const SuperAdminView: React.FC = () => {
                   className="saas-input"
                   placeholder="user@truespace.ru"
                 />
+              </div>
+
+              <div className="saas-field-group">
+                <label className="saas-label">
+                  <span>Новый пароль</span>
+                  <span className="saas-label-hint">Оставьте пустым, если не меняется</span>
+                </label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type="password"
+                    value={editUserPassword}
+                    onChange={(e) => setEditUserPassword(e.target.value)}
+                    className="saas-input"
+                    placeholder="Минимум 6 символов"
+                    autoComplete="new-password"
+                  />
+                  <div style={{ position: 'absolute', right: '12px', color: 'var(--muted-foreground)', pointerEvents: 'none' }}>
+                    <KeyRound size={15} />
+                  </div>
+                </div>
               </div>
 
               <div className="saas-form-actions" style={{ marginTop: '20px' }}>

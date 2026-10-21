@@ -19,6 +19,7 @@ import {
   extractAuthContext,
   signAuthToken,
   verifyPassword,
+  hashPassword,
 } from '../middleware/auth.js';
 import { createRateLimiter } from '../middleware/rateLimit.js';
 import { sendMail, buildVerificationEmailHtml } from '../utils/mailer.js';
@@ -296,8 +297,13 @@ export function createAuthRouter(store: IFinanceStore): Router {
         });
       }
 
-      // Verify super-admin password via environment hash if configured
-      if (user.isSuperAdmin && process.env.ADMIN_PASSWORD_HASH) {
+      // Verify stored password hash if set for this user
+      const storedHash = store.getUserPasswordHash ? await store.getUserPasswordHash(user.id) : null;
+      if (storedHash) {
+        if (!password || !verifyPassword(String(password), storedHash)) {
+          return res.status(401).json({ error: 'Неверный пароль' });
+        }
+      } else if (user.isSuperAdmin && process.env.ADMIN_PASSWORD_HASH) {
         if (!password || !verifyPassword(String(password), process.env.ADMIN_PASSWORD_HASH)) {
           return res.status(401).json({ error: 'Неверный пароль администратора платформы' });
         }
@@ -378,11 +384,22 @@ export function createAuthRouter(store: IFinanceStore): Router {
   router.post('/send-code', codeRateLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { email, fullName, companyName } = req.body;
+      if (!fullName || typeof fullName !== 'string' || !fullName.trim()) {
+        return res.status(400).json({ error: 'Поле "Ваше имя" обязательно для заполнения' });
+      }
+      if (!companyName || typeof companyName !== 'string' || !companyName.trim()) {
+        return res.status(400).json({ error: 'Поле "Название организации или проекта" обязательно для заполнения' });
+      }
       if (!email || typeof email !== 'string') {
-        return res.status(400).json({ error: 'Поле email обязательно' });
+        return res.status(400).json({ error: 'Поле email обязательно для заполнения' });
       }
 
       const trimmedEmail = email.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmedEmail)) {
+        return res.status(400).json({ error: 'Укажите корректный адрес электронной почты (например, name@company.ru)' });
+      }
+
       const existingUsers = await store.getUsers();
       const existing = existingUsers.find((u) => u.email.toLowerCase() === trimmedEmail);
       if (existing) {
@@ -474,11 +491,21 @@ export function createAuthRouter(store: IFinanceStore): Router {
   router.post('/register', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { email, fullName, companyName, code } = req.body;
+      if (!fullName || typeof fullName !== 'string' || !fullName.trim()) {
+        return res.status(400).json({ error: 'Поле "Ваше имя" обязательно для заполнения' });
+      }
+      if (!companyName || typeof companyName !== 'string' || !companyName.trim()) {
+        return res.status(400).json({ error: 'Поле "Название организации или проекта" обязательно для заполнения' });
+      }
       if (!email || typeof email !== 'string') {
         return res.status(400).json({ error: 'Поле email обязательно' });
       }
 
       const trimmedEmail = email.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmedEmail)) {
+        return res.status(400).json({ error: 'Укажите корректный адрес электронной почты' });
+      }
 
       // If code was supplied, verify it
       if (code) {
@@ -601,6 +628,95 @@ export function createAuthRouter(store: IFinanceStore): Router {
       });
 
       res.json({ success: true, user: updated });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/auth/change-email
+  router.post('/change-email', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId, newEmail } = req.body;
+      if (!userId || !newEmail || typeof newEmail !== 'string') {
+        return res.status(400).json({ error: 'Поля userId и newEmail обязательны' });
+      }
+
+      const trimmedEmail = newEmail.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmedEmail)) {
+        return res.status(400).json({ error: 'Укажите корректный адрес электронной почты (например, name@mail.ru)' });
+      }
+
+      const existingUser = await store.getUserById(userId);
+      if (!existingUser) {
+        return res.status(404).json({ error: 'Пользователь не найден' });
+      }
+
+      const allUsers = await store.getUsers();
+      const duplicate = allUsers.find((u) => u.email.toLowerCase() === trimmedEmail && u.id !== userId);
+      if (duplicate) {
+        return res.status(400).json({ error: 'Этот email уже используется другим пользователем' });
+      }
+
+      const updated = await store.saveUserProfile({
+        id: userId,
+        email: trimmedEmail,
+        fullName: existingUser.fullName,
+        avatarUrl: existingUser.avatarUrl,
+        isSuperAdmin: existingUser.isSuperAdmin,
+        isEmailVerified: true,
+      });
+
+      mirrorUserProfileToCloud(updated).catch(() => {});
+
+      res.json({
+        success: true,
+        user: updated,
+        message: 'Email успешно изменён',
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/auth/change-password
+  router.post('/change-password', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId, newPassword, currentPassword } = req.body;
+      if (!userId) {
+        return res.status(400).json({ error: 'Поле userId обязательно' });
+      }
+      if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+        return res.status(400).json({ error: 'Новый пароль должен содержать минимум 6 символов' });
+      }
+
+      const targetUser = await store.getUserById(userId);
+      if (!targetUser) {
+        return res.status(404).json({ error: 'Пользователь не найден' });
+      }
+
+      // Check if there is an existing password hash
+      const existingHash = store.getUserPasswordHash ? await store.getUserPasswordHash(userId) : null;
+      if (existingHash) {
+        // Current password must match
+        if (!currentPassword || !verifyPassword(String(currentPassword), existingHash)) {
+          return res.status(400).json({ error: 'Текущий пароль указан неверно' });
+        }
+      } else if (targetUser.isSuperAdmin && process.env.ADMIN_PASSWORD_HASH) {
+        if (!currentPassword || !verifyPassword(String(currentPassword), process.env.ADMIN_PASSWORD_HASH)) {
+          return res.status(400).json({ error: 'Текущий пароль администратора указан неверно' });
+        }
+      }
+
+      const newHash = hashPassword(String(newPassword));
+      if (store.setUserPassword) {
+        await store.setUserPassword(userId, newHash);
+      }
+
+      res.json({
+        success: true,
+        message: 'Пароль успешно обновлён',
+      });
     } catch (err) {
       next(err);
     }

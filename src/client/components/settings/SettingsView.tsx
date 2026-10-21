@@ -40,6 +40,10 @@ import {
   QrCode,
   Share2,
   Send,
+  KeyRound,
+  Lock,
+  Mail,
+  User,
 } from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext.js';
 import { useAuth } from '../../context/AuthContext.js';
@@ -47,7 +51,7 @@ import { api } from '../../api/apiClient.js';
 import { formatRubles } from '../../utils/formatters.js';
 import { Account, Category, Partner, TransactionDirection, UserRole, CompanyInvite } from '../../../shared/types.js';
 
-type SettingsTab = 'accounts' | 'partners' | 'categories' | 'organization';
+type SettingsTab = 'accounts' | 'partners' | 'categories' | 'organization' | 'profile';
 
 const PRESET_COLORS = [
   '#10b981', // изумрудный (касса / наличные)
@@ -111,12 +115,108 @@ export const SettingsView: React.FC = () => {
     addToast,
   } = useFinance();
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>('accounts');
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
+    const saved = localStorage.getItem('findoctor_settings_tab') as SettingsTab | null;
+    if (saved && ['accounts', 'partners', 'categories', 'organization', 'profile'].includes(saved)) {
+      return saved;
+    }
+    return 'accounts';
+  });
   const [isSaving, setIsSaving] = useState(false);
 
-  const { currentCompany, updateCompanyDetails, currentUser, userRole, companyMembers, inviteMember, deleteCompany } = useAuth();
+  const handleSelectTab = (tab: SettingsTab) => {
+    setActiveTab(tab);
+    localStorage.setItem('findoctor_settings_tab', tab);
+  };
+
+  const {
+    currentCompany,
+    updateCompanyDetails,
+    currentUser,
+    userRole,
+    companyMembers,
+    inviteMember,
+    deleteCompany,
+    updateProfile,
+    changeUserEmail,
+    changeUserPassword,
+  } = useAuth();
   const [orgName, setOrgName] = useState(currentCompany?.name || '');
   const [isSavingOrg, setIsSavingOrg] = useState(false);
+
+  // Profile & Security state
+  const [profileFullName, setProfileFullName] = useState(currentUser?.fullName || '');
+  const [profileEmail, setProfileEmail] = useState(currentUser?.email || '');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isSavingName, setIsSavingName] = useState(false);
+  const [isSavingEmail, setIsSavingEmail] = useState(false);
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+
+  useEffect(() => {
+    if (currentUser) {
+      setProfileFullName(currentUser.fullName || '');
+      setProfileEmail(currentUser.email || '');
+    }
+  }, [currentUser]);
+
+  const handleSaveProfileName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !profileFullName.trim()) return;
+    setIsSavingName(true);
+    try {
+      await updateProfile(currentUser.id, { fullName: profileFullName.trim() });
+      addToast('Имя профиля успешно сохранено', 'success');
+    } catch (err: any) {
+      addToast(err.message || 'Ошибка обновления имени', 'error');
+    } finally {
+      setIsSavingName(false);
+    }
+  };
+
+  const handleChangeEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !profileEmail.trim()) return;
+    if (profileEmail.trim().toLowerCase() === currentUser.email?.toLowerCase()) {
+      addToast('Вы указали текущий e-mail', 'info');
+      return;
+    }
+    setIsSavingEmail(true);
+    try {
+      const res = await changeUserEmail(currentUser.id, profileEmail.trim());
+      addToast(res.message || 'E-mail успешно изменён', 'success');
+    } catch (err: any) {
+      addToast(err.message || 'Ошибка смены e-mail', 'error');
+    } finally {
+      setIsSavingEmail(false);
+    }
+  };
+
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    if (!newPassword || newPassword.length < 6) {
+      addToast('Новый пароль должен содержать минимум 6 символов', 'info');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      addToast('Пароли не совпадают', 'info');
+      return;
+    }
+    setIsSavingPassword(true);
+    try {
+      const res = await changeUserPassword(currentUser.id, newPassword, currentPassword || undefined);
+      addToast(res.message || 'Пароль успешно обновлён', 'success');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      addToast(err.message || 'Ошибка изменения пароля', 'error');
+    } finally {
+      setIsSavingPassword(false);
+    }
+  };
 
   // Invite member state (Links, QR, Email)
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -617,7 +717,7 @@ export const SettingsView: React.FC = () => {
             type="button"
             role="tab"
             aria-selected={activeTab === 'accounts'}
-            onClick={() => setActiveTab('accounts')}
+            onClick={() => handleSelectTab('accounts')}
             className={`settings-tab-btn ${activeTab === 'accounts' ? 'tab-active' : ''}`}
           >
             <Wallet size={15} />
@@ -628,7 +728,7 @@ export const SettingsView: React.FC = () => {
             type="button"
             role="tab"
             aria-selected={activeTab === 'partners'}
-            onClick={() => setActiveTab('partners')}
+            onClick={() => handleSelectTab('partners')}
             className={`settings-tab-btn ${activeTab === 'partners' ? 'tab-active' : ''}`}
           >
             <Users size={15} />
@@ -639,7 +739,7 @@ export const SettingsView: React.FC = () => {
             type="button"
             role="tab"
             aria-selected={activeTab === 'categories'}
-            onClick={() => setActiveTab('categories')}
+            onClick={() => handleSelectTab('categories')}
             className={`settings-tab-btn ${activeTab === 'categories' ? 'tab-active' : ''}`}
           >
             <Tag size={15} />
@@ -650,11 +750,22 @@ export const SettingsView: React.FC = () => {
             type="button"
             role="tab"
             aria-selected={activeTab === 'organization'}
-            onClick={() => setActiveTab('organization')}
+            onClick={() => handleSelectTab('organization')}
             className={`settings-tab-btn ${activeTab === 'organization' ? 'tab-active' : ''}`}
           >
             <Building2 size={15} />
             <span>Организация и команда</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'profile'}
+            onClick={() => handleSelectTab('profile')}
+            className={`settings-tab-btn ${activeTab === 'profile' ? 'tab-active' : ''}`}
+          >
+            <KeyRound size={15} />
+            <span>Профиль и пароль</span>
           </button>
         </div>
       </div>
@@ -1431,6 +1542,221 @@ export const SettingsView: React.FC = () => {
                   Удаление организации доступно только её владельцу.
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: PROFILE & SECURITY                                                 */}
+      {/* ========================================================================= */}
+      {activeTab === 'profile' && (
+        <div className="settings-content-section animate-fade-in">
+          <div className="settings-subbar">
+            <div>
+              <h3 className="settings-subheading">Мой профиль и безопасность</h3>
+              <p className="settings-subtext">Управление личными данными, смена почты и пароля для входа в FINDOCTOR</p>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginTop: '16px' }}>
+            {/* Card 1: Личные данные */}
+            <div style={{
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(217, 119, 6, 0.1)',
+                  color: 'var(--primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <User size={18} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--foreground)' }}>Личные данные</h4>
+                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted-foreground)' }}>Ваше имя в отчётах и сменах</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveProfileName} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="settings-input-group">
+                  <label className="settings-input-label">Имя и фамилия</label>
+                  <input
+                    type="text"
+                    required
+                    value={profileFullName}
+                    onChange={(e) => setProfileFullName(e.target.value)}
+                    className="settings-text-input"
+                    placeholder="Например, Алексей Смирнов"
+                  />
+                </div>
+                <div>
+                  <button
+                    type="submit"
+                    disabled={isSavingName}
+                    className="btn-settings-add"
+                    style={{ width: '100%', justifyContent: 'center' }}
+                  >
+                    {isSavingName ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                    <span>Сохранить имя</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Card 2: Электронная почта */}
+            <div style={{
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                  color: '#2563eb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <Mail size={18} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--foreground)' }}>Email для входа</h4>
+                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted-foreground)' }}>Логин учётной записи</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleChangeEmailSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="settings-input-group">
+                  <label className="settings-input-label">Электронная почта</label>
+                  <input
+                    type="email"
+                    required
+                    value={profileEmail}
+                    onChange={(e) => setProfileEmail(e.target.value)}
+                    className="settings-text-input"
+                    placeholder="name@company.ru"
+                  />
+                  <span style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginTop: '4px' }}>
+                    Текущий e-mail: <strong>{currentUser?.email}</strong>
+                  </span>
+                </div>
+                <div>
+                  <button
+                    type="submit"
+                    disabled={isSavingEmail}
+                    className="btn-settings-add"
+                    style={{ width: '100%', justifyContent: 'center' }}
+                  >
+                    {isSavingEmail ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                    <span>Сменить Email</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Card 3: Смена пароля */}
+            <div style={{
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              gridColumn: '1 / -1',
+              maxWidth: '560px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                  color: '#10b981',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <Lock size={18} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--foreground)' }}>Смена пароля</h4>
+                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted-foreground)' }}>Установите надёжный пароль для защиты вашего аккаунта</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleChangePasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="settings-input-group">
+                  <label className="settings-input-label">Текущий пароль</label>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="settings-text-input"
+                    placeholder="Если пароль уже был установлен"
+                    autoComplete="current-password"
+                  />
+                </div>
+
+                <div className="settings-input-group">
+                  <label className="settings-input-label">Новый пароль</label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="settings-text-input"
+                    placeholder="Минимум 6 символов"
+                    autoComplete="new-password"
+                  />
+                </div>
+
+                <div className="settings-input-group">
+                  <label className="settings-input-label">Подтверждение нового пароля</label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="settings-text-input"
+                    placeholder="Повторите новый пароль"
+                    autoComplete="new-password"
+                  />
+                </div>
+
+                <div style={{ marginTop: '4px' }}>
+                  <button
+                    type="submit"
+                    disabled={isSavingPassword}
+                    className="btn-settings-add"
+                    style={{ width: '100%', justifyContent: 'center' }}
+                  >
+                    {isSavingPassword ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
+                    <span>Обновить пароль</span>
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

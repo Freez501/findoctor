@@ -54,10 +54,14 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
       } else if (mode === 'register') {
         if (registerStep === 'details') {
           if (!fullName.trim()) {
-            throw new Error('Укажите ваше имя');
+            throw new Error('Поле "Ваше имя" обязательно для заполнения');
           }
-          if (!email.trim()) {
-            throw new Error('Укажите email');
+          if (!companyName.trim()) {
+            throw new Error('Поле "Название организации или проекта" обязательно для заполнения');
+          }
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!email.trim() || !emailRegex.test(email.trim())) {
+            throw new Error('Введите корректный адрес электронной почты (например, name@company.ru)');
           }
           if (password.length < 6) {
             throw new Error('Пароль должен содержать минимум 6 символов');
@@ -66,7 +70,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
             throw new Error('Введённые пароли не совпадают. Пожалуйста, проверьте ввод.');
           }
 
-          const targetCompany = companyName.trim() || `Кейтеринг ${fullName.trim()}`;
+          const targetCompany = companyName.trim();
 
           // Step 1: Send verification code to email via server
           const res = await api.sendVerificationCode({
@@ -82,7 +86,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
           if (!verificationCode.trim()) {
             throw new Error('Введите 6-значный проверочный код из письма');
           }
-          const targetCompany = companyName.trim() || `Кейтеринг ${fullName.trim()}`;
+          const targetCompany = companyName.trim();
           await register(email.trim(), password, fullName.trim(), targetCompany, verificationCode.trim());
         }
       } else if (mode === 'forgot') {
@@ -269,6 +273,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
                       <Building2 size={16} className="auth-input-icon" />
                       <input
                         type="text"
+                        required
                         placeholder="Например, Мой Кейтеринг или Бар на выезд"
                         value={companyName}
                         onChange={(e) => setCompanyName(e.target.value)}

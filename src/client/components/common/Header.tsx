@@ -26,6 +26,7 @@ import {
   LucideIcon,
   LogOut,
   FileSpreadsheet,
+  KeyRound,
 } from 'lucide-react';
 import { useResetDemo } from '../../hooks/useResetDemo.js';
 import { useAuth } from '../../context/AuthContext.js';
@@ -245,11 +246,43 @@ export const Header: React.FC<HeaderProps> = ({
 
                 {/* Clean Navigation & Profile Actions */}
                 <div style={{ marginTop: '10px', marginBottom: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      try {
+                        localStorage.setItem('findoctor_settings_tab', 'profile');
+                      } catch {}
+                      onSelectTab?.('settings');
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      width: '100%',
+                      padding: '9px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border)',
+                      background: 'transparent',
+                      color: 'var(--foreground)',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <KeyRound size={14} color="var(--primary)" />
+                    <span>Мой профиль и пароль</span>
+                  </button>
+
                   {(userRole === 'owner' || userRole === 'admin' || isSuperAdmin) && (
                     <button
                       type="button"
                       onClick={() => {
                         setShowProfileMenu(false);
+                        try {
+                          localStorage.setItem('findoctor_settings_tab', 'organization');
+                        } catch {}
                         onSelectTab?.('settings');
                       }}
                       style={{

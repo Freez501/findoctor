@@ -43,6 +43,8 @@ export interface IFinanceStore {
   saveUserProfile(user: Partial<UserProfile> & { id: string; email: string }): Promise<UserProfile>;
   getCompanyMembers(companyId: string): Promise<{ membership: CompanyMembership; user?: UserProfile }[]>;
   addCompanyMember(data: { companyId: string; userId: string; role: UserRole; invitedBy?: string }): Promise<CompanyMembership>;
+  setUserPassword?(userId: string, passwordHash: string): Promise<boolean>;
+  getUserPasswordHash?(userId: string): Promise<string | null>;
 
   // Company Invites (Links & QR)
   getCompanyInvites(companyId?: string): Promise<CompanyInvite[]>;

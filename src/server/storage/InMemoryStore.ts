@@ -141,6 +141,17 @@ export class InMemoryStore implements IFinanceStore {
     }
   }
 
+  private userPasswords = new Map<string, string>();
+
+  public async setUserPassword(userId: string, passwordHash: string): Promise<boolean> {
+    this.userPasswords.set(userId, passwordHash);
+    return true;
+  }
+
+  public async getUserPasswordHash(userId: string): Promise<string | null> {
+    return this.userPasswords.get(userId) || null;
+  }
+
   public async getCompanyMembers(companyId: string): Promise<{ membership: CompanyMembership; user?: UserProfile }[]> {
     const memberships = (this.state.memberships || []).filter((m) => m.companyId === companyId);
     return memberships.map((m) => ({

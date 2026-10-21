@@ -85,12 +85,14 @@ export class MySqlStore implements IFinanceStore {
     };
 
     await this.pool.query(`
-      INSERT INTO companies (id, name, slug, plan, is_active, owner_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO companies (id, name, slug, plan, trial_ends_at, paid_until, is_active, owner_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         name = VALUES(name),
         slug = VALUES(slug),
         plan = VALUES(plan),
+        trial_ends_at = VALUES(trial_ends_at),
+        paid_until = VALUES(paid_until),
         is_active = VALUES(is_active),
         owner_id = VALUES(owner_id),
         updated_at = VALUES(updated_at)
@@ -99,6 +101,8 @@ export class MySqlStore implements IFinanceStore {
       comp.name,
       comp.slug,
       comp.plan,
+      comp.trialEndsAt || null,
+      comp.paidUntil || null,
       comp.isActive ? 1 : 0,
       comp.ownerId || null,
       comp.createdAt,
@@ -119,12 +123,14 @@ export class MySqlStore implements IFinanceStore {
 
     await this.pool.query(`
       UPDATE companies
-      SET name = ?, slug = ?, plan = ?, is_active = ?, owner_id = ?, updated_at = ?
+      SET name = ?, slug = ?, plan = ?, trial_ends_at = ?, paid_until = ?, is_active = ?, owner_id = ?, updated_at = ?
       WHERE id = ?
     `, [
       updated.name,
       updated.slug,
       updated.plan,
+      updated.trialEndsAt !== undefined ? updated.trialEndsAt : existing.trialEndsAt || null,
+      updated.paidUntil !== undefined ? updated.paidUntil : existing.paidUntil || null,
       updated.isActive ? 1 : 0,
       updated.ownerId || null,
       updated.updatedAt,
@@ -228,6 +234,17 @@ export class MySqlStore implements IFinanceStore {
     ]);
 
     return user;
+  }
+
+  public async setUserPassword(userId: string, passwordHash: string): Promise<boolean> {
+    await this.pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, userId]);
+    await this.pool.query('UPDATE user_profiles SET password_hash = ? WHERE id = ?', [passwordHash, userId]);
+    return true;
+  }
+
+  public async getUserPasswordHash(userId: string): Promise<string | null> {
+    const [rows] = await this.pool.query<mysql.RowDataPacket[]>('SELECT password_hash FROM users WHERE id = ? LIMIT 1', [userId]);
+    return rows.length > 0 && rows[0].password_hash ? rows[0].password_hash : null;
   }
 
   public async getCompanyMembers(companyId: string): Promise<{ membership: CompanyMembership; user?: UserProfile }[]> {

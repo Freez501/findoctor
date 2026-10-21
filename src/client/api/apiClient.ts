@@ -648,6 +648,24 @@ export class ApiClient {
     });
   }
 
+  public changeEmail(userId: string, newEmail: string, options?: RequestOptions): Promise<{ success: boolean; user: UserProfile; message: string }> {
+    return this.request<{ success: boolean; user: UserProfile; message: string }>('/api/auth/change-email', {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify({ userId, newEmail }),
+      priority: 'high',
+    });
+  }
+
+  public changePassword(userId: string, newPassword: string, currentPassword?: string, options?: RequestOptions): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>('/api/auth/change-password', {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify({ userId, newPassword, currentPassword }),
+      priority: 'high',
+    });
+  }
+
   public updateCompany(id: string, data: Partial<Company>, options?: RequestOptions): Promise<Company> {
     return this.request<Company>(`/api/companies/${encodeURIComponent(id)}`, {
       ...options,

@@ -29,6 +29,8 @@ export interface AuthContextType {
   enterDemoMode: () => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (userId: string, data: Partial<UserProfile>) => Promise<void>;
+  changeUserEmail: (userId: string, newEmail: string) => Promise<{ success: boolean; user: UserProfile; message: string }>;
+  changeUserPassword: (userId: string, newPassword: string, currentPassword?: string) => Promise<{ success: boolean; message: string }>;
   updateCompanyDetails: (companyId: string, data: Partial<Company>) => Promise<void>;
   switchUser: (userId: string) => Promise<void>;
   switchCompany: (companyId: string) => Promise<void>;
@@ -322,6 +324,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentUser?.id]);
 
+  const changeUserEmail = useCallback(async (userId: string, newEmail: string) => {
+    const res = await api.changeEmail(userId, newEmail);
+    if (res.user) {
+      if (currentUser?.id === userId) {
+        setCurrentUser(res.user);
+        localStorage.setItem('truespace_current_user', JSON.stringify(res.user));
+      }
+      setUsersList((prev) => prev.map((u) => (u.id === userId ? res.user : u)));
+    }
+    return res;
+  }, [currentUser?.id]);
+
+  const changeUserPassword = useCallback(async (userId: string, newPassword: string, currentPassword?: string) => {
+    return await api.changePassword(userId, newPassword, currentPassword);
+  }, []);
+
   const updateCompanyDetails = useCallback(async (companyId: string, data: Partial<Company>) => {
     const updated = await api.updateCompany(companyId, data);
     if (updated) {
@@ -482,6 +500,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         enterDemoMode,
         logout,
         updateProfile,
+        changeUserEmail,
+        changeUserPassword,
         updateCompanyDetails,
         switchUser,
         switchCompany,
