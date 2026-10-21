@@ -25,7 +25,7 @@ import {
   X,
   FileText,
 } from 'lucide-react';
-import { CateringEvent, EventStatus } from '../../../shared/types.js';
+import { CateringEvent, EventStatus, Transaction } from '../../../shared/types.js';
 import { useFinance } from '../../context/FinanceContext.js';
 import { formatRubles, formatDateRu } from '../../utils/formatters.js';
 import { EventDossierModal } from './EventDossierModal.js';

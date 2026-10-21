@@ -613,8 +613,8 @@ export class ApiClient {
   }
 
   // --- Auth & Users ---
-  public login(data: { email: string; password?: string }, options?: RequestOptions): Promise<{ success: boolean; user: UserProfile; company: Company }> {
-    return this.request<{ success: boolean; user: UserProfile; company: Company }>('/api/auth/login', {
+  public login(data: { email: string; password?: string }, options?: RequestOptions): Promise<{ success: boolean; user: UserProfile; company: Company; token?: string }> {
+    return this.request<{ success: boolean; user: UserProfile; company: Company; token?: string }>('/api/auth/login', {
       ...options,
       method: 'POST',
       body: JSON.stringify(data),
@@ -622,8 +622,8 @@ export class ApiClient {
     });
   }
 
-  public register(data: { email: string; password?: string; fullName?: string; companyName?: string; code?: string }, options?: RequestOptions): Promise<{ success: boolean; user: UserProfile; company: Company }> {
-    return this.request<{ success: boolean; user: UserProfile; company: Company }>('/api/auth/register', {
+  public register(data: { email: string; password?: string; fullName?: string; companyName?: string; code?: string }, options?: RequestOptions): Promise<{ success: boolean; user: UserProfile; company: Company; token?: string }> {
+    return this.request<{ success: boolean; user: UserProfile; company: Company; token?: string }>('/api/auth/register', {
       ...options,
       method: 'POST',
       body: JSON.stringify(data),

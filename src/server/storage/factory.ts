@@ -10,12 +10,13 @@ import { IFinanceStore } from './interfaces.js';
 import { InMemoryStore } from './InMemoryStore.js';
 import { JsonFileStore } from './JsonFileStore.js';
 import { SupabaseStore } from './SupabaseStore.js';
+import { MySqlStore } from './MySqlStore.js';
 
 if (process.env.NODE_ENV !== 'test') {
   dotenv.config();
 }
 
-export type StorageMode = 'memory' | 'json' | 'supabase';
+export type StorageMode = 'memory' | 'json' | 'supabase' | 'mysql';
 
 export interface StorageOptions {
   mode?: StorageMode | string;
@@ -33,12 +34,15 @@ export function createStorage(options?: StorageOptions): IFinanceStore {
       ? options?.filePath
         ? 'json'
         : 'memory'
-      : process.env.STORAGE_MODE || 'json';
+      : process.env.STORAGE_MODE || (process.env.DB_NAME ? 'mysql' : 'json');
   const mode = (options?.mode || defaultMode).toLowerCase();
 
   switch (mode) {
     case 'memory':
       return new InMemoryStore();
+
+    case 'mysql':
+      return new MySqlStore();
 
     case 'supabase': {
       const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
