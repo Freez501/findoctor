@@ -1,6 +1,6 @@
 # Project: Truespace — Барный кейтеринг и финансы
 
-- **Статус:** `stage_production_deployed` (Проект опубликован на сервере FirstVDS в Москве: полный репозиторий в папке сайта ISPmanager, база MySQL `findoctor` связана с сайтом, прямой вход в веб-интерфейс phpMyAdmin работает без ошибок, Caddy HTTPS настроен, Node.js сервис активен; 587/587 тестов green)
+- **Статус:** `stage_production_deployed` (Проект опубликован на сервере FirstVDS: база MySQL `findoctor` является основной боевой базой, бэкенд подключен через драйвер MySqlStore, данные синхронизированы, phpMyAdmin отображает актуальные записи в реальном времени; Node.js сервис активен)
 - **Боевая версия (Production):** `http://shved4656.fvds.ru` (IP: `153.76.170.74`)
 - **Локальная версия (Dev):** `http://localhost:5173/` (бэкенд API: `http://localhost:3001/api`)
 - **GitHub репозиторий:** `https://github.com/Freez501/findoctor.git` (ветка `main`, CI/CD готов)
@@ -11,7 +11,7 @@
 Единая масштабируемая модульная fullstack-архитектура на TypeScript:
 - **Shared Layer (`src/shared/`)**: доменные типы, контракты DTO, константы счетов и категорий, математические интерфейсы, типы для Telegram/парсера быстрых команд.
 - **Server Layer (`src/server/`)**: Node.js + Express REST API:
-  - `storage/`: паттерн Репозиторий (`IFinanceStore`) с автономной реализацией `JsonFileStore` (`data/truespace.json`) и `InMemoryStore`, а также адаптером `SupabaseStore`.
+  - `storage/`: паттерн Репозиторий (`IFinanceStore`) с полноценной боевой реализацией `MySqlStore` (прямая работа с СУБД MySQL `findoctor` на сервере FirstVDS), а также адаптерами `JsonFileStore` и `InMemoryStore`.
   - `data/`: SQL-миграция для PostgreSQL/Supabase (`supabase.sql`) и предзаполненный демо-набор (`seed.ts`).
   - `services/`:
     - `FinanceService`: пересчёт балансов, атомарные переводы, отмена транзакций, расчёт копеек.
