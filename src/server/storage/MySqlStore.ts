@@ -165,6 +165,9 @@ export class MySqlStore implements IFinanceStore {
 
   public async saveUserProfile(userInput: Partial<UserProfile> & { id: string; email: string }): Promise<UserProfile> {
     const now = new Date().toISOString();
+    const companyId = (userInput as any).companyId || null;
+    const companyName = (userInput as any).companyName || null;
+
     const user: UserProfile = {
       id: userInput.id,
       email: userInput.email.toLowerCase().trim(),
@@ -172,8 +175,6 @@ export class MySqlStore implements IFinanceStore {
       avatarUrl: userInput.avatarUrl,
       isSuperAdmin: userInput.isSuperAdmin ?? false,
       isEmailVerified: userInput.isEmailVerified ?? false,
-      companyId: userInput.companyId,
-      companyName: userInput.companyName,
       createdAt: userInput.createdAt || now,
       updatedAt: now,
     };
@@ -194,8 +195,8 @@ export class MySqlStore implements IFinanceStore {
       user.id,
       user.email,
       user.fullName,
-      user.companyId || null,
-      user.companyName || null,
+      companyId,
+      companyName,
       user.avatarUrl || null,
       user.isSuperAdmin ? 1 : 0,
       user.isEmailVerified ? 1 : 0,
@@ -218,8 +219,8 @@ export class MySqlStore implements IFinanceStore {
       user.id,
       user.email,
       user.fullName,
-      user.companyId || null,
-      user.companyName || null,
+      companyId,
+      companyName,
       user.isSuperAdmin ? 1 : 0,
       user.isEmailVerified ? 1 : 0,
       user.createdAt,
@@ -1243,8 +1244,6 @@ export class MySqlStore implements IFinanceStore {
       avatarUrl: r.avatar_url || undefined,
       isSuperAdmin: Boolean(r.is_super_admin),
       isEmailVerified: Boolean(r.is_email_verified),
-      companyId: r.company_id || undefined,
-      companyName: r.company_name || undefined,
       createdAt: r.created_at || new Date().toISOString(),
       updatedAt: r.updated_at || new Date().toISOString(),
     };
@@ -1271,7 +1270,6 @@ export class MySqlStore implements IFinanceStore {
     return {
       id: r.id,
       companyId: r.company_id || DEFAULT_COMPANY_ID,
-      companyName: r.company_name || undefined,
       name: r.name,
       type: r.type,
       description: r.description || '',
@@ -1289,7 +1287,6 @@ export class MySqlStore implements IFinanceStore {
     return {
       id: r.id,
       companyId: r.company_id || DEFAULT_COMPANY_ID,
-      companyName: r.company_name || undefined,
       name: r.name,
       role: r.role || undefined,
       isActive: Boolean(r.is_active),
@@ -1302,7 +1299,6 @@ export class MySqlStore implements IFinanceStore {
     return {
       id: r.id,
       companyId: r.company_id || DEFAULT_COMPANY_ID,
-      companyName: r.company_name || undefined,
       title: r.title,
       clientName: r.client_name || undefined,
       eventDate: r.event_date || '',
@@ -1321,7 +1317,6 @@ export class MySqlStore implements IFinanceStore {
     return {
       id: r.id,
       companyId: r.company_id || DEFAULT_COMPANY_ID,
-      companyName: r.company_name || undefined,
       name: r.name,
       type: r.type,
       direction: r.direction || undefined,
@@ -1336,7 +1331,6 @@ export class MySqlStore implements IFinanceStore {
     return {
       id: r.id,
       companyId: r.company_id || DEFAULT_COMPANY_ID,
-      companyName: r.company_name || undefined,
       type: r.type,
       direction: r.direction || undefined,
       amount: round2(r.amount),
