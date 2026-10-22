@@ -1,10 +1,380 @@
 /* ========================================================================= */
-/* Settings View (Card Grid)                                                 */
+/* Settings View (Linear / Stripe Architecture & Executive Cards)             */
 /* ========================================================================= */
 .settings-view {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.settings-linear-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+@media (min-width: 900px) {
+  .settings-linear-layout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+}
+
+.settings-sidebar {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 12px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  position: sticky;
+  top: 80px;
+}
+
+@media (max-width: 899px) {
+  .settings-sidebar {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 10px;
+    gap: 8px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .settings-sidebar::-webkit-scrollbar {
+    display: none;
+  }
+  .settings-nav-group {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    align-items: center;
+  }
+  .settings-nav-group-title {
+    display: none;
+  }
+  .settings-nav-items {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+  }
+}
+
+.settings-nav-group-title {
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-foreground);
+  padding: 0 10px;
+  margin-bottom: 6px;
+}
+
+.settings-nav-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-sidebar-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--foreground);
+  opacity: 0.75;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.settings-sidebar-link:hover {
+  background: var(--muted);
+  opacity: 1;
+}
+
+.settings-sidebar-link.active {
+  background: var(--primary);
+  color: #ffffff;
+  opacity: 1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.settings-sidebar-link-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-sidebar-count {
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--muted);
+  color: var(--foreground);
+  padding: 2px 7px;
+  border-radius: 9999px;
+}
+
+.settings-sidebar-link.active .settings-sidebar-count {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.settings-main-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+/* Executive Brand Hero Card */
+.settings-hero-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.settings-hero-main {
+  padding: 22px 26px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.settings-brand-cluster {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.settings-brand-monogram {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #2b2724 0%, #171514 100%);
+  color: #f7f6f4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 12px rgba(43, 39, 36, 0.15);
+  border: 1px solid rgba(217, 119, 6, 0.3);
+  flex-shrink: 0;
+}
+
+.settings-brand-details h2 {
+  font-family: var(--font-heading);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.settings-tariff-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: rgba(5, 150, 105, 0.08);
+  border: 1px solid rgba(5, 150, 105, 0.25);
+}
+
+.settings-tariff-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.settings-brand-details p {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin-top: 3px;
+}
+
+.btn-rename-subtle {
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-rename-subtle:hover {
+  background: var(--muted);
+  border-color: var(--border);
+}
+
+.settings-hero-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  background: var(--border);
+  gap: 1px;
+}
+
+.settings-meta-cell {
+  background: var(--card);
+  padding: 16px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-meta-title {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+}
+
+.settings-meta-val {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-meta-sub {
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+}
+
+/* Structured Settings Panel */
+.settings-section-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px 26px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.settings-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.settings-section-title {
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.settings-section-subtitle {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+
+.settings-row-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.settings-row-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.settings-row-item:first-child {
+  padding-top: 0;
+}
+
+.settings-row-info {
+  flex: 1;
+  min-width: 240px;
+}
+
+.settings-row-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.settings-row-desc {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+
+.settings-input-edit-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 380px;
+}
+
+/* Subtle Danger Zone */
+.settings-danger-box {
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  background: rgba(220, 38, 38, 0.03);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.settings-danger-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #b91c1c;
+}
+
+.settings-danger-desc {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin-top: 2px;
 }
 
 .settings-header-panel {
