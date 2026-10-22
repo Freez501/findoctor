@@ -1684,21 +1684,7 @@ export const SettingsView: React.FC = () => {
                   setDeleteCompanyNameConfirm('');
                   setIsDeleteCompanyModalOpen(true);
                 }}
-                className="btn-card-action"
-                style={{
-                  padding: '9px 16px',
-                  borderRadius: '8px',
-                  background: 'rgba(239, 68, 68, 0.12)',
-                  border: '1px solid rgba(239, 68, 68, 0.35)',
-                  color: '#ef4444',
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  whiteSpace: 'nowrap',
-                }}
+                className="btn-danger-action"
               >
                 <Trash2 size={15} />
                 <span>Удалить эту организацию...</span>
