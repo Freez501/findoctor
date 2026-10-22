@@ -82,6 +82,7 @@
 | F30 | Modern Staff Invite Links & QR | Приглашение сотрудников по ссылке, QR-коду, Telegram/WhatsApp и онбординг-экран за 5 секунд | M5 | USER_REQUEST 18.10 |
 | F31 | Executive Admin UI & 2-Step Auth | Редизайн админки (баннер Quiet Luxury, таблица команды, 2-колоночное модальное окно профиля, двухфакторная смена email и пароля) | M5 | USER_REQUEST 21.10 |
 | F32 | Linear/Stripe Executive Settings Layout | Лаконичный 2-колоночный интерфейс настроек организации с карточкой бренда, строками команды и безопасной зоной удаления | M5 | USER_REQUEST 22.10 |
+| F33 | Localhost Environment Visual Distinction | Автоматическое переключение favicon на красный и префикс [LOCAL] во вкладке браузера при запуске на localhost / 127.0.0.1 | M5 | USER_REQUEST 22.10 |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
