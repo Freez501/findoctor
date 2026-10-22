@@ -10,6 +10,10 @@
 :root {
   color-scheme: light;
 
+  /* Universal Clean Custom Scrollbars (Prevents Windows 95 thick grey scrollbars) */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(138, 133, 128, 0.28) transparent;
+
   /* ========================================================================= */
   /* shadcn/ui Design Tokens (Taupe Theme — Style Maia — Preset b1x9M8ZeJW)     */
   /* ========================================================================= */
@@ -137,6 +141,41 @@ body {
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Universal Clean Custom Scrollbars (Prevents Windows 95 thick grey scrollbars) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(138, 133, 128, 0.28) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(138, 133, 128, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(138, 133, 128, 0.45);
+}
+
+.no-scrollbar,
+.no-scrollbar-x {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.no-scrollbar-x::-webkit-scrollbar {
+  display: none !important;
 }
 
 h1,
@@ -693,8 +732,13 @@ textarea {
     order: 3;
     width: 100%;
     overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     margin-top: 6px;
     padding: 3px;
+  }
+  .app-header .header-nav-tabs::-webkit-scrollbar {
+    display: none;
   }
 }
 

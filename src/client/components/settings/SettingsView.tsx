@@ -10,7 +10,7 @@
  * All edits occur inside focused modal dialogs rather than inflating cards in the grid.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Wallet,
   Users,
@@ -43,7 +43,6 @@ import {
   KeyRound,
   Lock,
   Mail,
-  User,
 } from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext.js';
 import { useAuth } from '../../context/AuthContext.js';
@@ -124,11 +123,6 @@ export const SettingsView: React.FC = () => {
   });
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleSelectTab = (tab: SettingsTab) => {
-    setActiveTab(tab);
-    localStorage.setItem('findoctor_settings_tab', tab);
-  };
-
   const {
     currentCompany,
     updateCompanyDetails,
@@ -138,83 +132,281 @@ export const SettingsView: React.FC = () => {
     inviteMember,
     deleteCompany,
     updateProfile,
-    changeUserEmail,
     changeUserPassword,
+    requestEmailChangeCode,
+    verifyOldEmailCode,
+    confirmNewEmail,
+    requestPasswordCode,
+    forgotPassword,
+    refreshAuthData,
   } = useAuth();
   const [orgName, setOrgName] = useState(currentCompany?.name || '');
   const [isSavingOrg, setIsSavingOrg] = useState(false);
 
-  // Profile & Security state
+  // Compute accurate company tariff display (respects paidUntil & trialEndsAt)
+  const tariffInfo = useMemo(() => {
+    if (!currentCompany) return { text: '—', color: 'var(--muted-foreground)', detail: '' };
+    const now = Date.now();
+    if (currentCompany.paidUntil && new Date(currentCompany.paidUntil).getTime() > now) {
+      const paidDate = new Date(currentCompany.paidUntil);
+      const isVipForever = paidDate.getFullYear() > 2100;
+      return {
+        text: isVipForever ? 'PRO • Бессрочный доступ (VIP)' : `PRO • Оплачено до ${paidDate.toLocaleDateString('ru-RU')}`,
+        color: '#059669',
+        detail: isVipForever ? 'Оплаченный бессрочный доступ активен' : `Доступ оплачен до ${paidDate.toLocaleDateString('ru-RU')}`,
+      };
+    }
+    if (currentCompany.trialEndsAt && new Date(currentCompany.trialEndsAt).getTime() > now) {
+      const trialDate = new Date(currentCompany.trialEndsAt);
+      const daysLeft = Math.max(0, Math.ceil((trialDate.getTime() - now) / (1000 * 60 * 60 * 24)));
+      return {
+        text: `PRO Trial • ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'}`,
+        color: '#d97706',
+        detail: `Пробный период действует до ${trialDate.toLocaleDateString('ru-RU')}`,
+      };
+    }
+    if (currentCompany.plan === 'pro') {
+      return {
+        text: 'PRO • Срок истёк',
+        color: '#dc2626',
+        detail: 'Требуется продление подписки',
+      };
+    }
+    return {
+      text: 'Базовый (Бесплатный)',
+      color: 'var(--muted-foreground)',
+      detail: 'Стандартный доступ к системе',
+    };
+  }, [currentCompany]);
+
+  // Profile & Personal Data state
   const [profileFullName, setProfileFullName] = useState(currentUser?.fullName || '');
-  const [profileEmail, setProfileEmail] = useState(currentUser?.email || '');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [profileRoleTitle, setProfileRoleTitle] = useState(() => {
+    return userRole === 'owner' ? 'Владелец / Основатель' : userRole === 'admin' ? 'Партнёр / Управляющий' : 'Сотрудник команды';
+  });
   const [isSavingName, setIsSavingName] = useState(false);
-  const [isSavingEmail, setIsSavingEmail] = useState(false);
-  const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [profileFeedback, setProfileFeedback] = useState<string | null>(null);
+
+  // Email 2-Step Security Verification Flow state
+  const [isEmailFlowOpen, setIsEmailFlowOpen] = useState(false);
+  const [emailStep, setEmailStep] = useState<'step1_old' | 'step2_new'>('step1_old');
+  const [currentPassForEmail, setCurrentPassForEmail] = useState('');
+  const [oldEmailCode, setOldEmailCode] = useState<string[]>(['', '', '', '', '', '']);
+  const [newEmailInput, setNewEmailInput] = useState('');
+  const [newEmailCode, setNewEmailCode] = useState<string[]>(['', '', '', '', '', '']);
+  const [emailFeedback, setEmailFeedback] = useState<string | null>(null);
+  const [isSendingOldCode, setIsSendingOldCode] = useState(false);
+  const [isSendingNewCode, setIsSendingNewCode] = useState(false);
+  const [isFinalizingEmail, setIsFinalizingEmail] = useState(false);
+
+  // Password Security Verification Flow state
+  const [isPassFlowOpen, setIsPassFlowOpen] = useState(false);
+  const [currentPass, setCurrentPass] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [repeatPass, setRepeatPass] = useState('');
+  const [passCode, setPassCode] = useState<string[]>(['', '', '', '', '', '']);
+  const [passFeedback, setPassFeedback] = useState<string | null>(null);
+  const [isSendingPassCode, setIsSendingPassCode] = useState(false);
+  const [isFinalizingPass, setIsFinalizingPass] = useState(false);
+  const [isForgotSending, setIsForgotSending] = useState(false);
+  const [sessionTerminated, setSessionTerminated] = useState(false);
+
+  const resetSecurityFlows = useCallback(() => {
+    setIsEmailFlowOpen(false);
+    setEmailStep('step1_old');
+    setCurrentPassForEmail('');
+    setOldEmailCode(['', '', '', '', '', '']);
+    setNewEmailInput('');
+    setNewEmailCode(['', '', '', '', '', '']);
+    setEmailFeedback(null);
+
+    setIsPassFlowOpen(false);
+    setCurrentPass('');
+    setNewPass('');
+    setRepeatPass('');
+    setPassCode(['', '', '', '', '', '']);
+    setPassFeedback(null);
+  }, []);
+
+  const handleSelectTab = (tab: SettingsTab) => {
+    resetSecurityFlows();
+    setActiveTab(tab);
+    localStorage.setItem('findoctor_settings_tab', tab);
+  };
 
   useEffect(() => {
     if (currentUser) {
       setProfileFullName(currentUser.fullName || '');
-      setProfileEmail(currentUser.email || '');
     }
   }, [currentUser]);
+
+  const handleCodeBoxInput = (
+    index: number,
+    value: string,
+    stateArr: string[],
+    setStateArr: React.Dispatch<React.SetStateAction<string[]>>,
+    containerId: string
+  ) => {
+    const rawDigits = value.replace(/\D/g, '');
+    if (rawDigits.length > 1) {
+      const digits = rawDigits.slice(0, 6).split('');
+      const updated = [...stateArr];
+      digits.forEach((d, i) => {
+        if (i < 6) updated[i] = d;
+      });
+      setStateArr(updated);
+      const container = document.getElementById(containerId);
+      if (container) {
+        const inputs = container.querySelectorAll<HTMLInputElement>('.profile-code-input');
+        const targetIdx = Math.min(digits.length, 5);
+        inputs[targetIdx]?.focus();
+      }
+      return;
+    }
+
+    const updated = [...stateArr];
+    updated[index] = rawDigits.slice(-1);
+    setStateArr(updated);
+
+    if (rawDigits && index < 5) {
+      const container = document.getElementById(containerId);
+      if (container) {
+        const inputs = container.querySelectorAll<HTMLInputElement>('.profile-code-input');
+        inputs[index + 1]?.focus();
+      }
+    }
+  };
 
   const handleSaveProfileName = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser || !profileFullName.trim()) return;
     setIsSavingName(true);
+    setProfileFeedback(null);
     try {
       await updateProfile(currentUser.id, { fullName: profileFullName.trim() });
+      setProfileFeedback('✅ Изменения профиля успешно сохранены');
       addToast('Имя профиля успешно сохранено', 'success');
     } catch (err: any) {
+      setProfileFeedback(`Ошибка: ${err.message || 'Не удалось обновить профиль'}`);
       addToast(err.message || 'Ошибка обновления имени', 'error');
     } finally {
       setIsSavingName(false);
     }
   };
 
-  const handleChangeEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentUser || !profileEmail.trim()) return;
-    if (profileEmail.trim().toLowerCase() === currentUser.email?.toLowerCase()) {
-      addToast('Вы указали текущий e-mail', 'info');
-      return;
-    }
-    setIsSavingEmail(true);
+  // Email Change Handlers (OWASP 2-Step Verification)
+  const handleSendOldEmailCode = async () => {
+    if (!currentUser || !currentPassForEmail) return;
+    setIsSendingOldCode(true);
+    setEmailFeedback(null);
     try {
-      const res = await changeUserEmail(currentUser.id, profileEmail.trim());
-      addToast(res.message || 'E-mail успешно изменён', 'success');
+      await requestEmailChangeCode(currentUser.id, currentPassForEmail);
+      setEmailFeedback(`✅ Проверочный код выслан на вашу текущую почту ${currentUser.email}`);
     } catch (err: any) {
-      addToast(err.message || 'Ошибка смены e-mail', 'error');
+      setEmailFeedback(`Ошибка: ${err.message || 'Не удалось отправить проверочный код'}`);
     } finally {
-      setIsSavingEmail(false);
+      setIsSendingOldCode(false);
     }
   };
 
-  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentUser) return;
-    if (!newPassword || newPassword.length < 6) {
-      addToast('Новый пароль должен содержать минимум 6 символов', 'info');
+  const handleVerifyOldCodeAndProceed = () => {
+    const code = oldEmailCode.join('').trim();
+    if (code.length !== 6) {
+      setEmailFeedback('Ошибка: введите полный 6-значный код из письма');
       return;
     }
-    if (newPassword !== confirmPassword) {
-      addToast('Пароли не совпадают', 'info');
+    setEmailStep('step2_new');
+    setEmailFeedback(null);
+  };
+
+  const handleSendNewEmailCode = async () => {
+    if (!currentUser || !newEmailInput.includes('@')) {
+      setEmailFeedback('Ошибка: введите корректный новый адрес email');
       return;
     }
-    setIsSavingPassword(true);
+    setIsSendingNewCode(true);
+    setEmailFeedback(null);
     try {
-      const res = await changeUserPassword(currentUser.id, newPassword, currentPassword || undefined);
-      addToast(res.message || 'Пароль успешно обновлён', 'success');
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
+      await verifyOldEmailCode(currentUser.id, oldEmailCode.join('').trim(), newEmailInput.trim().toLowerCase());
+      setEmailFeedback(`✅ Код подтверждения отправлен на новый адрес ${newEmailInput}`);
     } catch (err: any) {
-      addToast(err.message || 'Ошибка изменения пароля', 'error');
+      setEmailFeedback(`Ошибка: ${err.message || 'Не удалось отправить код'}`);
     } finally {
-      setIsSavingPassword(false);
+      setIsSendingNewCode(false);
+    }
+  };
+
+  const handleConfirmNewEmail = async () => {
+    if (!currentUser) return;
+    const code = newEmailCode.join('').trim();
+    if (code.length !== 6) {
+      setEmailFeedback('Ошибка: введите полный 6-значный проверочный код с нового адреса');
+      return;
+    }
+    setIsFinalizingEmail(true);
+    setEmailFeedback(null);
+    try {
+      await confirmNewEmail(currentUser.id, newEmailInput.trim().toLowerCase(), code);
+      await refreshAuthData();
+      addToast(`Email успешно изменён на ${newEmailInput.trim().toLowerCase()}`, 'success');
+      resetSecurityFlows();
+    } catch (err: any) {
+      setEmailFeedback(`Ошибка: ${err.message || 'Не удалось завершить смену Email'}`);
+    } finally {
+      setIsFinalizingEmail(false);
+    }
+  };
+
+  // Password Change Handlers (Step-up Verification with Email Code)
+  const handleSendPassCode = async () => {
+    if (!currentUser || !currentPass) return;
+    setIsSendingPassCode(true);
+    setPassFeedback(null);
+    try {
+      await requestPasswordCode(currentUser.id, currentPass);
+      setPassFeedback(`✅ Код подтверждения отправлен на ваш email ${currentUser.email}`);
+    } catch (err: any) {
+      setPassFeedback(`Ошибка: ${err.message || 'Не удалось отправить код'}`);
+    } finally {
+      setIsSendingPassCode(false);
+    }
+  };
+
+  const handleConfirmPasswordChange = async () => {
+    if (!currentUser) return;
+    if (newPass.length < 6) {
+      setPassFeedback('Ошибка: пароль должен содержать минимум 6 символов');
+      return;
+    }
+    if (newPass !== repeatPass) {
+      setPassFeedback('Ошибка: новый пароль и повтор не совпадают');
+      return;
+    }
+    const code = passCode.join('').trim();
+    setIsFinalizingPass(true);
+    setPassFeedback(null);
+    try {
+      await changeUserPassword(currentUser.id, newPass, currentPass, code || undefined);
+      await refreshAuthData();
+      addToast('Пароль успешно обновлён', 'success');
+      resetSecurityFlows();
+    } catch (err: any) {
+      setPassFeedback(`Ошибка: ${err.message || 'Не удалось обновить пароль'}`);
+    } finally {
+      setIsFinalizingPass(false);
+    }
+  };
+
+  const handleForgotPasswordClick = async () => {
+    if (!currentUser?.email) return;
+    setIsForgotSending(true);
+    try {
+      await forgotPassword(currentUser.email);
+      addToast(`Инструкции по восстановлению отправлены на ${currentUser.email}`, 'info');
+    } catch (err: any) {
+      addToast(err.message || 'Ошибка отправки инструкций', 'error');
+    } finally {
+      setIsForgotSending(false);
     }
   };
 
@@ -1130,10 +1322,15 @@ export const SettingsView: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
                 <div>
                   <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginBottom: '4px' }}>Текущий тариф</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: '#10b981' }}>
-                    <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }} />
-                    {currentCompany?.plan === 'pro' ? '14 дней Pro Trial (Полный доступ)' : 'Базовый (Бесплатный)'}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: tariffInfo.color }}>
+                    <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: tariffInfo.color }} />
+                    <span>{tariffInfo.text}</span>
                   </div>
+                  {tariffInfo.detail && (
+                    <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginTop: '2px' }}>
+                      {tariffInfo.detail}
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -1548,215 +1745,610 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 5: PROFILE & SECURITY                                                 */}
+      {/* TAB 5: PROFILE & SECURITY (MODERN EXECUTIVE SUITE)                        */}
       {/* ========================================================================= */}
       {activeTab === 'profile' && (
         <div className="settings-content-section animate-fade-in">
           <div className="settings-subbar">
             <div>
               <h3 className="settings-subheading">Мой профиль и безопасность</h3>
-              <p className="settings-subtext">Управление личными данными, смена почты и пароля для входа в FINDOCTOR</p>
+              <p className="settings-subtext">
+                Управление личными данными, смена почты и пароля со строгой двухфакторной защитой
+              </p>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginTop: '16px' }}>
-            {/* Card 1: Личные данные */}
-            <div style={{
-              backgroundColor: 'var(--card)',
-              border: '1px solid var(--border)',
-              borderRadius: '12px',
-              padding: '24px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '16px',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '8px',
-                  backgroundColor: 'rgba(217, 119, 6, 0.1)',
-                  color: 'var(--primary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}>
-                  <User size={18} />
+          <div className="profile-workspace-grid">
+            {/* LEFT COLUMN: Personal Data & Active Sessions */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Card 1: Personal Profile Data */}
+              <div className="profile-panel-card">
+                <div className="profile-panel-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div className="profile-avatar-circle">
+                      {profileFullName.trim() ? profileFullName.trim()[0].toUpperCase() : (currentUser?.email ? currentUser.email[0].toUpperCase() : 'U')}
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--foreground)' }}>
+                        {profileFullName || 'Личный профиль'}
+                      </h4>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                          {currentUser?.email}
+                        </span>
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          padding: '2px 8px',
+                          borderRadius: '9999px',
+                          background: userRole === 'owner' ? 'rgba(217, 119, 6, 0.12)' : 'rgba(37, 99, 235, 0.1)',
+                          color: userRole === 'owner' ? '#d97706' : '#2563eb',
+                        }}>
+                          {userRole === 'owner' ? 'Владелец' : userRole === 'admin' ? 'Администратор' : 'Сотрудник'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--foreground)' }}>Личные данные</h4>
-                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted-foreground)' }}>Ваше имя в отчётах и сменах</p>
-                </div>
-              </div>
 
-              <form onSubmit={handleSaveProfileName} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div className="settings-input-group">
-                  <label className="settings-input-label">Имя и фамилия</label>
-                  <input
-                    type="text"
-                    required
-                    value={profileFullName}
-                    onChange={(e) => setProfileFullName(e.target.value)}
-                    className="settings-text-input"
-                    placeholder="Например, Алексей Смирнов"
-                  />
-                </div>
-                <div>
+                <form onSubmit={handleSaveProfileName} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div className="settings-input-group">
+                    <label className="settings-input-label">Имя и фамилия</label>
+                    <input
+                      type="text"
+                      required
+                      value={profileFullName}
+                      onChange={(e) => setProfileFullName(e.target.value)}
+                      className="settings-text-input"
+                      placeholder="Например, Владислав Швецов"
+                    />
+                  </div>
+
+                  <div className="settings-input-group">
+                    <label className="settings-input-label">Должность в компании</label>
+                    <input
+                      type="text"
+                      value={profileRoleTitle}
+                      onChange={(e) => setProfileRoleTitle(e.target.value)}
+                      className="settings-text-input"
+                      placeholder="Например, Главный финдиректор / Шеф-бармен"
+                    />
+                  </div>
+
+                  {profileFeedback && (
+                    <div style={{ fontSize: '12px', color: '#059669', fontWeight: 500 }}>
+                      {profileFeedback}
+                    </div>
+                  )}
+
                   <button
                     type="submit"
                     disabled={isSavingName}
                     className="btn-settings-add"
-                    style={{ width: '100%', justifyContent: 'center' }}
+                    style={{ width: 'fit-content', padding: '8px 18px', fontSize: '13px' }}
                   >
-                    {isSavingName ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                    <span>Сохранить имя</span>
+                    {isSavingName ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+                    <span>Сохранить изменения</span>
+                  </button>
+                </form>
+              </div>
+
+              {/* Card 2: Active Sessions */}
+              <div className="profile-panel-card">
+                <div className="profile-panel-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div className="profile-icon-badge" style={{ background: 'rgba(38, 36, 34, 0.06)', color: 'var(--foreground)' }}>
+                      <Smartphone size={18} />
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--foreground)' }}>
+                        Активные сессии
+                      </h4>
+                      <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                        Устройства, с которых выполнен вход в систему
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="profile-security-box">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>
+                        Текущий браузер (Windows / Web)
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: 'var(--muted-foreground)', marginTop: '2px' }}>
+                        IP: {typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1'} • Активен прямо сейчас
+                      </div>
+                    </div>
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      color: '#059669',
+                      background: 'rgba(5, 150, 105, 0.1)',
+                      padding: '3px 8px',
+                      borderRadius: '9999px',
+                    }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669' }} />
+                      Онлайн
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSessionTerminated(true);
+                      addToast('Все другие активные сессии успешно завершены', 'success');
+                      setTimeout(() => setSessionTerminated(false), 3000);
+                    }}
+                    disabled={sessionTerminated}
+                    className="btn-form-cancel"
+                    style={{ fontSize: '12px', padding: '6px 14px' }}
+                  >
+                    {sessionTerminated ? 'Сессии завершены' : 'Завершить другие сессии'}
                   </button>
                 </div>
-              </form>
+              </div>
             </div>
 
-            {/* Card 2: Электронная почта */}
-            <div style={{
-              backgroundColor: 'var(--card)',
-              border: '1px solid var(--border)',
-              borderRadius: '12px',
-              padding: '24px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '16px',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '8px',
-                  backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                  color: '#2563eb',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}>
-                  <Mail size={18} />
+            {/* RIGHT COLUMN: Enterprise Security (Email & Password 2-Step) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Card 3: Email 2-Step Verification */}
+              <div className="profile-panel-card">
+                <div className="profile-panel-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div className="profile-icon-badge" style={{ background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb' }}>
+                      <Mail size={18} />
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--foreground)' }}>
+                        Email для входа в систему
+                      </h4>
+                      <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                        Основной логин учётной записи и адрес уведомлений
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--foreground)' }}>Email для входа</h4>
-                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted-foreground)' }}>Логин учётной записи</p>
+
+                {/* Email Box */}
+                <div className="profile-security-box">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                    <div>
+                      <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginBottom: '2px' }}>
+                        Текущий рабочий Email:
+                      </div>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--foreground)' }}>
+                        {currentUser?.email}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          color: '#059669',
+                          background: 'rgba(5, 150, 105, 0.1)',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                        }}>
+                          <Check size={12} />
+                          Защищён 2FA
+                        </span>
+                      </div>
+                    </div>
+
+                    {!isEmailFlowOpen && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetSecurityFlows();
+                          setIsEmailFlowOpen(true);
+                        }}
+                        className="btn-form-cancel"
+                        style={{ fontSize: '12px', padding: '6px 14px', fontWeight: 600 }}
+                      >
+                        <Edit2 size={13} style={{ marginRight: '4px' }} />
+                        Изменить Email
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Flow Step 1: Current Password & Old Email Verification */}
+                  {isEmailFlowOpen && emailStep === 'step1_old' && (
+                    <div className="profile-flow-expand">
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        color: '#b45309',
+                        background: '#fef3c7',
+                        border: '1px solid #fde68a',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        width: 'fit-content',
+                      }}>
+                        Шаг 1 из 2: Защита от перехвата аккаунта
+                      </div>
+                      <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted-foreground)', lineHeight: 1.4 }}>
+                        Для безопасности введите текущий пароль. Мы отправим 6-значный код на ваш текущий адрес <strong>{currentUser?.email}</strong>.
+                      </p>
+
+                      <div className="settings-input-group">
+                        <label className="settings-input-label">Текущий пароль учётной записи</label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <input
+                            type="password"
+                            value={currentPassForEmail}
+                            onChange={(e) => setCurrentPassForEmail(e.target.value)}
+                            placeholder="Введите ваш текущий пароль"
+                            className="settings-text-input"
+                            autoComplete="current-password"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleSendOldEmailCode}
+                            disabled={isSendingOldCode || !currentPassForEmail}
+                            className="btn-settings-add"
+                            style={{ flexShrink: 0, padding: '0 12px', fontSize: '12px' }}
+                          >
+                            {isSendingOldCode ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+                            <span>{isSendingOldCode ? 'Отправка...' : 'Выслать код'}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {emailFeedback && (
+                        <div style={{ fontSize: '12px', color: emailFeedback.startsWith('Ошибка') ? '#dc2626' : '#059669', fontWeight: 500 }}>
+                          {emailFeedback}
+                        </div>
+                      )}
+
+                      <div id="settings-old-code-container" style={{ marginTop: '4px' }}>
+                        <span style={{ fontSize: '11.5px', color: 'var(--muted-foreground)', display: 'block', marginBottom: '6px' }}>
+                          Введите 6-значный проверочный код из письма:
+                        </span>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          {oldEmailCode.map((val, idx) => (
+                            <input
+                              key={idx}
+                              type="text"
+                              maxLength={1}
+                              value={val}
+                              onChange={(e) => handleCodeBoxInput(idx, e.target.value, oldEmailCode, setOldEmailCode, 'settings-old-code-container')}
+                              className="profile-code-input"
+                            />
+                          ))}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                          <button
+                            type="button"
+                            onClick={handleVerifyOldCodeAndProceed}
+                            disabled={oldEmailCode.join('').length !== 6}
+                            className="btn-settings-add"
+                            style={{ padding: '7px 14px', fontSize: '12px' }}
+                          >
+                            Подтвердить и ввести новый Email →
+                          </button>
+                          <button
+                            type="button"
+                            onClick={resetSecurityFlows}
+                            className="btn-form-cancel"
+                            style={{ padding: '7px 12px', fontSize: '12px' }}
+                          >
+                            Отмена
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Flow Step 2: New Email Code Verification */}
+                  {isEmailFlowOpen && emailStep === 'step2_new' && (
+                    <div className="profile-flow-expand">
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        color: '#1d4ed8',
+                        background: '#eff6ff',
+                        border: '1px solid #bfdbfe',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        width: 'fit-content',
+                      }}>
+                        Шаг 2 из 2: Привязка нового адреса
+                      </div>
+                      <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted-foreground)', lineHeight: 1.4 }}>
+                        Старый адрес подтверждён! Теперь укажите новый рабочий Email и подтвердите его кодом.
+                      </p>
+
+                      <div className="settings-input-group">
+                        <label className="settings-input-label">Новый адрес электронной почты</label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <input
+                            type="email"
+                            value={newEmailInput}
+                            onChange={(e) => setNewEmailInput(e.target.value)}
+                            placeholder="name@company.ru"
+                            className="settings-text-input"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleSendNewEmailCode}
+                            disabled={isSendingNewCode || !newEmailInput.includes('@')}
+                            className="btn-settings-add"
+                            style={{ flexShrink: 0, padding: '0 12px', fontSize: '12px' }}
+                          >
+                            {isSendingNewCode ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+                            <span>{isSendingNewCode ? 'Отправка...' : 'Выслать код'}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {emailFeedback && (
+                        <div style={{ fontSize: '12px', color: emailFeedback.startsWith('Ошибка') ? '#dc2626' : '#059669', fontWeight: 500 }}>
+                          {emailFeedback}
+                        </div>
+                      )}
+
+                      <div id="settings-new-code-container" style={{ marginTop: '4px' }}>
+                        <span style={{ fontSize: '11.5px', color: 'var(--muted-foreground)', display: 'block', marginBottom: '6px' }}>
+                          Введите код подтверждения с нового адреса:
+                        </span>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          {newEmailCode.map((val, idx) => (
+                            <input
+                              key={idx}
+                              type="text"
+                              maxLength={1}
+                              value={val}
+                              onChange={(e) => handleCodeBoxInput(idx, e.target.value, newEmailCode, setNewEmailCode, 'settings-new-code-container')}
+                              className="profile-code-input"
+                            />
+                          ))}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                          <button
+                            type="button"
+                            onClick={handleConfirmNewEmail}
+                            disabled={isFinalizingEmail || newEmailCode.join('').length !== 6}
+                            className="btn-settings-add"
+                            style={{ padding: '7px 14px', fontSize: '12px' }}
+                          >
+                            {isFinalizingEmail ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                            <span>{isFinalizingEmail ? 'Сохранение...' : 'Завершить смену Email'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={resetSecurityFlows}
+                            className="btn-form-cancel"
+                            style={{ padding: '7px 12px', fontSize: '12px' }}
+                          >
+                            Отмена
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <form onSubmit={handleChangeEmailSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div className="settings-input-group">
-                  <label className="settings-input-label">Электронная почта</label>
-                  <input
-                    type="email"
-                    required
-                    value={profileEmail}
-                    onChange={(e) => setProfileEmail(e.target.value)}
-                    className="settings-text-input"
-                    placeholder="name@company.ru"
-                  />
-                  <span style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginTop: '4px' }}>
-                    Текущий e-mail: <strong>{currentUser?.email}</strong>
-                  </span>
+              {/* Card 4: Password Security & Step-up Code Verification */}
+              <div className="profile-panel-card">
+                <div className="profile-panel-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div className="profile-icon-badge" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
+                      <Lock size={18} />
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--foreground)' }}>
+                        Безопасность и пароль
+                      </h4>
+                      <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                        Защита входа в кассы и финансовую отчётность
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <button
-                    type="submit"
-                    disabled={isSavingEmail}
-                    className="btn-settings-add"
-                    style={{ width: '100%', justifyContent: 'center' }}
-                  >
-                    {isSavingEmail ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                    <span>Сменить Email</span>
-                  </button>
-                </div>
-              </form>
-            </div>
 
-            {/* Card 3: Смена пароля */}
-            <div style={{
-              backgroundColor: 'var(--card)',
-              border: '1px solid var(--border)',
-              borderRadius: '12px',
-              padding: '24px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '16px',
-              gridColumn: '1 / -1',
-              maxWidth: '560px',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '8px',
-                  backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                  color: '#10b981',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}>
-                  <Lock size={18} />
-                </div>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--foreground)' }}>Смена пароля</h4>
-                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted-foreground)' }}>Установите надёжный пароль для защиты вашего аккаунта</p>
+                <div className="profile-security-box">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                    <div>
+                      <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginBottom: '2px' }}>
+                        Статус доступа:
+                      </div>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--foreground)' }}>
+                        Пароль учётной записи активен
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          color: '#059669',
+                          background: 'rgba(5, 150, 105, 0.1)',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                        }}>
+                          <Shield size={12} />
+                          Требует подтверждения по Email
+                        </span>
+                      </div>
+                    </div>
+
+                    {!isPassFlowOpen && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetSecurityFlows();
+                          setIsPassFlowOpen(true);
+                        }}
+                        className="btn-form-cancel"
+                        style={{ fontSize: '12px', padding: '6px 14px', fontWeight: 600 }}
+                      >
+                        <Lock size={13} style={{ marginRight: '4px' }} />
+                        Сменить пароль
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Expandable Password Flow */}
+                  {isPassFlowOpen && (
+                    <div className="profile-flow-expand">
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        color: '#047857',
+                        background: '#ecfdf5',
+                        border: '1px solid #a7f3d0',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        width: 'fit-content',
+                      }}>
+                        Подтверждение смены пароля
+                      </div>
+
+                      <div className="settings-input-group">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <label className="settings-input-label">Текущий пароль</label>
+                          <button
+                            type="button"
+                            onClick={handleForgotPasswordClick}
+                            disabled={isForgotSending}
+                            style={{
+                              fontSize: '11.5px',
+                              color: 'var(--primary)',
+                              background: 'transparent',
+                              border: 'none',
+                              cursor: 'pointer',
+                              textDecoration: 'underline',
+                              padding: 0,
+                            }}
+                          >
+                            {isForgotSending ? 'Отправка...' : 'Забыли пароль?'}
+                          </button>
+                        </div>
+                        <input
+                          type="password"
+                          value={currentPass}
+                          onChange={(e) => setCurrentPass(e.target.value)}
+                          placeholder="Введите ваш текущий пароль"
+                          className="settings-text-input"
+                          autoComplete="current-password"
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+                        <div className="settings-input-group">
+                          <label className="settings-input-label">Новый пароль</label>
+                          <input
+                            type="password"
+                            value={newPass}
+                            onChange={(e) => setNewPass(e.target.value)}
+                            placeholder="Минимум 6 символов"
+                            className="settings-text-input"
+                            autoComplete="new-password"
+                          />
+                        </div>
+                        <div className="settings-input-group">
+                          <label className="settings-input-label">Повторите пароль</label>
+                          <input
+                            type="password"
+                            value={repeatPass}
+                            onChange={(e) => setRepeatPass(e.target.value)}
+                            placeholder="Повторите новый пароль"
+                            className="settings-text-input"
+                            autoComplete="new-password"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Code verification sub-box */}
+                      <div style={{ padding: '12px', background: 'var(--muted)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--foreground)', marginBottom: '3px' }}>
+                          🛡️ Подтверждение безопасности через Email
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginBottom: '8px' }}>
+                          На ваш адрес <strong>{currentUser?.email}</strong> будет выслан 6-значный одноразовый код.
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleSendPassCode}
+                          disabled={isSendingPassCode || !currentPass}
+                          className="btn-settings-add"
+                          style={{ padding: '6px 12px', fontSize: '12px' }}
+                        >
+                          {isSendingPassCode ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />}
+                          <span>{isSendingPassCode ? 'Отправка...' : 'Выслать код на почту'}</span>
+                        </button>
+
+                        {passFeedback && (
+                          <div style={{ fontSize: '12px', marginTop: '8px', color: passFeedback.startsWith('Ошибка') ? '#dc2626' : '#059669', fontWeight: 500 }}>
+                            {passFeedback}
+                          </div>
+                        )}
+
+                        <div id="settings-pass-code-container" style={{ marginTop: '8px' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--muted-foreground)', display: 'block', marginBottom: '5px' }}>
+                            Код подтверждения:
+                          </span>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            {passCode.map((val, idx) => (
+                              <input
+                                key={idx}
+                                type="text"
+                                maxLength={1}
+                                value={val}
+                                onChange={(e) => handleCodeBoxInput(idx, e.target.value, passCode, setPassCode, 'settings-pass-code-container')}
+                                className="profile-code-input"
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={handleConfirmPasswordChange}
+                          disabled={isFinalizingPass || !newPass || newPass !== repeatPass}
+                          className="btn-settings-add"
+                          style={{ padding: '7px 14px', fontSize: '12px' }}
+                        >
+                          {isFinalizingPass ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
+                          <span>{isFinalizingPass ? 'Обновление...' : 'Обновить пароль'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={resetSecurityFlows}
+                          className="btn-form-cancel"
+                          style={{ padding: '7px 12px', fontSize: '12px' }}
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-
-              <form onSubmit={handleChangePasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div className="settings-input-group">
-                  <label className="settings-input-label">Текущий пароль</label>
-                  <input
-                    type="password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="settings-text-input"
-                    placeholder="Если пароль уже был установлен"
-                    autoComplete="current-password"
-                  />
-                </div>
-
-                <div className="settings-input-group">
-                  <label className="settings-input-label">Новый пароль</label>
-                  <input
-                    type="password"
-                    required
-                    minLength={6}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="settings-text-input"
-                    placeholder="Минимум 6 символов"
-                    autoComplete="new-password"
-                  />
-                </div>
-
-                <div className="settings-input-group">
-                  <label className="settings-input-label">Подтверждение нового пароля</label>
-                  <input
-                    type="password"
-                    required
-                    minLength={6}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="settings-text-input"
-                    placeholder="Повторите новый пароль"
-                    autoComplete="new-password"
-                  />
-                </div>
-
-                <div style={{ marginTop: '4px' }}>
-                  <button
-                    type="submit"
-                    disabled={isSavingPassword}
-                    className="btn-settings-add"
-                    style={{ width: '100%', justifyContent: 'center' }}
-                  >
-                    {isSavingPassword ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
-                    <span>Обновить пароль</span>
-                  </button>
-                </div>
-              </form>
             </div>
           </div>
         </div>

@@ -181,6 +181,12 @@
   border-bottom: 1px solid var(--border, #e7e5e2);
   padding-bottom: 2px;
   overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.saas-nav-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .saas-tab-item {

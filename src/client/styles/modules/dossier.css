@@ -169,6 +169,12 @@
   border-bottom: 1px solid var(--border);
   background: var(--card);
   overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.dossier-nav-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .dossier-tab-btn {

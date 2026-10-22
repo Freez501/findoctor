@@ -508,7 +508,12 @@
   gap: 6px;
   overflow-x: auto;
   padding: 2px 0;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.filter-accounts-track::-webkit-scrollbar {
+  display: none;
 }
 
 .filter-account-chip {
