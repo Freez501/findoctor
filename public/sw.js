@@ -4,7 +4,7 @@
  */
 
 const CACHE_NAME = 'findoctor-shell-v1';
-const PRECACHE_URLS = ['/', '/index.html', '/manifest.json', '/favicon.svg'];
+const PRECACHE_URLS = ['/', '/index.html', '/manifest.json', '/favicon.svg', '/favicon-dev.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

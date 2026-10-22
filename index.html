@@ -4,6 +4,37 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
+    <script>
+      (function() {
+        try {
+          var h = window.location.hostname;
+          var isLocal = h === 'localhost' || 
+                        h === '127.0.0.1' || 
+                        h === '0.0.0.0' || 
+                        h.startsWith('192.168.') || 
+                        h.startsWith('10.') || 
+                        h.endsWith('.local') ||
+                        window.location.port === '5173' ||
+                        window.location.port === '3000' ||
+                        window.location.port === '3001' ||
+                        window.location.port === '3333';
+
+          if (h.indexOf('fvds.ru') !== -1 || h.indexOf('shved4656') !== -1) {
+            isLocal = false;
+          }
+
+          if (isLocal) {
+            var links = document.querySelectorAll("link[rel*='icon']");
+            links.forEach(function(link) {
+              link.href = '/favicon-dev.svg';
+            });
+            if (document.title && !document.title.startsWith('[LOCAL]')) {
+              document.title = '[LOCAL] ' + document.title;
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
     <link rel="manifest" href="/manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#363330" />
