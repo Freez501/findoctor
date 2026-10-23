@@ -91,9 +91,9 @@
 }
 
 .event-card:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.12);
-  transform: translateY(-2px);
+  border-color: var(--ring);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 
 .event-card-top {

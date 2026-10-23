@@ -212,29 +212,33 @@ export const EventsView: React.FC = () => {
 
   return (
     <div className="events-container">
-      {/* Header & Overall Summary */}
-      <div className="events-header-panel">
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Calendar size={22} style={{ color: 'var(--color-accent)' }} />
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-accent-strong)' }}>
+      {/* Header & Overall Summary (Unified Header Card Standard) */}
+      <div className="reports-header-card">
+        <div className="reports-header-title">
+          <div className="reports-header-icon">
+            <Calendar size={20} />
+          </div>
+          <div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--foreground)', margin: 0 }}>
               Мероприятия и дебиторка
             </h2>
+            <p style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', margin: '2px 0 0 0' }}>
+              Контроль договоров выездных баров, входящих оплат от заказчиков и чистой проектной прибыли
+            </p>
           </div>
-          <p style={{ fontSize: '0.825rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-            Контроль договоров выездных баров, входящих оплат от заказчиков и чистой проектной прибыли.
-          </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleOpenCreate}
-          className="btn-settings-add"
-          style={{ alignSelf: 'flex-start' }}
-        >
-          <Plus size={16} />
-          <span>Новое мероприятие</span>
-        </button>
+        <div className="reports-actions-group">
+          <button
+            type="button"
+            onClick={handleOpenCreate}
+            className="btn-settings-add"
+            style={{ margin: 0, height: '38px', padding: '0 16px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Plus size={16} />
+            <span>Новое мероприятие</span>
+          </button>
+        </div>
       </div>
 
       {/* Aggregate Financial Metrics */}

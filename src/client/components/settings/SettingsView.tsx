@@ -899,6 +899,79 @@ export const SettingsView: React.FC = () => {
 
   return (
     <div className="settings-view settings-linear-layout">
+      {/* Top Full-Width Unified Page Header Card (Matches Reports, Events, Analytics & Journal) */}
+      <div className="reports-header-card" style={{ gridColumn: '1 / -1' }}>
+        <div className="reports-header-title">
+          <div className="reports-header-icon">
+            {activeTab === 'organization' && <Building2 size={20} />}
+            {activeTab === 'accounts' && <Wallet size={20} />}
+            {activeTab === 'categories' && <Tag size={20} />}
+            {activeTab === 'partners' && <Users size={20} />}
+            {activeTab === 'profile' && <KeyRound size={20} />}
+          </div>
+          <div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--foreground)', margin: 0 }}>
+              {activeTab === 'organization' && 'Организация и тариф'}
+              {activeTab === 'accounts' && 'Управление счетами'}
+              {activeTab === 'categories' && 'Классификатор статей'}
+              {activeTab === 'partners' && 'Партнёры и соучредители'}
+              {activeTab === 'profile' && 'Мой профиль и безопасность'}
+            </h2>
+            <p style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', margin: '2px 0 0 0' }}>
+              {activeTab === 'organization' && 'Реквизиты рабочего пространства, управление командой и параметрами доступа'}
+              {activeTab === 'accounts' && 'Редактируйте назначение касс, тип учёта или добавляйте новые счета'}
+              {activeTab === 'categories' && 'Статьи расходов и доходов для распределения операций и аналитики'}
+              {activeTab === 'partners' && 'Участники бизнеса для выплаты дивидендов и персональных изъятий'}
+              {activeTab === 'profile' && 'Управление личными данными, смена почты и пароля со строгой двухфакторной защитой'}
+            </p>
+          </div>
+        </div>
+
+        <div className="reports-actions-group">
+          {activeTab === 'accounts' && (
+            <>
+              <button
+                type="button"
+                onClick={handleResetBalances}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  height: '38px',
+                  padding: '0 14px',
+                  fontSize: '0.82rem',
+                  backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                  color: '#dc2626',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  borderRadius: 'var(--radius-sm)',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                <RotateCcw size={14} />
+                <span>Обнулить остатки</span>
+              </button>
+              <button type="button" onClick={openCreateAccount} className="btn-settings-add" style={{ height: '38px', margin: 0 }}>
+                <Plus size={15} />
+                <span>Добавить счёт</span>
+              </button>
+            </>
+          )}
+          {activeTab === 'categories' && (
+            <button type="button" onClick={openCreateCategory} className="btn-settings-add" style={{ height: '38px', margin: 0 }}>
+              <Plus size={15} />
+              <span>Добавить статью</span>
+            </button>
+          )}
+          {activeTab === 'partners' && (
+            <button type="button" onClick={openCreatePartner} className="btn-settings-add" style={{ height: '38px', margin: 0 }}>
+              <Plus size={15} />
+              <span>Добавить партнёра</span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* 1. Left Sidebar Navigation (Linear / Stripe Standard) */}
       <aside className="settings-sidebar" aria-label="Разделы настроек">
         <div className="settings-nav-group">
@@ -1713,39 +1786,38 @@ export const SettingsView: React.FC = () => {
           </div>
 
           <div className="profile-workspace-grid">
-            {/* LEFT COLUMN: Personal Data & Active Sessions */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {/* Card 1: Personal Profile Data */}
-              <div className="profile-panel-card">
-                <div className="profile-panel-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                    <div className="profile-avatar-circle">
-                      {profileFullName.trim() ? profileFullName.trim()[0].toUpperCase() : (currentUser?.email ? currentUser.email[0].toUpperCase() : 'U')}
-                    </div>
-                    <div>
-                      <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--foreground)' }}>
-                        {profileFullName || 'Личный профиль'}
-                      </h4>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                        <span style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
-                          {currentUser?.email}
-                        </span>
-                        <span style={{
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          padding: '2px 8px',
-                          borderRadius: '9999px',
-                          background: userRole === 'owner' ? 'rgba(217, 119, 6, 0.12)' : 'rgba(37, 99, 235, 0.1)',
-                          color: userRole === 'owner' ? '#d97706' : '#2563eb',
-                        }}>
-                          {userRole === 'owner' ? 'Владелец' : userRole === 'admin' ? 'Администратор' : 'Сотрудник'}
-                        </span>
-                      </div>
+            {/* Card 1: Personal Profile Data (Full-Width Horizontal Card — No Tetris) */}
+            <div className="profile-panel-card" style={{ gridColumn: '1 / -1' }}>
+              <div className="profile-panel-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div className="profile-avatar-circle">
+                    {profileFullName.trim() ? profileFullName.trim()[0].toUpperCase() : (currentUser?.email ? currentUser.email[0].toUpperCase() : 'U')}
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--foreground)' }}>
+                      {profileFullName || 'Личный профиль'}
+                    </h4>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                        {currentUser?.email}
+                      </span>
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '2px 8px',
+                        borderRadius: '9999px',
+                        background: userRole === 'owner' ? 'rgba(184, 155, 114, 0.18)' : 'rgba(37, 99, 235, 0.1)',
+                        color: userRole === 'owner' ? '#8c734b' : '#2563eb',
+                      }}>
+                        {userRole === 'owner' ? 'Владелец' : userRole === 'admin' ? 'Администратор' : 'Сотрудник'}
+                      </span>
                     </div>
                   </div>
                 </div>
+              </div>
 
-                <form onSubmit={handleSaveProfileName} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <form onSubmit={handleSaveProfileName} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
                   <div className="settings-input-group">
                     <label className="settings-input-label">Имя и фамилия</label>
                     <input
@@ -1768,92 +1840,90 @@ export const SettingsView: React.FC = () => {
                       placeholder="Например, Главный финдиректор / Шеф-бармен"
                     />
                   </div>
+                </div>
 
-                  {profileFeedback && (
-                    <div style={{ fontSize: '12px', color: '#059669', fontWeight: 500 }}>
-                      {profileFeedback}
-                    </div>
-                  )}
+                {profileFeedback && (
+                  <div style={{ fontSize: '12px', color: '#059669', fontWeight: 500 }}>
+                    {profileFeedback}
+                  </div>
+                )}
 
-                  <button
-                    type="submit"
-                    disabled={isSavingName}
-                    className="btn-settings-add"
-                    style={{ width: 'fit-content', padding: '8px 18px', fontSize: '13px' }}
-                  >
-                    {isSavingName ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
-                    <span>Сохранить изменения</span>
-                  </button>
-                </form>
+                <button
+                  type="submit"
+                  disabled={isSavingName}
+                  className="btn-settings-add"
+                  style={{ width: 'fit-content', padding: '8px 18px', fontSize: '13px' }}
+                >
+                  {isSavingName ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+                  <span>Сохранить изменения</span>
+                </button>
+              </form>
+            </div>
+
+            {/* Card 2: Active Sessions */}
+            <div className="profile-panel-card">
+              <div className="profile-panel-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div className="profile-icon-badge" style={{ background: 'var(--accent)', border: '1px solid var(--color-champagne)', color: 'var(--foreground)' }}>
+                    <Smartphone size={18} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--foreground)' }}>
+                      Активные сессии
+                    </h4>
+                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                      Устройства, с которых выполнен вход в систему
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              {/* Card 2: Active Sessions */}
-              <div className="profile-panel-card">
-                <div className="profile-panel-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div className="profile-icon-badge" style={{ background: 'rgba(38, 36, 34, 0.06)', color: 'var(--foreground)' }}>
-                      <Smartphone size={18} />
+              <div className="profile-security-box">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>
+                      Текущий браузер (Windows / Web)
                     </div>
-                    <div>
-                      <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--foreground)' }}>
-                        Активные сессии
-                      </h4>
-                      <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted-foreground)' }}>
-                        Устройства, с которых выполнен вход в систему
-                      </p>
+                    <div style={{ fontSize: '11.5px', color: 'var(--muted-foreground)', marginTop: '2px' }}>
+                      IP: {typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1'} • Активен прямо сейчас
                     </div>
                   </div>
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: '#059669',
+                    background: 'rgba(5, 150, 105, 0.1)',
+                    padding: '3px 8px',
+                    borderRadius: '9999px',
+                  }}>
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669' }} />
+                    Онлайн
+                  </span>
                 </div>
+              </div>
 
-                <div className="profile-security-box">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>
-                        Текущий браузер (Windows / Web)
-                      </div>
-                      <div style={{ fontSize: '11.5px', color: 'var(--muted-foreground)', marginTop: '2px' }}>
-                        IP: {typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1'} • Активен прямо сейчас
-                      </div>
-                    </div>
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      color: '#059669',
-                      background: 'rgba(5, 150, 105, 0.1)',
-                      padding: '3px 8px',
-                      borderRadius: '9999px',
-                    }}>
-                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669' }} />
-                      Онлайн
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSessionTerminated(true);
-                      addToast('Все другие активные сессии успешно завершены', 'success');
-                      setTimeout(() => setSessionTerminated(false), 3000);
-                    }}
-                    disabled={sessionTerminated}
-                    className="btn-form-cancel"
-                    style={{ fontSize: '12px', padding: '6px 14px' }}
-                  >
-                    {sessionTerminated ? 'Сессии завершены' : 'Завершить другие сессии'}
-                  </button>
-                </div>
+              <div style={{ marginTop: 'auto' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSessionTerminated(true);
+                    addToast('Все другие активные сессии успешно завершены', 'success');
+                    setTimeout(() => setSessionTerminated(false), 3000);
+                  }}
+                  disabled={sessionTerminated}
+                  className="btn-form-cancel"
+                  style={{ fontSize: '12px', padding: '6px 14px' }}
+                >
+                  {sessionTerminated ? 'Сессии завершены' : 'Завершить другие сессии'}
+                </button>
               </div>
             </div>
 
-            {/* RIGHT COLUMN: Enterprise Security (Email & Password 2-Step) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {/* Card 3: Email 2-Step Verification */}
-              <div className="profile-panel-card">
+            {/* Card 3: Email 2-Step Verification */}
+            <div className="profile-panel-card">
                 <div className="profile-panel-header">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <div className="profile-icon-badge" style={{ background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb' }}>
@@ -2303,7 +2373,6 @@ export const SettingsView: React.FC = () => {
                   )}
                 </div>
               </div>
-            </div>
           </div>
         </div>
       )}

@@ -139,13 +139,9 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
               type="button"
               onClick={() => onSelectCategory(cat.id)}
               className={`category-chip ${isSelected ? 'category-chip-selected' : ''}`}
-              style={{
-                borderColor: isSelected ? cat.color : undefined,
-                backgroundColor: isSelected ? `${cat.color}15` : undefined,
-              }}
               title={cat.name}
             >
-              <span className="category-chip-icon" style={{ color: cat.color }}>
+              <span className="category-chip-icon" style={{ opacity: isSelected ? 1 : 0.65 }}>
                 {getCategoryIcon(cat.id)}
               </span>
               <span className="category-chip-name">{cat.name}</span>

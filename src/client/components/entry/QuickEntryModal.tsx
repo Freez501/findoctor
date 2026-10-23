@@ -346,9 +346,8 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="quick-entry-form">
-          {/* STEP 1: Type Selector */}
+          {/* Type Selector (shadcn/ui Segmented Tabs) */}
           <div className="entry-step-block">
-            <span className="step-badge-indicator">Шаг 1: Тип операции</span>
             <div className="type-pills-row" role="radiogroup" aria-label="Тип операции">
               {/* Expense */}
               <button
@@ -388,15 +387,13 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
             </div>
           </div>
 
-          {/* STEP 2: Amount & Keypad */}
+          {/* Amount Input (Variant 1 — Clean Keyboard Numeric Box) */}
           <div className="entry-step-block">
-            <span className="step-badge-indicator">Шаг 2: Сумма операции</span>
             <NumericPad amount={amount} onAmountChange={setAmount} />
           </div>
 
-          {/* STEP 3: Context Routing (Accounts & Categories & Event) */}
+          {/* Context Routing (Accounts & Categories & Event) */}
           <div className="entry-step-block">
-            <span className="step-badge-indicator">Шаг 3: Счёт, статья и мероприятие</span>
 
             {/* Expense: Source Account */}
             {type === 'expense' && (

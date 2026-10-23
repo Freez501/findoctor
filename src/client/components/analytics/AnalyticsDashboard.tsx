@@ -52,29 +52,31 @@ export const AnalyticsDashboard: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Top Header Row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-accent)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {/* Top Header Row (Unified Header Card Standard) */}
+      <div className="reports-header-card">
+        <div className="reports-header-title">
+          <div className="reports-header-icon">
             <BarChart3 size={20} aria-hidden="true" />
           </div>
           <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-accent-strong)' }}>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--foreground)', margin: 0 }}>
               Маржинальность и доходность
             </h2>
-            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+            <p style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', margin: '2px 0 0 0' }}>
               Чистая прибыль проектов и подробный разбор затрат
-            </span>
+            </p>
           </div>
         </div>
-        <button type="button" onClick={() => refetch()} className="btn-refresh-accounts" title="Обновить аналитику">
-          <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-          <span>Обновить</span>
-        </button>
+        <div className="reports-actions-group">
+          <button type="button" onClick={() => refetch()} className="reports-print-btn" title="Обновить аналитику">
+            <RefreshCw size={15} className={isLoading ? 'animate-spin' : ''} />
+            <span>Обновить</span>
+          </button>
+        </div>
       </div>
 
       {/* Top Mode Switcher */}
-      <div className="dossier-tabs-nav" style={{ margin: '0 0 10px 0' }}>
+      <div className="dossier-tabs-nav" style={{ margin: 0, border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--card)', padding: '6px', boxShadow: 'var(--shadow-sm)' }}>
         <button
           type="button"
           onClick={() => setActiveTab('margin')}
@@ -170,8 +172,8 @@ export const AnalyticsDashboard: React.FC = () => {
             </span>
           </div>
 
-          {/* Events Margin Breakdown Cards */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Events Margin Breakdown Cards (Compact Grid with Drill-down) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '16px', alignItems: 'start' }}>
             {displayedMetrics.length === 0 ? (
               <div className="glass-panel" style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
                 По выбранному мероприятию пока нет финансовых операций.

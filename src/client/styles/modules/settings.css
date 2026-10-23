@@ -177,7 +177,7 @@
   font-size: 19px;
   letter-spacing: 0.5px;
   box-shadow: 0 4px 12px rgba(43, 39, 36, 0.15);
-  border: 1px solid rgba(217, 119, 6, 0.3);
+  border: 1px solid rgba(197, 176, 142, 0.45);
   flex-shrink: 0;
 }
 
@@ -1223,17 +1223,21 @@
 /* ========================================================================= */
 /* Modern Executive Profile & Security Workspace                             */
 /* ========================================================================= */
+.settings-subbar {
+  display: none !important;
+}
+
 .profile-workspace-grid {
   display: grid;
   grid-template-columns: 1fr;
   gap: 20px;
-  margin-top: 16px;
+  margin-top: 0;
 }
 
 @media (min-width: 900px) {
   .profile-workspace-grid {
     grid-template-columns: 1fr 1fr;
-    align-items: start;
+    align-items: stretch;
   }
 }
 

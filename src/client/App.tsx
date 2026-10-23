@@ -190,18 +190,6 @@ export const App: React.FC = () => {
         </ErrorBoundary>
       </main>
 
-      {/* Floating Action Button (Mobile) */}
-      <button
-        type="button"
-        onClick={() => handleOpenEntry()}
-        className="fab-quick-entry"
-        title="Внести финансовую операцию"
-        aria-label="Внести операцию"
-      >
-        <Plus size={20} aria-hidden="true" />
-        <span>Внести операцию</span>
-      </button>
-
       {/* Quick Entry Modal & Toasts */}
       <QuickEntryModal isOpen={isOpen} onClose={handleCloseEntry} initialAccountId={selectedAccountId} />
       <Toast />

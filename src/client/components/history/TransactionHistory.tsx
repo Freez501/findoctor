@@ -254,22 +254,26 @@ export const TransactionHistory: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-accent)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {/* Header (Unified Header Card Standard) */}
+      <div className="reports-header-card">
+        <div className="reports-header-title">
+          <div className="reports-header-icon">
             <History size={20} aria-hidden="true" />
           </div>
           <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Журнал операций</h2>
-            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--foreground)', margin: 0 }}>
+              Журнал операций
+            </h2>
+            <p style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', margin: '2px 0 0 0' }}>
               История кассовых движений с возможностью отмены и редактирования
-            </span>
+            </p>
           </div>
         </div>
-        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
-          {filtered.length} {filtered.length === 1 ? 'запись' : 'записей'}
-        </span>
+        <div className="reports-actions-group">
+          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--foreground)', background: 'var(--muted)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 'var(--radius-sm)' }}>
+            {filtered.length} {filtered.length === 1 ? 'запись' : 'записей'}
+          </span>
+        </div>
       </div>
 
       {/* Filter Bar */}

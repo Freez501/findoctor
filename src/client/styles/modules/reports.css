@@ -23,9 +23,9 @@
   flex-wrap: wrap;
   gap: 16px;
   padding: 20px;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
 }
 
@@ -36,11 +36,12 @@
 }
 
 .reports-header-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, var(--color-accent) 0%, #1e40af 100%);
-  color: #fff;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  border: 1px solid var(--color-champagne);
+  color: var(--foreground);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -49,30 +50,32 @@
 .reports-actions-group {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .reports-period-chip {
-  padding: 6px 14px;
-  border-radius: var(--radius-full);
-  font-size: 0.825rem;
-  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-weight: 500;
   cursor: pointer;
-  border: 1px solid var(--color-border);
-  background-color: transparent;
-  color: var(--color-text);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid var(--border);
+  background-color: var(--card);
+  color: var(--muted-foreground);
+  transition: all 0.15s ease;
 }
 
 .reports-period-chip:hover {
-  background-color: var(--color-surface-hover);
+  background-color: var(--muted);
+  color: var(--foreground);
 }
 
 .reports-period-chip.active {
-  background-color: var(--color-accent);
-  color: #ffffff;
-  border-color: var(--color-accent);
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+  font-weight: 600;
 }
 
 .reports-export-btn {
@@ -103,15 +106,17 @@
   border-radius: var(--radius-sm);
   font-size: 0.85rem;
   font-weight: 600;
-  border: 1px solid var(--color-border);
-  background-color: var(--color-surface);
-  color: var(--color-text);
+  border: 1px solid var(--border);
+  background-color: var(--card);
+  color: var(--foreground);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .reports-print-btn:hover {
-  background-color: var(--color-surface-hover);
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
 }
 
 /* Statement Navigation Tabs */

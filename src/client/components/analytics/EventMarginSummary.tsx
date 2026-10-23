@@ -20,11 +20,11 @@ const STATUS_LABELS: Record<EventStatus, string> = {
 };
 
 export const EventMarginSummary: React.FC<Props> = ({ metric, status = 'active' }) => {
-  const [isExpanded, setIsExpanded] = useState<boolean>(true);
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const marginBadge = classifyMargin(metric.marginPercentage);
 
   return (
-    <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'var(--color-surface)' }}>
+    <div className="glass-panel" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px', backgroundColor: 'var(--card)' }}>
       {/* Header Row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
         <div>
