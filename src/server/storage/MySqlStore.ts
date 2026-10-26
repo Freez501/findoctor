@@ -1362,7 +1362,7 @@ export class MySqlStore implements IFinanceStore {
       contractAmount: round2(r.contract_amount),
       guestCount: Number(r.guest_count) || 0,
       location: r.location || undefined,
-      notes: r.notes || undefined,
+      notes: r.notes ? r.notes.replace(/(?:\r?\n)?<!--__TAX_META__:.*?-->/g, '').trim() || undefined : undefined,
       isTaxable: r.is_taxable !== null && r.is_taxable !== undefined ? Boolean(r.is_taxable) : true,
       taxSystem: r.tax_system || undefined,
       taxRate: r.tax_rate !== null && r.tax_rate !== undefined ? Number(r.tax_rate) : undefined,

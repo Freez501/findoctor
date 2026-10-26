@@ -26,6 +26,40 @@ import { IFinanceStore, NewEventInput, NewTransactionInput } from './interfaces.
 
 const round2 = (n: number | string | undefined | null): number => Math.round((Number(n) || 0) * 100) / 100;
 
+interface EventTaxMeta {
+  isTaxable?: boolean;
+  taxSystem?: any;
+  taxRate?: number;
+  legalEntity?: string;
+}
+
+const TAX_META_REGEX = /(?:\r?\n)?<!--__TAX_META__:(.*?)-->/;
+
+export function parseTaxMetaFromNotes(notes?: string | null): { cleanNotes?: string; meta: EventTaxMeta } {
+  if (!notes) return { cleanNotes: notes || undefined, meta: {} };
+  const match = notes.match(TAX_META_REGEX);
+  if (!match) return { cleanNotes: notes, meta: {} };
+
+  let meta: EventTaxMeta = {};
+  try {
+    meta = JSON.parse(match[1]);
+  } catch {
+    // Malformed JSON fallback
+  }
+
+  const cleanNotes = notes.replace(TAX_META_REGEX, '').trim() || undefined;
+  return { cleanNotes, meta };
+}
+
+export function encodeTaxMetaIntoNotes(cleanNotes?: string | null, meta?: EventTaxMeta): string | null {
+  const base = (cleanNotes || '').replace(TAX_META_REGEX, '').trim();
+  if (!meta || Object.keys(meta).length === 0) {
+    return base || null;
+  }
+  const tag = `<!--__TAX_META__:${JSON.stringify(meta)}-->`;
+  return base ? `${base}\n${tag}` : tag;
+}
+
 export class SupabaseStore implements IFinanceStore {
   private client: SupabaseClient;
   private fallbackMilestones: EventPaymentMilestone[] = [];
@@ -134,6 +168,7 @@ export class SupabaseStore implements IFinanceStore {
   }
 
   private mapEvent(row: any): CateringEvent {
+    const { cleanNotes, meta } = parseTaxMetaFromNotes(row.notes);
     return {
       id: row.id,
       companyId: row.company_id || DEFAULT_COMPANY_ID,
@@ -145,11 +180,11 @@ export class SupabaseStore implements IFinanceStore {
       contractAmount: row.contract_amount != null ? round2(row.contract_amount) : undefined,
       guestCount: row.guest_count != null ? Number(row.guest_count) : undefined,
       location: row.location || undefined,
-      notes: row.notes || undefined,
-      isTaxable: row.is_taxable !== null && row.is_taxable !== undefined ? Boolean(row.is_taxable) : (row as any).isTaxable !== undefined ? Boolean((row as any).isTaxable) : true,
-      taxSystem: row.tax_system || (row as any).taxSystem || undefined,
-      taxRate: row.tax_rate !== null && row.tax_rate !== undefined ? Number(row.tax_rate) : (row as any).taxRate !== undefined ? Number((row as any).taxRate) : undefined,
-      legalEntity: row.legal_entity || (row as any).legalEntity || undefined,
+      notes: cleanNotes,
+      isTaxable: row.is_taxable !== null && row.is_taxable !== undefined ? Boolean(row.is_taxable) : (meta.isTaxable !== undefined ? meta.isTaxable : (row as any).isTaxable !== undefined ? Boolean((row as any).isTaxable) : true),
+      taxSystem: row.tax_system || meta.taxSystem || (row as any).taxSystem || undefined,
+      taxRate: row.tax_rate !== null && row.tax_rate !== undefined ? Number(row.tax_rate) : (meta.taxRate !== undefined ? Number(meta.taxRate) : (row as any).taxRate !== undefined ? Number((row as any).taxRate) : undefined),
+      legalEntity: row.legal_entity || meta.legalEntity || (row as any).legalEntity || undefined,
       createdBy: row.created_by || undefined,
       updatedBy: row.updated_by || undefined,
       createdAt: row.created_at || new Date().toISOString(),
@@ -205,13 +240,54 @@ export class SupabaseStore implements IFinanceStore {
   public async getCompanies(): Promise<Company[]> {
     const { data, error } = await this.client.from('companies').select('*');
     if (error) throw new Error(error.message);
-    return (data || []).map((r) => this.mapCompany(r));
+    const list = (data || []).map((r) => this.mapCompany(r));
+    try {
+      const { data: taxCats } = await this.client
+        .from('categories')
+        .select('id, icon')
+        .like('id', 'cat_tax_%');
+      if (taxCats && taxCats.length > 0) {
+        const catMap = new Map<string, any>();
+        taxCats.forEach((tc) => {
+          try {
+            const compId = tc.id.replace('cat_tax_', '');
+            catMap.set(compId, JSON.parse(tc.icon));
+          } catch {}
+        });
+        list.forEach((comp) => {
+          if (!comp.taxSettings && catMap.has(comp.id)) {
+            const t = catMap.get(comp.id);
+            comp.taxSettings = t;
+            comp.taxSystem = t.system;
+            comp.taxRate = t.rate;
+          }
+        });
+      }
+    } catch {}
+    return list;
   }
 
   public async getCompanyById(id: string): Promise<Company | null> {
     const { data, error } = await this.client.from('companies').select('*').eq('id', id).maybeSingle();
     if (error) throw new Error(error.message);
-    return data ? this.mapCompany(data) : null;
+    if (!data) return null;
+    const comp = this.mapCompany(data);
+    if (!comp.taxSettings) {
+      try {
+        const { data: taxCat } = await this.client
+          .from('categories')
+          .select('icon')
+          .eq('id', `cat_tax_${id}`)
+          .maybeSingle();
+        if (taxCat && taxCat.icon) {
+          const parsed = JSON.parse(taxCat.icon);
+          comp.taxSettings = parsed;
+          comp.taxSystem = parsed.system;
+          comp.taxRate = parsed.rate;
+        }
+      } catch {}
+    }
+    return comp;
   }
 
   public async createCompany(companyInput: Partial<Company> & { name: string }): Promise<Company> {
@@ -272,6 +348,30 @@ export class SupabaseStore implements IFinanceStore {
     if (updates.taxSystem !== undefined) (data as any).taxSystem = updates.taxSystem;
     if (updates.taxRate !== undefined) (data as any).taxRate = updates.taxRate;
     if (updates.taxSettings !== undefined) (data as any).taxSettings = updates.taxSettings;
+
+    if (updates.taxSettings || updates.taxRate !== undefined || updates.taxSystem) {
+      try {
+        const currentTax = updates.taxSettings || {
+          system: updates.taxSystem || 'usn_income',
+          rate: updates.taxRate ?? 6,
+          applyOnlyToBank: false,
+        };
+        await this.client.from('categories').upsert({
+          id: `cat_tax_${id}`,
+          company_id: id,
+          name: '__tax_settings__',
+          type: 'expense',
+          direction: 'overhead',
+          color: '#000000',
+          icon: JSON.stringify(currentTax),
+          is_system: true,
+          is_event_specific: false,
+        });
+      } catch {
+        // Safe ignore
+      }
+    }
+
     return this.mapCompany(data);
   }
 
@@ -683,8 +783,16 @@ export class SupabaseStore implements IFinanceStore {
         : `event-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const isTaxable = (eventInput as any).isTaxable !== undefined ? Boolean((eventInput as any).isTaxable) : true;
     const taxSystem = (eventInput as any).taxSystem ?? null;
-    const taxRate = (eventInput as any).taxRate !== undefined ? Number((eventInput as any).taxRate) : null;
-    const legalEntity = (eventInput as any).legalEntity ?? null;
+    const taxRate = (eventInput as any).taxRate !== undefined && (eventInput as any).taxRate !== '' && (eventInput as any).taxRate !== null ? Number((eventInput as any).taxRate) : null;
+    const legalEntity = (eventInput as any).legalEntity ? String((eventInput as any).legalEntity).trim() : null;
+
+    const taxMeta: EventTaxMeta = {};
+    if (isTaxable === false) taxMeta.isTaxable = false;
+    if (taxRate !== null) taxMeta.taxRate = taxRate;
+    if (legalEntity) taxMeta.legalEntity = legalEntity;
+    if (taxSystem) taxMeta.taxSystem = taxSystem;
+
+    const notesWithMeta = encodeTaxMetaIntoNotes(eventInput.notes, taxMeta);
 
     const row: any = {
       id: eventId,
@@ -697,7 +805,7 @@ export class SupabaseStore implements IFinanceStore {
       contract_amount: eventInput.contractAmount != null ? round2(eventInput.contractAmount) : 0,
       guest_count: eventInput.guestCount ?? 0,
       location: eventInput.location ?? null,
-      notes: eventInput.notes ?? null,
+      notes: notesWithMeta,
       is_taxable: isTaxable,
       tax_system: taxSystem,
       tax_rate: taxRate,
@@ -726,14 +834,11 @@ export class SupabaseStore implements IFinanceStore {
     }
     if (error) throw new Error(error.message);
     const resultObj = data || row;
-    resultObj.isTaxable = isTaxable;
-    resultObj.taxSystem = taxSystem;
-    resultObj.taxRate = taxRate;
-    resultObj.legalEntity = legalEntity;
     return this.mapEvent(resultObj);
   }
 
   public async updateEvent(id: string, updates: Partial<CateringEvent>): Promise<CateringEvent> {
+    const existing = await this.getEventById(id);
     const payload: Record<string, any> = { updated_at: new Date().toISOString() };
     if (updates.title !== undefined) payload.title = updates.title;
     if (updates.clientName !== undefined) payload.client_name = updates.clientName;
@@ -743,7 +848,22 @@ export class SupabaseStore implements IFinanceStore {
     if (updates.contractAmount !== undefined) payload.contract_amount = round2(updates.contractAmount);
     if (updates.guestCount !== undefined) payload.guest_count = updates.guestCount;
     if (updates.location !== undefined) payload.location = updates.location;
-    if (updates.notes !== undefined) payload.notes = updates.notes;
+
+    // Resolve tax metadata: take explicit updates or keep existing
+    const isTaxable = updates.isTaxable !== undefined ? updates.isTaxable : existing?.isTaxable;
+    const taxRate = updates.taxRate !== undefined ? updates.taxRate : existing?.taxRate;
+    const legalEntity = updates.legalEntity !== undefined ? updates.legalEntity : existing?.legalEntity;
+    const taxSystem = updates.taxSystem !== undefined ? updates.taxSystem : existing?.taxSystem;
+
+    const taxMeta: EventTaxMeta = {};
+    if (isTaxable !== undefined) taxMeta.isTaxable = isTaxable;
+    if (taxRate !== undefined && taxRate !== null && taxRate !== ('' as any)) taxMeta.taxRate = Number(taxRate);
+    if (legalEntity !== undefined && legalEntity !== null && String(legalEntity).trim()) taxMeta.legalEntity = String(legalEntity).trim();
+    if (taxSystem !== undefined && taxSystem !== null) taxMeta.taxSystem = taxSystem;
+
+    const baseNotes = updates.notes !== undefined ? updates.notes : existing?.notes;
+    payload.notes = encodeTaxMetaIntoNotes(baseNotes, taxMeta);
+
     if (updates.isTaxable !== undefined) payload.is_taxable = updates.isTaxable;
     if (updates.taxSystem !== undefined) payload.tax_system = updates.taxSystem;
     if (updates.taxRate !== undefined) payload.tax_rate = updates.taxRate;
@@ -773,10 +893,6 @@ export class SupabaseStore implements IFinanceStore {
     }
     if (error) throw new Error(error.message);
     if (!data) throw new Error(`Мероприятие с id "${id}" не найдено`);
-    if (updates.isTaxable !== undefined) (data as any).isTaxable = updates.isTaxable;
-    if (updates.taxSystem !== undefined) (data as any).taxSystem = updates.taxSystem;
-    if (updates.taxRate !== undefined) (data as any).taxRate = updates.taxRate;
-    if (updates.legalEntity !== undefined) (data as any).legalEntity = updates.legalEntity;
     return this.mapEvent(data);
   }
 
@@ -1236,7 +1352,7 @@ export class SupabaseStore implements IFinanceStore {
   public async getCategories(companyId?: string): Promise<Category[]> {
     const { data, error } = await this.client.from('categories').select('*');
     if (error) throw new Error(error.message);
-    const all = (data || []).map((r) => this.mapCategory(r));
+    const all = (data || []).map((r) => this.mapCategory(r)).filter((c) => !c.name.startsWith('__'));
     if (companyId) {
       return all.filter((c) => !c.companyId || c.companyId === companyId || c.isSystem || c.companyId === DEFAULT_COMPANY_ID);
     }

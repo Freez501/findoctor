@@ -373,6 +373,17 @@ export async function mirrorEventToCloud(ev: any): Promise<void> {
     const { createClient } = await import('@supabase/supabase-js');
     const client = createClient(url, key, { auth: { persistSession: false } });
 
+    let notesWithMeta = ev.notes || null;
+    const taxMeta: Record<string, any> = {};
+    if (ev.isTaxable !== undefined) taxMeta.isTaxable = ev.isTaxable;
+    if (ev.taxRate !== undefined && ev.taxRate !== '') taxMeta.taxRate = Number(ev.taxRate);
+    if (ev.legalEntity) taxMeta.legalEntity = ev.legalEntity;
+    if (ev.taxSystem) taxMeta.taxSystem = ev.taxSystem;
+    if (Object.keys(taxMeta).length > 0) {
+      const raw = (notesWithMeta || '').replace(/<!--__TAX_META__:.*?-->/g, '').trim();
+      notesWithMeta = raw ? `${raw}\n<!--__TAX_META__:${JSON.stringify(taxMeta)}-->` : `<!--__TAX_META__:${JSON.stringify(taxMeta)}-->`;
+    }
+
     const { error } = await client.from('events').upsert({
       id: ev.id,
       company_id: ev.companyId || 'company_truespace_default',
@@ -384,7 +395,7 @@ export async function mirrorEventToCloud(ev: any): Promise<void> {
       contract_amount: ev.contractAmount || 0,
       guest_count: ev.guestCount || 0,
       location: ev.location || null,
-      notes: ev.notes || null,
+      notes: notesWithMeta,
       created_by: ev.createdBy || null,
       updated_by: ev.updatedBy || null,
       updated_at: new Date().toISOString(),
