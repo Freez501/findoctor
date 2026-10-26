@@ -24,9 +24,11 @@ import {
   AlertCircle,
   X,
   FileText,
+  Briefcase,
 } from 'lucide-react';
 import { CateringEvent, EventStatus, Transaction } from '../../../shared/types.js';
 import { useFinance } from '../../context/FinanceContext.js';
+import { useAuth } from '../../context/AuthContext.js';
 import { formatRubles, formatDateRu } from '../../utils/formatters.js';
 import { EventDossierModal } from './EventDossierModal.js';
 
@@ -40,6 +42,9 @@ interface EventFormState {
   guestCount: string;
   location: string;
   notes: string;
+  isTaxable: boolean;
+  taxRate: string;
+  legalEntity: string;
 }
 
 const INITIAL_FORM: EventFormState = {
@@ -52,10 +57,15 @@ const INITIAL_FORM: EventFormState = {
   guestCount: '',
   location: '',
   notes: '',
+  isTaxable: true,
+  taxRate: '',
+  legalEntity: '',
 };
 
 export const EventsView: React.FC = () => {
   const { events, transactions, createEvent, updateEvent, deleteEvent, deleteBatchTransactions } = useFinance();
+  const { currentCompany } = useAuth();
+  const [taxFilter, setTaxFilter] = useState<'all' | 'taxable' | 'non_taxable'>('all');
   const [isFormOpen, setIsFormOpen] = useState<boolean>(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [formData, setFormData] = useState<EventFormState>(INITIAL_FORM);
@@ -63,6 +73,18 @@ export const EventsView: React.FC = () => {
   const [eventToDelete, setEventToDelete] = useState<{ event: CateringEvent; linkedTxs: Transaction[] } | null>(null);
   const [isDeletingEvent, setIsDeletingEvent] = useState<boolean>(false);
   const [selectedDossierEvent, setSelectedDossierEvent] = useState<CateringEvent | null>(null);
+
+  // Filter events by official contract (taxable) vs private (non-taxable)
+  const filteredEvents = useMemo(() => {
+    return events.filter((ev) => {
+      if (taxFilter === 'taxable') return ev.isTaxable !== false;
+      if (taxFilter === 'non_taxable') return ev.isTaxable === false;
+      return true;
+    });
+  }, [events, taxFilter]);
+
+  const taxableCount = useMemo(() => events.filter((e) => e.isTaxable !== false).length, [events]);
+  const nonTaxableCount = useMemo(() => events.filter((e) => e.isTaxable === false).length, [events]);
 
   // Compute metrics for each event from active transactions
   const eventMetrics = useMemo(() => {
@@ -128,6 +150,9 @@ export const EventsView: React.FC = () => {
       guestCount: ev.guestCount !== undefined ? String(ev.guestCount) : '',
       location: ev.location || '',
       notes: ev.notes || '',
+      isTaxable: ev.isTaxable !== false,
+      taxRate: ev.taxRate !== undefined ? String(ev.taxRate) : '',
+      legalEntity: ev.legalEntity || '',
     });
     setIsFormOpen(true);
   };
@@ -146,6 +171,8 @@ export const EventsView: React.FC = () => {
     const contractAmountNum = formData.contractAmount ? Number(formData.contractAmount) : undefined;
     const budgetNum = formData.budget ? Number(formData.budget) : undefined;
     const guestCountNum = formData.guestCount ? Number(formData.guestCount) : undefined;
+    const taxRateNum = formData.taxRate ? Number(formData.taxRate) : undefined;
+    const legalEntityStr = formData.legalEntity.trim() || undefined;
 
     if (editingEventId) {
       await updateEvent(editingEventId, {
@@ -158,6 +185,9 @@ export const EventsView: React.FC = () => {
         guestCount: guestCountNum,
         location: formData.location.trim() || undefined,
         notes: formData.notes.trim() || undefined,
+        isTaxable: formData.isTaxable,
+        taxRate: taxRateNum,
+        legalEntity: legalEntityStr,
       });
     } else {
       await createEvent({
@@ -170,6 +200,9 @@ export const EventsView: React.FC = () => {
         guestCount: guestCountNum,
         location: formData.location.trim() || undefined,
         notes: formData.notes.trim() || undefined,
+        isTaxable: formData.isTaxable,
+        taxRate: taxRateNum,
+        legalEntity: legalEntityStr,
       });
     }
 
@@ -316,7 +349,7 @@ export const EventsView: React.FC = () => {
                   placeholder="Свадьба в Усадьбе Муравьёвых"
                   className="settings-text-input"
                   value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
                 />
               </div>
 
@@ -327,7 +360,7 @@ export const EventsView: React.FC = () => {
                   placeholder="Анастасия и Дмитрий"
                   className="settings-text-input"
                   value={formData.clientName}
-                  onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, clientName: e.target.value }))}
                 />
               </div>
 
@@ -338,7 +371,7 @@ export const EventsView: React.FC = () => {
                   required
                   className="settings-text-input"
                   value={formData.eventDate}
-                  onChange={(e) => setFormData({ ...formData, eventDate: e.target.value })}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, eventDate: e.target.value }))}
                 />
               </div>
 
@@ -347,7 +380,7 @@ export const EventsView: React.FC = () => {
                 <select
                   className="settings-text-input"
                   value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as EventStatus })}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, status: e.target.value as EventStatus }))}
                 >
                   <option value="planned">Планируется</option>
                   <option value="active">В работе</option>
@@ -363,7 +396,7 @@ export const EventsView: React.FC = () => {
                   placeholder="250000"
                   className="settings-text-input"
                   value={formData.contractAmount}
-                  onChange={(e) => setFormData({ ...formData, contractAmount: e.target.value })}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, contractAmount: e.target.value }))}
                 />
               </div>
 
@@ -374,9 +407,122 @@ export const EventsView: React.FC = () => {
                   placeholder="Усадьба Муравьёвых, шатёр"
                   className="settings-text-input"
                   value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, location: e.target.value }))}
                 />
               </div>
+            </div>
+
+            {/* Налогообложение и юрлицо проекта */}
+            <div
+              style={{
+                padding: '16px',
+                borderRadius: '12px',
+                backgroundColor: '#faf8f5',
+                border: '1px solid #e9e2d6',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+              }}
+            >
+              <div>
+                <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--foreground)' }}>
+                  Тип оформления и налог проекта
+                </span>
+                <p style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)', margin: '3px 0 0 0' }}>
+                  {formData.isTaxable
+                    ? 'Официальный проект: сумма учитывается в налоговой базе организации и в отчёте P&L'
+                    : 'Частный проект: не облагается налогом и исключается из налогового резерва компании'}
+                </p>
+              </div>
+
+              {/* Segmented Switch Buttons */}
+              <div style={{ display: 'inline-flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setFormData((prev) => ({ ...prev, isTaxable: true }))}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    fontSize: '0.825rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    border: '1px solid',
+                    background: formData.isTaxable ? 'var(--champagne-bg)' : '#ffffff',
+                    borderColor: formData.isTaxable ? 'var(--champagne-border)' : 'var(--border)',
+                    color: formData.isTaxable ? 'var(--foreground)' : 'var(--muted-foreground)',
+                    boxShadow: formData.isTaxable ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <Briefcase size={14} style={{ color: formData.isTaxable ? 'var(--champagne-icon)' : 'inherit' }} />
+                  <span>По договору (с налогом)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFormData((prev) => ({ ...prev, isTaxable: false }))}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    fontSize: '0.825rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    border: '1px solid',
+                    background: !formData.isTaxable ? 'var(--champagne-bg)' : '#ffffff',
+                    borderColor: !formData.isTaxable ? 'var(--champagne-border)' : 'var(--border)',
+                    color: !formData.isTaxable ? 'var(--foreground)' : 'var(--muted-foreground)',
+                    boxShadow: !formData.isTaxable ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <span>👤 Частный проект (без налога)</span>
+                </button>
+              </div>
+
+              {formData.isTaxable && (
+                <div className="settings-form-grid" style={{ marginTop: '4px' }}>
+                  <div className="settings-input-group">
+                    <label className="settings-input-label">
+                      Индивидуальная ставка налога (%)
+                      <span style={{ fontWeight: 400, color: 'var(--muted-foreground)', marginLeft: '4px' }}>
+                        (по умолчанию ставка компании {currentCompany?.taxRate ?? 6}%)
+                      </span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="50"
+                      placeholder={`По умолчанию: ${currentCompany?.taxRate ?? 6}%`}
+                      className="settings-text-input"
+                      value={formData.taxRate}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, taxRate: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="settings-input-group">
+                    <label className="settings-input-label">
+                      Юрлицо проекта
+                      <span style={{ fontWeight: 400, color: 'var(--muted-foreground)', marginLeft: '4px' }}>
+                        (если у вас несколько: ИП, ООО)
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="например, ООО «Праздник» или ИП Иванов"
+                      className="settings-text-input"
+                      value={formData.legalEntity}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, legalEntity: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="settings-input-group">
@@ -386,7 +532,7 @@ export const EventsView: React.FC = () => {
                 placeholder="Коктейли, особенности меню, контакт организатора..."
                 className="settings-text-input"
                 value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
               />
             </div>
 
@@ -402,36 +548,106 @@ export const EventsView: React.FC = () => {
         </div>
       )}
 
-      {/* Events Grid */}
-      <div className="event-cards-grid">
-        {events.map((ev) => {
-          const metrics = eventMetrics.get(ev.id) || { received: 0, costs: 0 };
-          const contract = ev.contractAmount || (metrics.received > 0 ? metrics.received : 0);
-          const debt = Math.max(0, contract - metrics.received);
-          const profit = metrics.received - metrics.costs;
-          const progressPercent = contract > 0 ? Math.min(100, Math.round((metrics.received / contract) * 100)) : 100;
+      {/* Quick Filter Bar: All / Contract (Taxable) / Private (Non-taxable) */}
+      <div className="events-filter-bar">
+        <div className="events-filter-group">
+          <button
+            type="button"
+            className={`events-filter-btn ${taxFilter === 'all' ? 'active' : ''}`}
+            onClick={() => setTaxFilter('all')}
+          >
+            <span>Все проекты</span>
+            <span style={{ fontSize: '0.725rem', opacity: 0.75 }}>({events.length})</span>
+          </button>
 
-          return (
-            <div
-              key={ev.id}
-              className="event-card"
-              onClick={() => setSelectedDossierEvent(ev)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setSelectedDossierEvent(ev);
-                }
-              }}
-            >
-              <div className="event-card-body">
-                <div className="event-card-top">
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <h3 className="event-card-title">{ev.title}</h3>
-                      {getStatusBadge(ev.status)}
-                    </div>
+          <button
+            type="button"
+            className={`events-filter-btn ${taxFilter === 'taxable' ? 'active' : ''}`}
+            onClick={() => setTaxFilter('taxable')}
+          >
+            <Briefcase size={13} style={{ color: taxFilter === 'taxable' ? 'var(--champagne-icon)' : 'inherit' }} />
+            <span>По договору (с налогом)</span>
+            <span style={{ fontSize: '0.725rem', opacity: 0.75 }}>({taxableCount})</span>
+          </button>
+
+          <button
+            type="button"
+            className={`events-filter-btn ${taxFilter === 'non_taxable' ? 'active' : ''}`}
+            onClick={() => setTaxFilter('non_taxable')}
+          >
+            <span>👤 Частные (без налога)</span>
+            <span style={{ fontSize: '0.725rem', opacity: 0.75 }}>({nonTaxableCount})</span>
+          </button>
+        </div>
+
+        <div style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)' }}>
+          Показано: <b style={{ color: 'var(--foreground)' }}>{filteredEvents.length}</b> из {events.length}
+        </div>
+      </div>
+
+      {/* Events Grid */}
+      {filteredEvents.length === 0 ? (
+        <div
+          className="glass-panel"
+          style={{
+            padding: '36px 20px',
+            textAlign: 'center',
+            color: 'var(--muted-foreground)',
+            fontSize: '0.9rem',
+            backgroundColor: '#fff',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border)',
+          }}
+        >
+          Мероприятий в выбранной категории не найдено.
+        </div>
+      ) : (
+        <div className="event-cards-grid">
+          {filteredEvents.map((ev) => {
+            const metrics = eventMetrics.get(ev.id) || { received: 0, costs: 0 };
+            const contract = ev.contractAmount || (metrics.received > 0 ? metrics.received : 0);
+            const debt = Math.max(0, contract - metrics.received);
+            const profit = metrics.received - metrics.costs;
+            const progressPercent = contract > 0 ? Math.min(100, Math.round((metrics.received / contract) * 100)) : 100;
+
+            return (
+              <div
+                key={ev.id}
+                className="event-card"
+                onClick={() => setSelectedDossierEvent(ev)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedDossierEvent(ev);
+                  }
+                }}
+              >
+                <div className="event-card-body">
+                  <div className="event-card-top">
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <h3 className="event-card-title">{ev.title}</h3>
+                        {getStatusBadge(ev.status)}
+                        {ev.isTaxable !== false ? (
+                          <span
+                            className="event-tax-badge is-taxable"
+                            title={ev.legalEntity ? `Юрлицо: ${ev.legalEntity}` : 'Официальный проект по договору'}
+                          >
+                            <Briefcase size={11} style={{ color: 'var(--champagne-icon)' }} />
+                            <span>{ev.taxRate ? `${ev.taxRate}%` : 'По договору'}</span>
+                            {ev.legalEntity && <span style={{ opacity: 0.85 }}>· {ev.legalEntity}</span>}
+                          </span>
+                        ) : (
+                          <span
+                            className="event-tax-badge is-private"
+                            title="Частный проект, исключается из налогового резерва"
+                          >
+                            👤 Частный
+                          </span>
+                        )}
+                      </div>
 
                     {ev.clientName && (
                       <div className="event-card-client" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -546,6 +762,7 @@ export const EventsView: React.FC = () => {
           );
         })}
       </div>
+      )}
 
       {/* Event Dossier Modal */}
       {selectedDossierEvent && (

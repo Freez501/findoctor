@@ -82,6 +82,9 @@ export class SupabaseStore implements IFinanceStore {
       paidUntil: row.paid_until || undefined,
       isActive: row.is_active ?? true,
       ownerId: row.owner_id || undefined,
+      taxSystem: row.tax_system || (row as any).taxSystem || undefined,
+      taxRate: row.tax_rate !== null && row.tax_rate !== undefined ? Number(row.tax_rate) : (row as any).taxRate !== undefined ? Number((row as any).taxRate) : undefined,
+      taxSettings: row.tax_settings ? (typeof row.tax_settings === 'string' ? JSON.parse(row.tax_settings) : row.tax_settings) : (row as any).taxSettings || undefined,
       createdAt: row.created_at || new Date().toISOString(),
       updatedAt: row.updated_at || new Date().toISOString(),
     };
@@ -143,6 +146,10 @@ export class SupabaseStore implements IFinanceStore {
       guestCount: row.guest_count != null ? Number(row.guest_count) : undefined,
       location: row.location || undefined,
       notes: row.notes || undefined,
+      isTaxable: row.is_taxable !== null && row.is_taxable !== undefined ? Boolean(row.is_taxable) : (row as any).isTaxable !== undefined ? Boolean((row as any).isTaxable) : true,
+      taxSystem: row.tax_system || (row as any).taxSystem || undefined,
+      taxRate: row.tax_rate !== null && row.tax_rate !== undefined ? Number(row.tax_rate) : (row as any).taxRate !== undefined ? Number((row as any).taxRate) : undefined,
+      legalEntity: row.legal_entity || (row as any).legalEntity || undefined,
       createdBy: row.created_by || undefined,
       updatedBy: row.updated_by || undefined,
       createdAt: row.created_at || new Date().toISOString(),
@@ -235,15 +242,36 @@ export class SupabaseStore implements IFinanceStore {
     if (updates.paidUntil !== undefined) payload.paid_until = updates.paidUntil;
     if (updates.isActive !== undefined) payload.is_active = updates.isActive;
     if (updates.ownerId !== undefined) payload.owner_id = updates.ownerId;
+    if (updates.taxSystem !== undefined) payload.tax_system = updates.taxSystem;
+    if (updates.taxRate !== undefined) payload.tax_rate = updates.taxRate;
+    if (updates.taxSettings !== undefined) payload.tax_settings = typeof updates.taxSettings === 'object' ? JSON.stringify(updates.taxSettings) : updates.taxSettings;
 
-    const { data, error } = await this.client
+    let { data, error } = await this.client
       .from('companies')
       .update(payload)
       .eq('id', id)
       .select('*')
       .maybeSingle();
+
+    if (error && (error.message?.includes('tax_system') || error.message?.includes('tax_rate') || error.message?.includes('tax_settings') || error.message?.includes('schema cache'))) {
+      delete payload.tax_system;
+      delete payload.tax_rate;
+      delete payload.tax_settings;
+      const retry = await this.client
+        .from('companies')
+        .update(payload)
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+      data = retry.data;
+      error = retry.error;
+    }
+
     if (error) throw new Error(error.message);
     if (!data) throw new Error(`Компания не найдена: ${id}`);
+    if (updates.taxSystem !== undefined) (data as any).taxSystem = updates.taxSystem;
+    if (updates.taxRate !== undefined) (data as any).taxRate = updates.taxRate;
+    if (updates.taxSettings !== undefined) (data as any).taxSettings = updates.taxSettings;
     return this.mapCompany(data);
   }
 
@@ -653,7 +681,12 @@ export class SupabaseStore implements IFinanceStore {
       'id' in eventInput && eventInput.id
         ? eventInput.id
         : `event-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const row = {
+    const isTaxable = (eventInput as any).isTaxable !== undefined ? Boolean((eventInput as any).isTaxable) : true;
+    const taxSystem = (eventInput as any).taxSystem ?? null;
+    const taxRate = (eventInput as any).taxRate !== undefined ? Number((eventInput as any).taxRate) : null;
+    const legalEntity = (eventInput as any).legalEntity ?? null;
+
+    const row: any = {
       id: eventId,
       company_id: (eventInput as any).companyId || DEFAULT_COMPANY_ID,
       title: eventInput.title,
@@ -665,12 +698,25 @@ export class SupabaseStore implements IFinanceStore {
       guest_count: eventInput.guestCount ?? 0,
       location: eventInput.location ?? null,
       notes: eventInput.notes ?? null,
+      is_taxable: isTaxable,
+      tax_system: taxSystem,
+      tax_rate: taxRate,
+      legal_entity: legalEntity,
       created_by: this.sanitizeUserIdRef((eventInput as any).createdBy),
       updated_by: this.sanitizeUserIdRef((eventInput as any).updatedBy),
       created_at: now,
       updated_at: now,
     };
     let { data, error } = await this.client.from('events').insert(row).select('*').single();
+    if (error && (error.message?.includes('is_taxable') || error.message?.includes('tax_system') || error.message?.includes('schema cache'))) {
+      delete row.is_taxable;
+      delete row.tax_system;
+      delete row.tax_rate;
+      delete row.legal_entity;
+      const retry = await this.client.from('events').insert(row).select('*').single();
+      data = retry.data;
+      error = retry.error;
+    }
     if (error && error.message?.includes('foreign key constraint')) {
       row.created_by = null;
       row.updated_by = null;
@@ -679,7 +725,12 @@ export class SupabaseStore implements IFinanceStore {
       error = retry.error;
     }
     if (error) throw new Error(error.message);
-    return this.mapEvent(data || row);
+    const resultObj = data || row;
+    resultObj.isTaxable = isTaxable;
+    resultObj.taxSystem = taxSystem;
+    resultObj.taxRate = taxRate;
+    resultObj.legalEntity = legalEntity;
+    return this.mapEvent(resultObj);
   }
 
   public async updateEvent(id: string, updates: Partial<CateringEvent>): Promise<CateringEvent> {
@@ -693,16 +744,39 @@ export class SupabaseStore implements IFinanceStore {
     if (updates.guestCount !== undefined) payload.guest_count = updates.guestCount;
     if (updates.location !== undefined) payload.location = updates.location;
     if (updates.notes !== undefined) payload.notes = updates.notes;
+    if (updates.isTaxable !== undefined) payload.is_taxable = updates.isTaxable;
+    if (updates.taxSystem !== undefined) payload.tax_system = updates.taxSystem;
+    if (updates.taxRate !== undefined) payload.tax_rate = updates.taxRate;
+    if (updates.legalEntity !== undefined) payload.legal_entity = updates.legalEntity;
     if (updates.updatedBy !== undefined) payload.updated_by = this.sanitizeUserIdRef(updates.updatedBy);
 
-    const { data, error } = await this.client
+    let { data, error } = await this.client
       .from('events')
       .update(payload)
       .eq('id', id)
       .select('*')
       .maybeSingle();
+
+    if (error && (error.message?.includes('is_taxable') || error.message?.includes('tax_system') || error.message?.includes('schema cache'))) {
+      delete payload.is_taxable;
+      delete payload.tax_system;
+      delete payload.tax_rate;
+      delete payload.legal_entity;
+      const retry = await this.client
+        .from('events')
+        .update(payload)
+        .eq('id', id)
+        .select('*')
+        .maybeSingle();
+      data = retry.data;
+      error = retry.error;
+    }
     if (error) throw new Error(error.message);
     if (!data) throw new Error(`Мероприятие с id "${id}" не найдено`);
+    if (updates.isTaxable !== undefined) (data as any).isTaxable = updates.isTaxable;
+    if (updates.taxSystem !== undefined) (data as any).taxSystem = updates.taxSystem;
+    if (updates.taxRate !== undefined) (data as any).taxRate = updates.taxRate;
+    if (updates.legalEntity !== undefined) (data as any).legalEntity = updates.legalEntity;
     return this.mapEvent(data);
   }
 

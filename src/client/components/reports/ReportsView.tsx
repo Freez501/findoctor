@@ -111,9 +111,10 @@ export const ReportsView: React.FC = () => {
         system: currentCompany?.taxSystem || 'usn_income',
         rate: currentCompany?.taxRate ?? 6,
         applyOnlyToBank: false,
-      }
+      },
+      events
     );
-  }, [transactions, categories, dateRange, currentPeriodLabel, currentCompany]);
+  }, [transactions, categories, dateRange, currentPeriodLabel, currentCompany, events]);
 
   const eventEconomics = useMemo(() => {
     return generateEventEconomicsReport(events, transactions, dateRange);

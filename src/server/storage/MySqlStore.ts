@@ -621,13 +621,17 @@ export class MySqlStore implements IFinanceStore {
       guestCount: eventInput.guestCount || 0,
       location: eventInput.location,
       notes: eventInput.notes,
+      isTaxable: eventInput.isTaxable !== undefined ? eventInput.isTaxable : true,
+      taxSystem: eventInput.taxSystem,
+      taxRate: eventInput.taxRate !== undefined ? eventInput.taxRate : undefined,
+      legalEntity: eventInput.legalEntity,
       createdAt: now,
       updatedAt: now,
     };
 
     await this.pool.query(`
-      INSERT INTO events (id, company_id, title, client_name, event_date, status, budget, contract_amount, guest_count, location, notes, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO events (id, company_id, title, client_name, event_date, status, budget, contract_amount, guest_count, location, notes, is_taxable, tax_system, tax_rate, legal_entity, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       ev.id,
       ev.companyId,
@@ -640,6 +644,10 @@ export class MySqlStore implements IFinanceStore {
       ev.guestCount,
       ev.location || null,
       ev.notes || null,
+      ev.isTaxable ? 1 : 0,
+      ev.taxSystem || null,
+      ev.taxRate !== undefined ? ev.taxRate : null,
+      ev.legalEntity || null,
       ev.createdAt,
       ev.updatedAt,
     ]);
@@ -659,7 +667,7 @@ export class MySqlStore implements IFinanceStore {
 
     await this.pool.query(`
       UPDATE events
-      SET title = ?, client_name = ?, event_date = ?, status = ?, budget = ?, contract_amount = ?, guest_count = ?, location = ?, notes = ?, updated_at = ?
+      SET title = ?, client_name = ?, event_date = ?, status = ?, budget = ?, contract_amount = ?, guest_count = ?, location = ?, notes = ?, is_taxable = ?, tax_system = ?, tax_rate = ?, legal_entity = ?, updated_at = ?
       WHERE id = ?
     `, [
       updated.title,
@@ -671,6 +679,10 @@ export class MySqlStore implements IFinanceStore {
       updated.guestCount,
       updated.location || null,
       updated.notes || null,
+      updated.isTaxable !== undefined ? (updated.isTaxable ? 1 : 0) : 1,
+      updated.taxSystem || null,
+      updated.taxRate !== undefined ? updated.taxRate : null,
+      updated.legalEntity || null,
       now,
       id,
     ]);
@@ -1351,6 +1363,10 @@ export class MySqlStore implements IFinanceStore {
       guestCount: Number(r.guest_count) || 0,
       location: r.location || undefined,
       notes: r.notes || undefined,
+      isTaxable: r.is_taxable !== null && r.is_taxable !== undefined ? Boolean(r.is_taxable) : true,
+      taxSystem: r.tax_system || undefined,
+      taxRate: r.tax_rate !== null && r.tax_rate !== undefined ? Number(r.tax_rate) : undefined,
+      legalEntity: r.legal_entity || undefined,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     };

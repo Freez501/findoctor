@@ -7,9 +7,10 @@
  * - Самозанятость / НПД (4% / 6%)
  * - Индивидуальная ставка (%)
  * - Без расчёта (чистый управленческий учёт)
+ * - Попроектный учёт: частные мероприятия (без налога) vs официальные договоры с индивидуальной ставкой (5%, 7%, 15%, 20%)
  */
 
-import { Transaction, Account, CompanyTaxSettings, TaxSystem } from '../../shared/types.js';
+import { Transaction, Account, CompanyTaxSettings, TaxSystem, CateringEvent } from '../../shared/types.js';
 
 export interface TaxCalculationResult {
   system: TaxSystem;
@@ -22,6 +23,8 @@ export interface TaxCalculationResult {
   taxAmount: number;
   quarterLabel: string;
   isEffective: boolean;
+  taxableEventsCount?: number;
+  nonTaxableEventsCount?: number;
 }
 
 export function getQuarterDateRange(date: Date = new Date()): { startDate: string; endDate: string; quarterLabel: string } {
@@ -46,7 +49,8 @@ export function calculateTaxReserve(
   transactions: Transaction[],
   accounts: Account[],
   taxSettings?: CompanyTaxSettings,
-  targetDate: Date = new Date()
+  targetDate: Date = new Date(),
+  events: CateringEvent[] = []
 ): TaxCalculationResult {
   const system: TaxSystem = taxSettings?.system || 'usn_income';
   const rate: number = taxSettings?.rate ?? 6;
@@ -81,7 +85,11 @@ export function calculateTaxReserve(
     accounts.filter((a) => a.type === 'bank' || a.type === 'card').map((a) => a.id)
   );
 
-  let incomeBase = 0;
+  const eventMap = new Map<string, CateringEvent>(events.map((e) => [e.id, e]));
+
+  let standardIncomeBase = 0;
+  let customEventIncomeBase = 0;
+  let customEventTaxSum = 0;
   let expenseBase = 0;
 
   for (const tx of transactions) {
@@ -93,39 +101,64 @@ export function calculateTaxReserve(
       if (applyOnlyToBank && tx.toAccountId && !bankAccountIds.has(tx.toAccountId)) {
         continue;
       }
-      incomeBase += tx.amount;
+
+      // Check event taxability
+      if (tx.eventId) {
+        const ev = eventMap.get(tx.eventId);
+        if (ev) {
+          // If event is explicitly marked non-taxable (private event without contract)
+          if (ev.isTaxable === false) {
+            continue; // Completely exclude from tax base!
+          }
+          // If event has its own specific tax rate (different legal entity or VAT)
+          if (ev.taxRate !== undefined && ev.taxRate !== null) {
+            customEventTaxSum += Math.round(tx.amount * (ev.taxRate / 100));
+            customEventIncomeBase += tx.amount;
+            continue;
+          }
+        }
+      }
+
+      standardIncomeBase += tx.amount;
     } else if (tx.type === 'expense') {
       if (applyOnlyToBank && tx.fromAccountId && !bankAccountIds.has(tx.fromAccountId)) {
         continue;
+      }
+      if (tx.eventId) {
+        const ev = eventMap.get(tx.eventId);
+        if (ev && ev.isTaxable === false) {
+          continue; // Non-taxable event expenses don't offset taxable company income
+        }
       }
       expenseBase += tx.amount;
     }
   }
 
-  let taxableBase = 0;
-  let taxAmount = 0;
+  let standardTax = 0;
+  let calculatedTaxableBase = standardIncomeBase + customEventIncomeBase;
 
   if (system === 'usn_income' || system === 'npd' || system === 'custom') {
-    taxableBase = incomeBase;
-    taxAmount = Math.round(incomeBase * (rate / 100));
+    standardTax = Math.round(standardIncomeBase * (rate / 100));
   } else if (system === 'usn_income_expense') {
-    taxableBase = Math.max(0, incomeBase - expenseBase);
-    // Минимальный налог для УСН Доходы минус Расходы в РФ: 1% от доходов
-    const standardTax = Math.round(taxableBase * (rate / 100));
-    const minTax = Math.round(incomeBase * 0.01);
-    taxAmount = Math.max(standardTax, minTax);
+    const taxableProfit = Math.max(0, standardIncomeBase - expenseBase);
+    calculatedTaxableBase = taxableProfit + customEventIncomeBase;
+    const calculatedTax = Math.round(taxableProfit * (rate / 100));
+    const minTax = Math.round(standardIncomeBase * 0.01);
+    standardTax = Math.max(calculatedTax, minTax);
   }
+
+  const totalTaxAmount = standardTax + customEventTaxSum;
 
   return {
     system,
     systemLabel: labels[system],
     rate,
     applyOnlyToBank,
-    incomeBase,
+    incomeBase: standardIncomeBase + customEventIncomeBase,
     expenseBase,
-    taxableBase,
-    taxAmount,
+    taxableBase: calculatedTaxableBase,
+    taxAmount: totalTaxAmount,
     quarterLabel,
-    isEffective: taxAmount > 0 || incomeBase > 0,
+    isEffective: totalTaxAmount > 0 || (standardIncomeBase + customEventIncomeBase) > 0,
   };
 }

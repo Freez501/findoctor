@@ -17,6 +17,7 @@ import {
   ParsedStatementItem,
   Transaction,
   TransactionType,
+  TaxSystem,
 } from './types.js';
 
 export type { ParsedStatementItem };
@@ -52,6 +53,10 @@ export interface CreateEventDTO {
   guestCount?: number;
   location?: string;
   notes?: string;
+  isTaxable?: boolean;
+  taxSystem?: TaxSystem;
+  taxRate?: number;
+  legalEntity?: string;
   companyId?: string;
   createdBy?: string;
   updatedBy?: string;
@@ -393,6 +398,10 @@ export function validateCreateEventDTO(input: unknown): ValidationResult<CreateE
       guestCount: payload.guestCount,
       location: payload.location ? payload.location.trim() : undefined,
       notes: payload.notes ? payload.notes.trim() : undefined,
+      isTaxable: payload.isTaxable !== undefined ? Boolean(payload.isTaxable) : undefined,
+      taxSystem: payload.taxSystem,
+      taxRate: typeof payload.taxRate === 'number' ? payload.taxRate : undefined,
+      legalEntity: payload.legalEntity ? payload.legalEntity.trim() : undefined,
     },
   };
 }

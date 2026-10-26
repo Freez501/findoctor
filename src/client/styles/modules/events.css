@@ -223,3 +223,74 @@
   color: var(--chart-1);
 }
 
+/* Events Taxation & Contract Filtering Standards (Maia Champagne) */
+.events-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.events-filter-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f1f2f4;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.events-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.events-filter-btn:hover {
+  color: var(--foreground);
+}
+
+.events-filter-btn.active {
+  background: var(--champagne-bg);
+  border-color: var(--champagne-border);
+  color: var(--foreground);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.event-tax-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.725rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.event-tax-badge.is-taxable {
+  background: var(--champagne-bg);
+  color: #715830;
+  border: 1px solid var(--champagne-border-subtle);
+}
+
+.event-tax-badge.is-private {
+  background: #f3f4f6;
+  color: #6b7280;
+  border: 1px solid #e5e7eb;
+}
+
+

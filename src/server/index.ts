@@ -1,5 +1,5 @@
 /**
- * Truespace — Барный кейтеринг и финансы
+ * Truespace — Барный кейтеринг и финансы (Tax Engine Active v2)
  * Server Entrypoint (`src/server/index.ts`)
  *
  * Boots the Express REST API server, binds to port 3001 with 0.0.0.0 host for LAN mobile access,

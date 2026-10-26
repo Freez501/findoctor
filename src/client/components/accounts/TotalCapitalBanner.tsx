@@ -17,7 +17,7 @@ import { formatRubles, formatPercent } from '../../utils/formatters.js';
 export const TotalCapitalBanner: React.FC = () => {
   const { accounts, totalBalance, isLoading } = useAccounts();
   const { currentCompany } = useAuth();
-  const { transactions } = useFinance();
+  const { transactions, events } = useFinance();
 
   const activeAccounts = accounts.filter((a) => a.isActive !== false);
   const isInitialColdLoad = isLoading && accounts.length === 0;
@@ -27,7 +27,7 @@ export const TotalCapitalBanner: React.FC = () => {
       system: currentCompany?.taxSystem || 'usn_income',
       rate: currentCompany?.taxRate ?? 6,
       applyOnlyToBank: false,
-    });
+    }, new Date(), events);
     if (currentQ.taxAmount > 0) return currentQ;
 
     // If current quarter has no transactions yet, check previous quarter (e.g. III кв. where initial seed data lives)
@@ -37,10 +37,10 @@ export const TotalCapitalBanner: React.FC = () => {
       system: currentCompany?.taxSystem || 'usn_income',
       rate: currentCompany?.taxRate ?? 6,
       applyOnlyToBank: false,
-    }, prevDate);
+    }, prevDate, events);
 
     return prevQ.taxAmount > 0 ? prevQ : currentQ;
-  }, [transactions, accounts, currentCompany]);
+  }, [transactions, accounts, currentCompany, events]);
 
   return (
     <section className="total-capital-banner hero-glow-banner" aria-label="Сводный баланс и ликвидность">

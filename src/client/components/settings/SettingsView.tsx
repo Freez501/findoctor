@@ -114,6 +114,7 @@ export const SettingsView: React.FC = () => {
     resetAccountBalances,
     addToast,
     transactions,
+    events,
   } = useFinance();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
@@ -571,8 +572,8 @@ export const SettingsView: React.FC = () => {
       system: taxSystem,
       rate: Number(taxRate) || 0,
       applyOnlyToBank,
-    });
-  }, [transactions, accounts, taxSystem, taxRate, applyOnlyToBank]);
+    }, new Date(), events);
+  }, [transactions, accounts, taxSystem, taxRate, applyOnlyToBank, events]);
 
   const handleSaveTaxSettings = async (e: React.FormEvent) => {
     e.preventDefault();

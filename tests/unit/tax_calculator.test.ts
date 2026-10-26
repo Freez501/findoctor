@@ -197,4 +197,130 @@ describe('Tax Calculator Suite — Russian SME & Agency Taxation', () => {
     expect(res.taxAmount).toBe(0);
     expect(res.isEffective).toBe(false);
   });
+
+  it('completely excludes private events marked with isTaxable: false', () => {
+    const targetDate = new Date('2026-10-26T12:00:00Z');
+    const events = [
+      {
+        id: 'ev_official',
+        title: 'Корпоратив Сбер',
+        eventDate: '2026-10-15',
+        status: 'active' as const,
+        isTaxable: true,
+      },
+      {
+        id: 'ev_private',
+        title: 'День рождения шефа (частный)',
+        eventDate: '2026-10-20',
+        status: 'completed' as const,
+        isTaxable: false, // НЕ облагается налогом
+      },
+    ];
+
+    const txs: Transaction[] = [
+      {
+        id: 'tx_official',
+        type: 'income',
+        amount: 300000,
+        toAccountId: 'acc_bank',
+        categoryId: 'prepayment',
+        eventId: 'ev_official',
+        transactionDate: '2026-10-15T12:00:00Z',
+        isDeleted: false,
+        companyId: 'co_test',
+        description: 'Официальная оплата по договору',
+        createdAt: '2026-10-15T12:00:00Z',
+        updatedAt: '2026-10-15T12:00:00Z',
+      },
+      {
+        id: 'tx_private',
+        type: 'income',
+        amount: 150000,
+        toAccountId: 'acc_bank', // даже если зашло на счёт, проект частный!
+        categoryId: 'prepayment',
+        eventId: 'ev_private',
+        transactionDate: '2026-10-20T12:00:00Z',
+        isDeleted: false,
+        companyId: 'co_test',
+        description: 'Частный перевод за день рождения',
+        createdAt: '2026-10-20T12:00:00Z',
+        updatedAt: '2026-10-20T12:00:00Z',
+      },
+    ];
+
+    const taxSettings: CompanyTaxSettings = {
+      system: 'usn_income',
+      rate: 6,
+      applyOnlyToBank: false,
+    };
+
+    const res = calculateTaxReserve(txs, mockAccounts, taxSettings, targetDate, events);
+    // Only official event 300k is taxed! Private event 150k is excluded!
+    expect(res.incomeBase).toBe(300000);
+    expect(res.taxAmount).toBe(18000); // 6% of 300k
+  });
+
+  it('calculates custom per-event tax rate (e.g. ООО с НДС 20% или УСН 5%) alongside company default', () => {
+    const targetDate = new Date('2026-10-26T12:00:00Z');
+    const events = [
+      {
+        id: 'ev_standard',
+        title: 'Свадьба на ИП (УСН 6%)',
+        eventDate: '2026-10-10',
+        status: 'completed' as const,
+        isTaxable: true,
+      },
+      {
+        id: 'ev_vat_company',
+        title: 'Крупный форум через ООО с НДС (20%)',
+        eventDate: '2026-10-18',
+        status: 'active' as const,
+        isTaxable: true,
+        taxRate: 20, // индивидуальная ставка 20%
+        legalEntity: 'ООО Ивент Про',
+      },
+    ];
+
+    const txs: Transaction[] = [
+      {
+        id: 'tx_std',
+        type: 'income',
+        amount: 200000,
+        toAccountId: 'acc_bank',
+        categoryId: 'prepayment',
+        eventId: 'ev_standard',
+        transactionDate: '2026-10-10T12:00:00Z',
+        isDeleted: false,
+        companyId: 'co_test',
+        description: 'Оплата на ИП',
+        createdAt: '2026-10-10T12:00:00Z',
+        updatedAt: '2026-10-10T12:00:00Z',
+      },
+      {
+        id: 'tx_vat',
+        type: 'income',
+        amount: 500000,
+        toAccountId: 'acc_bank',
+        categoryId: 'prepayment',
+        eventId: 'ev_vat_company',
+        transactionDate: '2026-10-18T12:00:00Z',
+        isDeleted: false,
+        companyId: 'co_test',
+        description: 'Оплата на ООО с НДС',
+        createdAt: '2026-10-18T12:00:00Z',
+        updatedAt: '2026-10-18T12:00:00Z',
+      },
+    ];
+
+    const taxSettings: CompanyTaxSettings = {
+      system: 'usn_income',
+      rate: 6, // 6% для стандартных
+      applyOnlyToBank: false,
+    };
+
+    const res = calculateTaxReserve(txs, mockAccounts, taxSettings, targetDate, events);
+    // 200k * 6% = 12k; 500k * 20% = 100k; Total tax = 112k!
+    expect(res.incomeBase).toBe(700000);
+    expect(res.taxAmount).toBe(112000);
+  });
 });

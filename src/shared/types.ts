@@ -242,6 +242,14 @@ export interface CateringEvent {
   location?: string;
   /** Additional notes, cocktail menu specifics, organizer contacts */
   notes?: string;
+  /** Whether project has official contract and is subject to taxation (true = с налогом, false = частный без налога) */
+  isTaxable?: boolean;
+  /** Specific taxation system for this project (optional, defaults to company's taxSystem) */
+  taxSystem?: TaxSystem;
+  /** Specific tax rate for this project in % (e.g. 6, 15, 5, 7, 20 or custom) */
+  taxRate?: number;
+  /** Legal entity conducting the contract (e.g. 'ООО Ивент Про', 'ИП Смирнов') */
+  legalEntity?: string;
   /** Author who created this record */
   createdBy?: AuditUser;
   /** Author who last updated this record */

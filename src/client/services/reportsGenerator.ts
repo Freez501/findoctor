@@ -204,7 +204,8 @@ export function generatePnLStatement(
   categories: Category[],
   range: DateRange,
   periodLabel: string,
-  taxSettings?: CompanyTaxSettings
+  taxSettings?: CompanyTaxSettings,
+  events: CateringEvent[] = []
 ): PnLStatementData {
   const catMap = new Map(categories.map((c) => [c.id, c.name]));
 
@@ -242,19 +243,41 @@ export function generatePnLStatement(
   const grossMarginPercent = revenue > 0 ? round2((grossProfit / revenue) * 100) : 0;
   const netMarginPercent = revenue > 0 ? round2((operatingProfit / revenue) * 100) : 0;
 
-  // Taxation calculations for P&L
+  // Taxation calculations for P&L with per-event taxability support
   let taxEstimated = 0;
   let taxLabel = '';
   if (taxSettings && taxSettings.system !== 'none') {
     const rate = taxSettings.rate ?? 6;
+    const eventMap = new Map<string, CateringEvent>(events.map((e) => [e.id, e]));
+
+    let taxableRevenue = 0;
+    let customEventTax = 0;
+
+    periodTx.forEach((tx) => {
+      if (tx.type !== 'income') return;
+      if (tx.categoryId === 'cat_founder_invest' || catMap.get(tx.categoryId)?.toLowerCase().includes('займ')) return;
+
+      if (tx.eventId) {
+        const ev = eventMap.get(tx.eventId);
+        if (ev) {
+          if (ev.isTaxable === false) return; // private event -> no tax!
+          if (ev.taxRate !== undefined && ev.taxRate !== null) {
+            customEventTax += round2(tx.amount * (ev.taxRate / 100));
+            return;
+          }
+        }
+      }
+      taxableRevenue += tx.amount;
+    });
+
     if (taxSettings.system === 'usn_income' || taxSettings.system === 'npd' || taxSettings.system === 'custom') {
-      taxEstimated = round2(revenue * (rate / 100));
+      taxEstimated = round2(taxableRevenue * (rate / 100)) + customEventTax;
       taxLabel = `Расчётный налог (${taxSettings.system === 'usn_income' ? 'УСН Доходы' : taxSettings.system === 'npd' ? 'НПД' : 'Ставка'} ${rate}%)`;
     } else if (taxSettings.system === 'usn_income_expense') {
       const taxableBase = Math.max(0, operatingProfit);
       const standardTax = round2(taxableBase * (rate / 100));
-      const minTax = round2(revenue * 0.01);
-      taxEstimated = Math.max(standardTax, minTax);
+      const minTax = round2(taxableRevenue * 0.01);
+      taxEstimated = Math.max(standardTax, minTax) + customEventTax;
       taxLabel = `Расчётный налог (УСН Доходы-Расходы ${rate}%)`;
     }
   }
