@@ -32,6 +32,8 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
   const [fullName, setFullName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
+  const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -68,6 +70,9 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
           }
           if (password !== confirmPassword) {
             throw new Error('Введённые пароли не совпадают. Пожалуйста, проверьте ввод.');
+          }
+          if (!acceptedPrivacy) {
+            throw new Error('Для регистрации необходимо подтвердить согласие на обработку персональных данных');
           }
 
           const targetCompany = companyName.trim();
@@ -227,7 +232,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
                   onClick={async () => {
                     try {
                       setIsLoading(true);
-                      const targetCompany = companyName.trim() || `Кейтеринг ${fullName.trim()}`;
+                      const targetCompany = companyName.trim() || `Организация ${fullName.trim()}`;
                       const res = await api.sendVerificationCode({
                         email: email.trim(),
                         password,
@@ -274,7 +279,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
                       <input
                         type="text"
                         required
-                        placeholder="Например, Мой Кейтеринг или Бар на выезд"
+                        placeholder="Например, Свадебное агентство или Корпоративное агентство"
                         value={companyName}
                         onChange={(e) => setCompanyName(e.target.value)}
                         className="auth-input"
@@ -407,9 +412,47 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
                 </div>
               )}
 
+              {mode === 'register' && (
+                <div className="auth-checkbox-row" style={{ alignItems: 'flex-start', gap: '9px', margin: '4px 0 6px 0' }}>
+                  <input
+                    type="checkbox"
+                    id="acceptPrivacyPolicy"
+                    checked={acceptedPrivacy}
+                    onChange={(e) => setAcceptedPrivacy(e.target.checked)}
+                    style={{ cursor: 'pointer', accentColor: 'var(--primary)', marginTop: '3px', width: '15px', height: '15px', flexShrink: 0 }}
+                  />
+                  <label htmlFor="acceptPrivacyPolicy" className="auth-checkbox-label" style={{ lineHeight: 1.45, fontSize: '0.775rem' }}>
+                    Я согласен на{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setShowPrivacyModal(true);
+                      }}
+                      className="auth-text-link"
+                      style={{ fontSize: '0.775rem', fontWeight: 600 }}
+                    >
+                      обработку персональных данных
+                    </button>{' '}
+                    и принимаю условия{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setShowPrivacyModal(true);
+                      }}
+                      className="auth-text-link"
+                      style={{ fontSize: '0.775rem', fontWeight: 600 }}
+                    >
+                      Политики конфиденциальности
+                    </button>
+                  </label>
+                </div>
+              )}
+
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || (mode === 'register' && !acceptedPrivacy)}
                 className="auth-submit-btn"
               >
                 <span>
@@ -482,10 +525,90 @@ export const AuthView: React.FC<AuthViewProps> = ({ initialMode = 'login', onBac
 
         {/* Safety & Multi-Tenant Info Footer */}
         <div className="auth-footer-badge">
-          <Shield size={14} className="text-accent" />
-          <span>Изолированная база данных и шифрование данных PostgreSQL Supabase</span>
+          <Shield size={14} style={{ color: '#8c734b' }} />
+          <span>Изолированный контур данных компании и двухфакторная защита доступа</span>
         </div>
       </div>
+
+      {/* Legal Consent & Privacy Policy Placeholder Modal (152-ФЗ) */}
+      {showPrivacyModal && (
+        <div
+          className="ui-dialog-backdrop"
+          onClick={() => setShowPrivacyModal(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Согласие на обработку персональных данных"
+        >
+          <div
+            className="ui-dialog"
+            style={{ maxWidth: '520px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div className="ui-page-header-icon" style={{ width: '34px', height: '34px' }}>
+                  <Shield size={17} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--foreground)' }}>
+                    Обработка персональных данных (152-ФЗ)
+                  </h3>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>
+                    Политика конфиденциальности и пользовательское соглашение
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: '#f8f9fa',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '14px',
+                fontSize: '0.8125rem',
+                lineHeight: 1.55,
+                color: 'var(--foreground)',
+                maxHeight: '280px',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+              }}
+            >
+              <p style={{ margin: 0, fontWeight: 600 }}>
+                Информационная заглушка юридического документа
+              </p>
+              <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>
+                В соответствии с Федеральным законом № 152-ФЗ «О персональных данных», при регистрации в системе FINDOCTOR пользователь даёт согласие на обработку указанных при регистрации данных (имя, адрес электронной почты, наименование организации) исключительно в целях предоставления доступа к сервису.
+              </p>
+              <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>
+                Полный текст Политики конфиденциальности и Согласия на обработку персональных данных будет прикреплён в этом окне перед публичным запуском.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={() => setShowPrivacyModal(false)}
+                className="ui-btn-secondary"
+              >
+                Закрыть
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAcceptedPrivacy(true);
+                  setShowPrivacyModal(false);
+                }}
+                className="ui-btn-primary"
+              >
+                Принять и отметить галочку
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

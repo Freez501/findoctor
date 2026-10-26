@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Trash2 } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, ArrowLeftRight, Trash2 } from 'lucide-react';
 import { Transaction } from '../../../shared/types.js';
 import { formatRubles, formatDateTimeRu } from '../../utils/formatters.js';
 import { useFinance } from '../../context/FinanceContext.js';
@@ -105,7 +105,7 @@ export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelect
           className="compact-tx-icon"
           style={{ backgroundColor: iconBgColor, color: amountColor }}
         >
-          {isIncome ? <ArrowDownLeft size={16} /> : isExpense ? <ArrowUpRight size={16} /> : <ArrowLeftRight size={16} />}
+          {isIncome ? <ArrowUpRight size={16} /> : isExpense ? <ArrowDownRight size={16} /> : <ArrowLeftRight size={16} />}
         </div>
 
         <div className="compact-tx-content">

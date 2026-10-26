@@ -119,7 +119,7 @@ export const AnalyticsDashboard: React.FC = () => {
           {overview && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
               <div className="glass-panel" style={{ padding: '16px' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block' }}>Выручка кейтеринга</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block' }}>Выручка организации</span>
                 <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#059669' }}>{formatRubles(overview.eventsTotalRevenue)}</span>
               </div>
               <div className="glass-panel" style={{ padding: '16px' }}>
@@ -167,13 +167,21 @@ export const AnalyticsDashboard: React.FC = () => {
 
             <span style={{ fontSize: '0.775rem', color: 'var(--color-text-muted)' }}>
               {selectedEventId === 'all'
-                ? `Показаны все ${metrics.length} выездных баров`
+                ? (() => {
+                    const n = metrics.length;
+                    const mod100 = n % 100;
+                    const mod10 = n % 10;
+                    if (mod100 >= 11 && mod100 <= 14) return `Показаны все ${n} мероприятий`;
+                    if (mod10 === 1) return `Показано ${n} мероприятие`;
+                    if (mod10 >= 2 && mod10 <= 4) return `Показаны все ${n} мероприятия`;
+                    return `Показаны все ${n} мероприятий`;
+                  })()
                 : `Детализированный отчёт по выбранному проекту`}
             </span>
           </div>
 
           {/* Events Margin Breakdown Cards (Compact Grid with Drill-down) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '16px', alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '16px', alignItems: 'start' }}>
             {displayedMetrics.length === 0 ? (
               <div className="glass-panel" style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
                 По выбранному мероприятию пока нет финансовых операций.

@@ -377,7 +377,7 @@
   font-weight: 500;
   color: var(--muted-foreground);
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
@@ -388,10 +388,11 @@
 }
 
 .filter-type-pill-active {
-  background: var(--card);
+  background: #f6f2ea;
+  border-color: #c5b08e;
   color: var(--foreground);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .filter-dropdowns-group {
@@ -539,16 +540,17 @@
 }
 
 .filter-chip-active {
-  background: var(--foreground);
-  color: var(--background);
-  border-color: var(--foreground);
+  background: #f6f2ea;
+  color: var(--foreground);
+  border-color: #c5b08e;
   font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .filter-chip-active:hover {
-  background: var(--foreground);
-  color: var(--background);
-  border-color: var(--foreground);
+  background: #f6f2ea;
+  color: var(--foreground);
+  border-color: #c5b08e;
 }
 
 .chip-dot {

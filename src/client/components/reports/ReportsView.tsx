@@ -60,7 +60,7 @@ export const ReportsView: React.FC = () => {
     custom: 'Произвольный',
   };
 
-  const currentPeriodLabel = `${periodLabels[period]} (${dateRange.startDate} — ${dateRange.endDate})`;
+  const currentPeriodLabel = `${periodLabels[period]} (${formatDateRu(dateRange.startDate)} — ${formatDateRu(dateRange.endDate)})`;
 
   // Load milestones and vendors across all events for Balance & Payroll
   const loadMilestonesAndVendors = useCallback(async () => {
@@ -514,12 +514,12 @@ export const ReportsView: React.FC = () => {
 
                 {/* Overhead Costs OPEX */}
                 <tr className="statement-row-section">
-                  <td colSpan={3}>3. ОБЩЕХОЗЯЙСТВЕННЫЕ РАСХОДЫ БАРА (OPEX)</td>
+                  <td colSpan={3}>3. ОБЩЕХОЗЯЙСТВЕННЫЕ РАСХОДЫ КОМПАНИИ (OPEX)</td>
                 </tr>
                 {pnl.opexItems.length === 0 ? (
                   <tr>
                     <td style={{ color: 'var(--color-text-muted)', paddingLeft: '32px' }} colSpan={2}>
-                      Нет постоянных расходов бара за период
+                      Нет постоянных расходов компании за период
                     </td>
                     <td className="num-col">0%</td>
                   </tr>
@@ -565,7 +565,7 @@ export const ReportsView: React.FC = () => {
             <div>
               <h3 className="statement-main-title">Маржинальность проектов и план-факт</h3>
               <span className="statement-subtitle">
-                Юнит-экономика каждого выездного бара • Выручка, себестоимость и маржа
+                Юнит-экономика каждого проекта • Выручка, себестоимость и маржа
               </span>
             </div>
             <div style={{ textAlign: 'right' }}>

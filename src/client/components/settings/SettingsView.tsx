@@ -1337,12 +1337,12 @@ export const SettingsView: React.FC = () => {
                     </span>
                   </h2>
                   <p>
-                    Выездной барный кейтеринг и управление финансами • ID: {currentCompany?.id || '—'}
+                    Управление финансами, кассами и рентабельностью проектов • Код: {currentCompany?.slug || 'brilliant-event'}
                   </p>
                 </div>
               </div>
 
-              {(userRole === 'owner' || userRole === 'admin' || currentUser?.isSuperAdmin) && (
+              {(userRole === 'owner' || userRole === 'admin' || currentCompany?.ownerId === currentUser?.id || currentUser?.isSuperAdmin) && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1378,25 +1378,54 @@ export const SettingsView: React.FC = () => {
                 <span className="settings-meta-sub">{currentUser?.email || '—'}</span>
               </div>
 
-              <div className="settings-meta-cell">
-                <span className="settings-meta-title">Ваша роль</span>
-                <span className="settings-meta-val">
-                  {userRole === 'owner' ? 'Владелец компании' : userRole === 'admin' ? 'Администратор' : userRole === 'accountant' ? 'Бухгалтер' : 'Сотрудник'}
-                </span>
-                <span className="settings-meta-sub">
-                  {userRole === 'owner' ? 'Полные права доступа' : 'Ограниченный доступ'}
-                </span>
-              </div>
+              {(() => {
+                const isOwnerRole =
+                  userRole === 'owner' ||
+                  currentCompany?.ownerId === currentUser?.id ||
+                  Boolean(currentUser?.isSuperAdmin);
+                return (
+                  <div className="settings-meta-cell">
+                    <span className="settings-meta-title">Ваша роль</span>
+                    <span className="settings-meta-val">
+                      {isOwnerRole
+                        ? 'Владелец компании'
+                        : userRole === 'admin'
+                        ? 'Администратор'
+                        : userRole === 'accountant'
+                        ? 'Бухгалтер'
+                        : 'Сотрудник'}
+                    </span>
+                    <span className="settings-meta-sub">
+                      {isOwnerRole || userRole === 'admin' ? 'Полные права доступа' : 'Ограниченный доступ'}
+                    </span>
+                  </div>
+                );
+              })()}
 
-              <div className="settings-meta-cell">
-                <span className="settings-meta-title">Команда</span>
-                <span className="settings-meta-val">
-                  {companyMembers.length || 1} {companyMembers.length === 1 ? 'участник' : companyMembers.length < 5 ? 'участника' : 'участников'}
-                </span>
-                <span className="settings-meta-sub">
-                  {invitesList.length > 0 ? `${invitesList.length} активных инвайтов` : 'Доступ открыт'}
-                </span>
-              </div>
+              {(() => {
+                const count = Math.max(1, companyMembers.length);
+                const mod100 = count % 100;
+                const mod10 = count % 10;
+                const label =
+                  mod100 >= 11 && mod100 <= 14
+                    ? 'участников'
+                    : mod10 === 1
+                    ? 'участник'
+                    : mod10 >= 2 && mod10 <= 4
+                    ? 'участника'
+                    : 'участников';
+                return (
+                  <div className="settings-meta-cell">
+                    <span className="settings-meta-title">Команда</span>
+                    <span className="settings-meta-val">
+                      {count} {label}
+                    </span>
+                    <span className="settings-meta-sub">
+                      {invitesList.length > 0 ? `${invitesList.length} активных инвайтов` : 'Доступ открыт'}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </section>
 
@@ -1406,14 +1435,14 @@ export const SettingsView: React.FC = () => {
               <div>
                 <h3 className="settings-section-title">Параметры организации</h3>
                 <p className="settings-section-subtitle">
-                  Отображение наименования кейтеринга в шапке CRM, чеках и управленческой отчётности
+                  Отображение наименования организации в шапке CRM, чеках и управленческой отчётности
                 </p>
               </div>
             </div>
 
             <form onSubmit={handleSaveOrganization} className="settings-row-item">
               <div className="settings-row-info">
-                <div className="settings-row-label">Название кейтеринга</div>
+                <div className="settings-row-label">Название организации</div>
                 <div className="settings-row-desc">
                   Официальное публичное наименование в выгрузках P&L, чеках и актах
                 </div>
@@ -1686,7 +1715,7 @@ export const SettingsView: React.FC = () => {
                           </button>
 
                           <a
-                            href={`https://t.me/share/url?url=${encodeURIComponent(fullUrl)}&text=${encodeURIComponent(`Приглашаю в команду кейтеринга «${currentCompany?.name || 'Truespace'}» в TrueSpace: `)}`}
+                            href={`https://t.me/share/url?url=${encodeURIComponent(fullUrl)}&text=${encodeURIComponent(`Приглашаю в команду компании «${currentCompany?.name || 'FINDOCTOR'}»: `)}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             title="Отправить в Telegram"
@@ -2845,7 +2874,7 @@ export const SettingsView: React.FC = () => {
                   Пригласить сотрудника
                 </h3>
                 <p className="settings-modal-subtitle">
-                  Доступ в организацию «{currentCompany?.name || 'Кейтеринг'}»
+                  Доступ в организацию «{currentCompany?.name || 'Организация'}»
                 </p>
               </div>
               <button
@@ -3232,7 +3261,7 @@ export const SettingsView: React.FC = () => {
                   color: '#ef4444',
                 }}
               >
-                Все финансовые записи, кассы и мероприятия кейтеринга «{currentCompany.name}» будут безвозвратно стёрты.
+                Все финансовые записи, кассы и мероприятия компании «{currentCompany.name}» будут безвозвратно стёрты.
               </div>
 
               <div className="settings-input-group" style={{ marginTop: '14px' }}>

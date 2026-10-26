@@ -905,7 +905,7 @@ export const SuperAdminView: React.FC = () => {
             <div className="saas-card-header">
               <div className="saas-card-title-group">
                 <Building2 size={18} className="text-accent" />
-                <h3 className="saas-card-title">Создать новый кейтеринговый бизнес</h3>
+                <h3 className="saas-card-title">Создать новую организацию</h3>
               </div>
             </div>
 

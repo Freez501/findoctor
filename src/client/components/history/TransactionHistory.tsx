@@ -271,7 +271,15 @@ export const TransactionHistory: React.FC = () => {
         </div>
         <div className="reports-actions-group">
           <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--foreground)', background: 'var(--muted)', border: '1px solid var(--border)', padding: '6px 12px', borderRadius: 'var(--radius-sm)' }}>
-            {filtered.length} {filtered.length === 1 ? 'запись' : 'записей'}
+            {filtered.length}{' '}
+            {(() => {
+              const mod100 = filtered.length % 100;
+              const mod10 = filtered.length % 10;
+              if (mod100 >= 11 && mod100 <= 14) return 'записей';
+              if (mod10 === 1) return 'запись';
+              if (mod10 >= 2 && mod10 <= 4) return 'записи';
+              return 'записей';
+            })()}
           </span>
         </div>
       </div>

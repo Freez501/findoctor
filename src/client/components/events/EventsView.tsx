@@ -223,7 +223,7 @@ export const EventsView: React.FC = () => {
               Мероприятия и дебиторка
             </h2>
             <p style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', margin: '2px 0 0 0' }}>
-              Контроль договоров выездных баров, входящих оплат от заказчиков и чистой проектной прибыли
+              Контроль договоров организации, входящих оплат от заказчиков и чистой проектной прибыли
             </p>
           </div>
         </div>
@@ -425,119 +425,123 @@ export const EventsView: React.FC = () => {
                 }
               }}
             >
-              <div className="event-card-top">
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <h3 className="event-card-title">{ev.title}</h3>
-                    {getStatusBadge(ev.status)}
-                  </div>
-
-                  {ev.clientName && (
-                    <div className="event-card-client" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <User size={13} />
-                      <span>{ev.clientName}</span>
+              <div className="event-card-body">
+                <div className="event-card-top">
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <h3 className="event-card-title">{ev.title}</h3>
+                      {getStatusBadge(ev.status)}
                     </div>
-                  )}
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', flexWrap: 'wrap' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                      <Calendar size={12} />
-                      {formatDateRu(ev.eventDate)}
-                    </span>
-                    {ev.location && (
+                    {ev.clientName && (
+                      <div className="event-card-client" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <User size={13} />
+                        <span>{ev.clientName}</span>
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px', flexWrap: 'wrap' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <MapPin size={12} />
-                        {ev.location}
+                        <Calendar size={12} />
+                        {formatDateRu(ev.eventDate)}
                       </span>
+                      {ev.location && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                          <MapPin size={12} />
+                          {ev.location}
+                        </span>
+                      )}
+                    </div>
+
+                    {ev.notes && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic', marginTop: '6px' }}>
+                        {ev.notes}
+                      </div>
                     )}
                   </div>
-                </div>
 
-                {/* Actions */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleOpenEdit(ev);
-                    }}
-                    title="Редактировать мероприятие"
-                    className="btn-touch-target"
-                    style={{ minWidth: '44px', minHeight: '44px', color: 'var(--color-text-muted)', borderRadius: '4px', cursor: 'pointer' }}
-                  >
-                    <Edit2 size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const linked = transactions.filter((t) => !t.isDeleted && t.eventId === ev.id);
-                      setEventToDelete({ event: ev, linkedTxs: linked });
-                    }}
-                    title="Удалить мероприятие"
-                    className="btn-touch-target"
-                    style={{ minWidth: '44px', minHeight: '44px', color: 'var(--color-text-muted)', borderRadius: '4px', cursor: 'pointer' }}
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Progress: payments received vs contract */}
-              {contract > 0 && (
-                <div className="event-progress-container">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>
-                    <span>Оплачено {progressPercent}%</span>
-                    <span>Договор: {formatRubles(contract)}</span>
-                  </div>
-                  <div className="event-progress-bar">
-                    <div className="event-progress-fill" style={{ width: `${progressPercent}%` }} />
+                  {/* Actions */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenEdit(ev);
+                      }}
+                      title="Редактировать мероприятие"
+                      className="btn-touch-target"
+                      style={{ minWidth: '44px', minHeight: '44px', color: 'var(--color-text-muted)', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      <Edit2 size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const linked = transactions.filter((t) => !t.isDeleted && t.eventId === ev.id);
+                        setEventToDelete({ event: ev, linkedTxs: linked });
+                      }}
+                      title="Удалить мероприятие"
+                      className="btn-touch-target"
+                      style={{ minWidth: '44px', minHeight: '44px', color: 'var(--color-text-muted)', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      <Trash2 size={15} />
+                    </button>
                   </div>
                 </div>
-              )}
 
-              {/* Metrics Grid */}
-              <div className="event-metrics-grid">
-                <div className="event-metric-box">
-                  <span className="event-metric-label">Поступило</span>
-                  <span className="event-metric-val val-positive">{formatRubles(metrics.received)}</span>
-                </div>
-
-                <div className="event-metric-box">
-                  <span className="event-metric-label">Дебиторка</span>
-                  <span className={`event-metric-val ${debt > 0 ? 'val-warning' : ''}`}>
-                    {formatRubles(debt)}
-                  </span>
-                </div>
-
-                <div className="event-metric-box">
-                  <span className="event-metric-label">Расходы бара</span>
-                  <span className="event-metric-val" style={{ color: '#dc2626' }}>{formatRubles(metrics.costs)}</span>
-                </div>
-
-                <div className="event-metric-box">
-                  <span className="event-metric-label">Чистая прибыль</span>
-                  <span className={`event-metric-val ${profit >= 0 ? 'val-positive' : ''}`} style={{ color: profit < 0 ? '#dc2626' : undefined }}>
-                    {formatRubles(profit)}
-                  </span>
-                </div>
+                {/* Progress: payments received vs contract */}
+                {contract > 0 && (
+                  <div className="event-progress-container">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.725rem', color: 'var(--color-text-muted)' }}>
+                      <span>Оплачено {progressPercent}%</span>
+                      <span>Договор: {formatRubles(contract)}</span>
+                    </div>
+                    <div className="event-progress-bar">
+                      <div className="event-progress-fill" style={{ width: `${progressPercent}%` }} />
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Event Pro Suite: Dossier & Budget Button */}
-              <button
-                type="button"
-                onClick={() => setSelectedDossierEvent(ev)}
-                className="btn-event-dossier"
-              >
-                <FileText size={15} />
-                <span>Финансовое досье и смета</span>
-              </button>
+              <div className="event-card-bottom">
+                {/* Metrics Grid */}
+                <div className="event-metrics-grid">
+                  <div className="event-metric-box">
+                    <span className="event-metric-label">Поступило</span>
+                    <span className="event-metric-val val-positive">{formatRubles(metrics.received)}</span>
+                  </div>
 
-              {ev.notes && (
-                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic', borderTop: '1px solid var(--color-border)', paddingTop: '6px' }}>
-                  {ev.notes}
+                  <div className="event-metric-box">
+                    <span className="event-metric-label">Дебиторка</span>
+                    <span className={`event-metric-val ${debt > 0 ? 'val-warning' : ''}`}>
+                      {formatRubles(debt)}
+                    </span>
+                  </div>
+
+                  <div className="event-metric-box">
+                    <span className="event-metric-label">Расходы</span>
+                    <span className="event-metric-val" style={{ color: '#dc2626' }}>{formatRubles(metrics.costs)}</span>
+                  </div>
+
+                  <div className="event-metric-box">
+                    <span className="event-metric-label">Чистая прибыль</span>
+                    <span className={`event-metric-val ${profit >= 0 ? 'val-positive' : ''}`} style={{ color: profit < 0 ? '#dc2626' : undefined }}>
+                      {formatRubles(profit)}
+                    </span>
+                  </div>
                 </div>
-              )}
+
+                {/* Event Pro Suite: Dossier & Budget Button */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedDossierEvent(ev)}
+                  className="btn-event-dossier"
+                >
+                  <FileText size={15} />
+                  <span>Финансовое досье и смета</span>
+                </button>
+              </div>
             </div>
           );
         })}

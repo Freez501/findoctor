@@ -72,10 +72,11 @@
 }
 
 .reports-period-chip.active {
-  background-color: var(--primary);
-  color: var(--primary-foreground);
-  border-color: var(--primary);
+  background-color: #f6f2ea;
+  color: var(--foreground);
+  border-color: #c5b08e;
   font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .reports-export-btn {
@@ -157,10 +158,14 @@
 }
 
 .reports-tab-item.active {
-  color: var(--color-accent);
+  color: var(--foreground);
   font-weight: 700;
-  background-color: var(--color-surface);
-  border-bottom: 2px solid var(--color-accent);
+  background-color: #f6f2ea;
+  border-bottom: 2px solid #c5b08e;
+}
+
+.reports-tab-item.active svg {
+  color: #8c734b;
 }
 
 /* Financial Table Layout */

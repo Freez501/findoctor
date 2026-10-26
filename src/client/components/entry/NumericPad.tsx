@@ -61,12 +61,12 @@ export const NumericPad: React.FC<NumericPadProps> = ({
   return (
     <div className="numeric-pad-container">
       <div className="amount-display-box" role="region" aria-label="Ввод суммы операции">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
           <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#8c734b' }}>
-            Сумма операции
+            Сумма операции (ввод с клавиатуры)
           </span>
           <span style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--muted-foreground)' }}>
-            Только цифры, ₽
+            RUB, ₽
           </span>
         </div>
 
@@ -109,7 +109,7 @@ export const NumericPad: React.FC<NumericPadProps> = ({
           )}
         </div>
 
-        <div className="preset-increments-row" role="group" aria-label="Быстрые добавления суммы" style={{ justifyContent: 'flex-start', marginTop: '10px' }}>
+        <div className="preset-increments-row" role="group" aria-label="Быстрые добавления суммы" style={{ justifyContent: 'flex-start', marginTop: '6px' }}>
           <button
             type="button"
             onClick={() => handleIncrement(500)}

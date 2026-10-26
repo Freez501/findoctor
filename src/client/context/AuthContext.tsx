@@ -184,7 +184,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const rawActiveCo = companies.find((c) => c.id === preferredCompanyId) || ownedCo || companies[0];
         const activeCo: Company =
           isDemo && rawActiveCo.id === 'company_truespace_default'
-            ? { ...rawActiveCo, name: 'FINDOCTOR • Демо-кейтеринг' }
+            ? { ...rawActiveCo, name: 'FINDOCTOR • Демо-организация' }
             : rawActiveCo;
         setCurrentCompany(activeCo);
         localStorage.setItem('truespace_current_company', JSON.stringify(activeCo));
@@ -285,7 +285,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     const demoCompany: Company = {
       ...INITIAL_COMPANIES_SEED[0],
-      name: 'FINDOCTOR • Демо-кейтеринг',
+      name: 'FINDOCTOR • Демо-организация',
     };
     setCurrentUser(demoUser);
     setCurrentCompany(demoCompany);

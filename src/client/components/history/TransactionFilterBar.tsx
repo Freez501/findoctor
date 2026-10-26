@@ -227,7 +227,7 @@ export const TransactionFilterBar: React.FC<Props> = ({
               aria-label="Фильтр по мероприятию"
             >
               <option value="all">Все мероприятия</option>
-              <option value="general">Общие расходы бара (без ивента)</option>
+              <option value="general">Общие расходы компании (без ивента)</option>
               {events.map((ev) => (
                 <option key={ev.id} value={ev.id}>
                   {ev.title}

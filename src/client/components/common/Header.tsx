@@ -91,13 +91,66 @@ export const Header: React.FC<HeaderProps> = ({
   }, [showProfileMenu]);
 
   const getRoleDisplayName = (role: string, isSuper?: boolean) => {
-    if (isSuper) return 'Суперадмин платформы';
-    if (role === 'owner') return 'Владелец / Главный финдиректор';
+    if (isSuper && role !== 'owner') return 'Суперадмин платформы';
+    if (role === 'owner' || currentCompany?.ownerId === currentUser?.id) return 'Владелец / Главный финдиректор';
     if (role === 'admin') return 'Сооснователь / Партнёр';
     if (role === 'accountant') return 'Бухгалтер / Финменеджер';
-    if (role === 'staff') return 'Бармен / Сотрудник';
+    if (role === 'staff') return 'Сотрудник команды';
     return 'Сотрудник';
   };
+
+  const tariffInfo = (() => {
+    if (!currentCompany) {
+      return {
+        text: 'PRO • Бессрочный доступ (VIP)',
+        badge: 'PRO VIP',
+        color: '#059669',
+        bg: 'rgba(16, 185, 129, 0.08)',
+        border: 'rgba(16, 185, 129, 0.22)',
+      };
+    }
+    const now = Date.now();
+    if (currentCompany.paidUntil && new Date(currentCompany.paidUntil).getTime() > now) {
+      const paidDate = new Date(currentCompany.paidUntil);
+      const isVipForever = paidDate.getFullYear() > 2100;
+      return {
+        text: isVipForever
+          ? 'PRO • Бессрочный доступ (VIP)'
+          : `PRO • Оплачено до ${paidDate.toLocaleDateString('ru-RU')}`,
+        badge: isVipForever ? 'PRO VIP' : 'PRO',
+        color: '#059669',
+        bg: 'rgba(16, 185, 129, 0.08)',
+        border: 'rgba(16, 185, 129, 0.22)',
+      };
+    }
+    if (currentCompany.trialEndsAt && new Date(currentCompany.trialEndsAt).getTime() > now) {
+      const trialDate = new Date(currentCompany.trialEndsAt);
+      const daysLeft = Math.max(0, Math.ceil((trialDate.getTime() - now) / (1000 * 60 * 60 * 24)));
+      return {
+        text: `PRO Trial • ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'}`,
+        badge: 'PRO TRIAL',
+        color: '#8c734b',
+        bg: '#f6f2ea',
+        border: '#e5dac7',
+      };
+    }
+    if (currentCompany.plan === 'pro') {
+      return {
+        text: 'PRO • Бессрочный доступ (VIP)',
+        badge: 'PRO VIP',
+        color: '#059669',
+        bg: 'rgba(16, 185, 129, 0.08)',
+        border: 'rgba(16, 185, 129, 0.22)',
+      };
+    }
+    return {
+      text: 'Базовый (Бесплатный)',
+      badge: 'FREE',
+      color: 'var(--muted-foreground)',
+      bg: 'var(--muted)',
+      border: 'var(--border)',
+    };
+  })();
 
   return (
     <header className="app-header">
@@ -211,7 +264,7 @@ export const Header: React.FC<HeaderProps> = ({
                         {currentCompany?.name || 'FINDOCTOR'}
                       </div>
                       <div className="profile-company-plan">
-                        Организация • <span className="profile-plan-badge">PRO</span>
+                        Организация • <span className="profile-plan-badge">{tariffInfo.badge}</span>
                       </div>
                     </div>
                   </div>
@@ -332,27 +385,25 @@ export const Header: React.FC<HeaderProps> = ({
                   </button>
                 )}
 
-                {/* Trial info for regular tenants */}
-                {!isSuperAdmin && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '8px 10px',
-                      background: 'rgba(217, 119, 6, 0.08)',
-                      borderRadius: '8px',
-                      border: '1px solid rgba(217, 119, 6, 0.18)',
-                      fontSize: '11px',
-                      color: '#b45309',
-                      fontWeight: 600,
-                      marginBottom: '4px',
-                    }}
-                  >
-                    <Sparkles size={13} />
-                    <span>Тариф: 14 дней Pro Trial</span>
-                  </div>
-                )}
+                {/* Accurate Tariff Status Badge (synced with SettingsView) */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 10px',
+                    background: tariffInfo.bg,
+                    borderRadius: '8px',
+                    border: `1px solid ${tariffInfo.border}`,
+                    fontSize: '11px',
+                    color: tariffInfo.color,
+                    fontWeight: 600,
+                    marginBottom: '4px',
+                  }}
+                >
+                  <Sparkles size={13} />
+                  <span>Тариф: {tariffInfo.text}</span>
+                </div>
 
                 {/* Reset Demo Button (SUPERADMIN ONLY) */}
                 {isSuperAdmin && (

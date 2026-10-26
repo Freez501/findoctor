@@ -17,7 +17,7 @@ import { DEFAULT_EXPENSE_CATEGORY_ID, DEFAULT_INCOME_CATEGORY_ID, CATEGORY_IDS, 
 import { useFinance } from '../../context/FinanceContext.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { api } from '../../api/apiClient.js';
-import { formatRubles, formatDateRu } from '../../utils/formatters.js';
+import { formatRubles } from '../../utils/formatters.js';
 import { NumericPad } from './NumericPad.js';
 import { CategoryChips } from './CategoryChips.js';
 import { AccountChips } from './AccountChips.js';
@@ -553,17 +553,50 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
               </div>
             )}
 
-            {/* Event selector (Operational Expense and Income only) */}
-            {type !== 'transfer' && direction === 'operational' && (
-              <EventSelector
-                selectedEventId={selectedEventId}
-                onSelectEventId={setSelectedEventId}
-              />
-            )}
+            {/* Event selector + Compact Date Row */}
+            <div className={type !== 'transfer' && direction === 'operational' ? 'event-date-compact-grid' : 'date-only-compact-row'}>
+              {type !== 'transfer' && direction === 'operational' && (
+                <EventSelector
+                  selectedEventId={selectedEventId}
+                  onSelectEventId={setSelectedEventId}
+                />
+              )}
+
+              <div className="date-selection-container">
+                <div className="field-block-label-row">
+                  <span className="field-block-label">Дата</span>
+                  <div className="date-inline-shortcuts">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDate(getTodayDateStr())}
+                      className={`date-mini-chip ${selectedDate === getTodayDateStr() ? 'active' : ''}`}
+                    >
+                      Сегодня
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDate(getYesterdayDateStr())}
+                      className={`date-mini-chip ${selectedDate === getYesterdayDateStr() ? 'active' : ''}`}
+                    >
+                      Вчера
+                    </button>
+                  </div>
+                </div>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => {
+                    if (e.target.value) setSelectedDate(e.target.value);
+                  }}
+                  className="settings-text-input date-compact-input"
+                  aria-label="Выбрать дату операции"
+                />
+              </div>
+            </div>
 
             {/* Vendor / Crew Selection (for Operational Event Expense) */}
             {type === 'expense' && direction === 'operational' && selectedEventId && eventVendors.length > 0 && (
-              <div className="partner-chips-container animate-fade-in" style={{ marginTop: '10px' }}>
+              <div className="partner-chips-container animate-fade-in">
                 <div className="field-block-label-row">
                   <span className="field-block-label" style={{ color: 'var(--color-accent-strong)' }}>
                     Подрядчик (кому выплата):
@@ -609,72 +642,19 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
               </div>
             )}
 
-            {/* Transaction Date Selector */}
-            <div className="date-selection-container">
-              <div className="field-block-label-row">
-                <span className="field-block-label">Дата операции:</span>
-                <span className="field-block-hint">
-                  {selectedDate === getTodayDateStr()
-                    ? 'Сегодня'
-                    : selectedDate === getYesterdayDateStr()
-                    ? 'Вчера'
-                    : formatDateRu(selectedDate)}
-                </span>
-              </div>
-              <div className="date-pills-row">
-                <button
-                  type="button"
-                  onClick={() => setSelectedDate(getTodayDateStr())}
-                  className={`date-preset-pill ${selectedDate === getTodayDateStr() ? 'pill-active' : ''}`}
-                >
-                  <span>Сегодня</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedDate(getYesterdayDateStr())}
-                  className={`date-preset-pill ${selectedDate === getYesterdayDateStr() ? 'pill-active' : ''}`}
-                >
-                  <span>Вчера</span>
-                </button>
-                <div
-                  className={`date-input-wrapper ${
-                    selectedDate !== getTodayDateStr() && selectedDate !== getYesterdayDateStr()
-                      ? 'date-input-active'
-                      : ''
-                  }`}
-                >
-                  <Calendar size={14} className="date-input-icon" aria-hidden="true" />
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => {
-                      if (e.target.value) setSelectedDate(e.target.value);
-                    }}
-                    className="date-native-input"
-                    aria-label="Выбрать произвольную дату"
-                  />
-                </div>
-              </div>
-            </div>
-
             {/* Memo / comment description */}
             <div className="memo-field-wrapper">
-              <div className="field-block-label-row">
-                <label htmlFor="tx-memo-input" className="field-block-label">
-                  Заметка / комментарий:
-                </label>
-                <span className="field-block-hint">Необязательно</span>
-              </div>
               <div className="memo-input-container">
-                <FileText size={16} className="memo-input-icon" aria-hidden="true" />
+                <FileText size={15} className="memo-input-icon" aria-hidden="true" />
                 <input
                   id="tx-memo-input"
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Например: 10 мешков льда, такси двум барменам..."
+                  placeholder="Комментарий (необязательно): например, 10 мешков льда..."
                   className="memo-input"
                   maxLength={100}
+                  aria-label="Комментарий к операции"
                 />
                 {description && (
                   <button

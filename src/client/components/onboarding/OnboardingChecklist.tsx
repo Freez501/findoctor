@@ -26,7 +26,7 @@ interface OnboardingChecklistProps {
   onOpenQuickEntry: () => void;
 }
 
-const STORAGE_STEPS_KEY = 'findoctor_onboarding_steps';
+const STORAGE_STEPS_KEY = 'findoctor_onboarding_manual_steps_v1';
 const STORAGE_DISMISSED_KEY = 'findoctor_onboarding_dismissed';
 
 export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
@@ -40,7 +40,10 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
   const [completedSteps, setCompletedSteps] = useState<number[]>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_STEPS_KEY);
-      return raw ? JSON.parse(raw) : [];
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return Array.from(new Set(parsed.filter((s): s is number => s === 1 || s === 2 || s === 3)));
     } catch {
       return [];
     }
@@ -54,18 +57,22 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
     localStorage.setItem(STORAGE_STEPS_KEY, JSON.stringify(completedSteps));
   }, [completedSteps]);
 
-  // Auto-mark step 1 if user visits events tab, step 3 if user visits analytics tab
-  useEffect(() => {
-    if (currentTab === 'events' && !completedSteps.includes(1)) {
-      setCompletedSteps((prev) => [...prev, 1]);
-    }
-    if (currentTab === 'analytics' && !completedSteps.includes(3)) {
-      setCompletedSteps((prev) => [...prev, 3]);
-    }
-  }, [currentTab, completedSteps]);
-
-  const markStep = (step: number) => {
+  const markStep = (step: 1 | 2 | 3) => {
     setCompletedSteps((prev) => (prev.includes(step) ? prev : [...prev, step]));
+  };
+
+  const toggleStep = (step: 1 | 2 | 3) => {
+    setCompletedSteps((prev) =>
+      prev.includes(step) ? prev.filter((s) => s !== step) : [...prev, step]
+    );
+  };
+
+  const handleResetDemoAndOnboarding = async () => {
+    setCompletedSteps([]);
+    localStorage.removeItem(STORAGE_STEPS_KEY);
+    setIsDismissed(false);
+    localStorage.removeItem(STORAGE_DISMISSED_KEY);
+    await resetDemo();
   };
 
   const handleDismiss = () => {
@@ -76,9 +83,13 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
   const handleReopenOnboarding = () => {
     setIsDismissed(false);
     localStorage.removeItem(STORAGE_DISMISSED_KEY);
+    if (currentTab !== 'accounts') {
+      onSelectTab('accounts');
+    }
   };
 
-  const progressCount = completedSteps.length;
+  const progressCount = Math.min(3, completedSteps.length);
+  const showFullCard = !isDismissed && currentTab === 'accounts';
 
   return (
     <div className="onboarding-zone">
@@ -93,7 +104,7 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
           </div>
 
           <div className="demo-mode-actions">
-            {isDismissed && (
+            {!showFullCard && (
               <button
                 type="button"
                 onClick={handleReopenOnboarding}
@@ -106,7 +117,7 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
 
             <button
               type="button"
-              onClick={resetDemo}
+              onClick={handleResetDemoAndOnboarding}
               disabled={isResetting}
               className="demo-btn-secondary"
               title="Вернуть исходные демо-данные (1 166 300 ₽)"
@@ -127,8 +138,8 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
         </div>
       )}
 
-      {/* 3-Step Interactive Onboarding Card */}
-      {!isDismissed && (
+      {/* 3-Step Interactive Onboarding Card (only shown on main Accounts screen) */}
+      {showFullCard && (
         <section
           className="onboarding-card"
           aria-label="Пошаговое знакомство с FINDOCTOR"
@@ -172,7 +183,15 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
                 completedSteps.includes(1) ? 'onboarding-step-done' : ''
               }`}
             >
-              <div className="onboarding-step-top">
+              <div
+                className="onboarding-step-top"
+                onClick={() => toggleStep(1)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleStep(1)}
+                style={{ cursor: 'pointer' }}
+                title="Нажмите, чтобы отметить или снять выполнение шага"
+              >
                 <span className="onboarding-step-num">Шаг 1</span>
                 {completedSteps.includes(1) ? (
                   <CheckCircle2 size={18} className="onboarding-icon-done" />
@@ -182,8 +201,8 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
               </div>
               <h3 className="onboarding-step-heading">Выберите или создайте мероприятие</h3>
               <p className="onboarding-step-desc">
-                Откройте список выездов (например, «Свадьба в лофте» или «IT-Корпоратив») либо
-                добавьте свой банкет.
+                Откройте список проектов (например, «Свадьба в лофте» или «IT-Корпоратив») либо
+                добавьте своё мероприятие.
               </p>
               <button
                 type="button"
@@ -206,7 +225,15 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
                 completedSteps.includes(2) ? 'onboarding-step-done' : ''
               }`}
             >
-              <div className="onboarding-step-top">
+              <div
+                className="onboarding-step-top"
+                onClick={() => toggleStep(2)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleStep(2)}
+                style={{ cursor: 'pointer' }}
+                title="Нажмите, чтобы отметить или снять выполнение шага"
+              >
                 <span className="onboarding-step-num">Шаг 2</span>
                 {completedSteps.includes(2) ? (
                   <CheckCircle2 size={18} className="onboarding-icon-done" />
@@ -216,7 +243,7 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
               </div>
               <h3 className="onboarding-step-heading">Внесите расход со смены за 3 секунды</h3>
               <p className="onboarding-step-desc">
-                Нажмите «Внести операцию», введите сумму (например, 4 500 ₽ за лёд) и привяжите её к
+                Нажмите «Внести операцию», введите сумму (например, 4 500 ₽ за закупку) и привяжите её к
                 мероприятию.
               </p>
               <button
@@ -240,7 +267,15 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
                 completedSteps.includes(3) ? 'onboarding-step-done' : ''
               }`}
             >
-              <div className="onboarding-step-top">
+              <div
+                className="onboarding-step-top"
+                onClick={() => toggleStep(3)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleStep(3)}
+                style={{ cursor: 'pointer' }}
+                title="Нажмите, чтобы отметить или снять выполнение шага"
+              >
                 <span className="onboarding-step-num">Шаг 3</span>
                 {completedSteps.includes(3) ? (
                   <CheckCircle2 size={18} className="onboarding-icon-done" />
@@ -250,7 +285,7 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
               </div>
               <h3 className="onboarding-step-heading">Посмотрите чистую прибыль и аналитику</h3>
               <p className="onboarding-step-desc">
-                Перейдите в раздел «Аналитика», чтобы увидеть рентабельность каждого выезда в
+                Перейдите в раздел «Аналитика», чтобы увидеть рентабельность каждого проекта в
                 процентах и рублях.
               </p>
               <button

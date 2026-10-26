@@ -66,29 +66,35 @@ export const PartnersDashboard: React.FC = () => {
   }, [partners, accounts, transactions]);
 
   return (
-    <div className="partners-dashboard-panel animate-fade-in">
+    <div className="glass-panel partners-dashboard-panel">
       {/* Top Banner: Total Dividends */}
       <div className="partners-total-banner">
-        <div>
-          <div className="partners-banner-title">
-            <Users size={18} />
-            <span>Выплаты партнёрам и дивиденды</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="partners-header-icon">
+            <Users size={18} aria-hidden="true" />
           </div>
-          <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-            Суммарный вывод прибыли и персональные выплаты учредителям
-          </p>
+          <div>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--foreground)', margin: 0 }}>
+              Выплаты партнёрам и дивиденды
+            </h3>
+            <span style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>
+              Суммарный вывод прибыли и персональные выплаты учредителям
+            </span>
+          </div>
         </div>
 
         <div style={{ textAlign: 'right' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block' }}>Всего выведено:</span>
-          <span className="partners-banner-amount font-mono">
+          <span style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)', display: 'block' }}>
+            Всего выведено
+          </span>
+          <span className="partners-banner-amount">
             {formatRubles(data.totalDividendsPaid)}
           </span>
         </div>
       </div>
 
       {/* Partner Metric Cards */}
-      <div className="settings-card-grid">
+      <div className="partners-card-grid">
         {data.partners.map((partner) => {
           const sharePercent =
             data.totalDividendsPaid > 0
@@ -99,34 +105,25 @@ export const PartnersDashboard: React.FC = () => {
             <div key={partner.partnerId} className="partner-metric-card">
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div className="settings-partner-avatar" aria-hidden="true">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div className="partner-avatar-badge" aria-hidden="true">
                       {partner.partnerName.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                      <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--foreground)', margin: 0 }}>
                         {partner.partnerName}
                       </h4>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>
                         {partner.transactionsCount} {partner.transactionsCount === 1 ? 'выплата' : 'выплат'}
                       </span>
                     </div>
                   </div>
 
                   <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-text)', display: 'block' }}>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--foreground)', display: 'block', fontVariantNumeric: 'tabular-nums' }}>
                       {formatRubles(partner.totalWithdrawn)}
                     </span>
-                    <span style={{
-                      fontSize: '0.7rem',
-                      fontWeight: 700,
-                      color: 'var(--color-accent-strong)',
-                      backgroundColor: 'rgba(95,124,103,0.12)',
-                      padding: '2px 6px',
-                      borderRadius: 'var(--radius-full)',
-                      display: 'inline-block',
-                      marginTop: '2px',
-                    }}>
+                    <span className="partner-share-pill">
                       {sharePercent}% от всех выплат
                     </span>
                   </div>
@@ -142,20 +139,20 @@ export const PartnersDashboard: React.FC = () => {
               </div>
 
               {/* Recent payouts snippet */}
-              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '10px' }}>
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
                 <span style={{
-                  fontSize: '0.7rem',
-                  fontWeight: 700,
+                  fontSize: '0.68rem',
+                  fontWeight: 600,
                   textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  color: 'var(--color-text-muted)',
+                  letterSpacing: '0.04em',
+                  color: 'var(--muted-foreground)',
                   display: 'block',
                   marginBottom: '6px',
                 }}>
                   Последние выплаты:
                 </span>
                 {partner.recentPayouts.length === 0 ? (
-                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)', margin: 0 }}>
                     Пока нет записей о выводе средств
                   </p>
                 ) : (
@@ -163,15 +160,15 @@ export const PartnersDashboard: React.FC = () => {
                     {partner.recentPayouts.slice(0, 3).map((p) => (
                       <div key={p.transactionId} className="payout-item-row">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', fontFamily: 'monospace', flexShrink: 0 }}>
+                          <span style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
                             {formatDateRu(p.date)}
                           </span>
-                          <span style={{ color: 'var(--color-text)', fontSize: '0.775rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <span style={{ color: 'var(--foreground)', fontSize: '0.775rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {p.comment || p.fromAccountName || 'Выплата'}
                           </span>
                         </div>
-                        <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#b45309', flexShrink: 0, marginLeft: '8px' }}>
-                          -{formatRubles(p.amount)}
+                        <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: '#b45309', flexShrink: 0, marginLeft: '8px', fontSize: '0.775rem' }}>
+                          −{formatRubles(p.amount)}
                         </span>
                       </div>
                     ))}

@@ -91,7 +91,7 @@ export const InviteAcceptView: React.FC<InviteAcceptViewProps> = ({ token, onSuc
         return { label: 'Бухгалтер / Финменеджер', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.12)' };
       case 'staff':
       default:
-        return { label: 'Сотрудник / Бармен на выезде', color: '#10b981', bg: 'rgba(16, 185, 129, 0.12)' };
+        return { label: 'Сотрудник на площадке / Выезде', color: '#10b981', bg: 'rgba(16, 185, 129, 0.12)' };
     }
   };
 
@@ -99,13 +99,13 @@ export const InviteAcceptView: React.FC<InviteAcceptViewProps> = ({ token, onSuc
     switch (role) {
       case 'owner':
       case 'super_admin':
-        return 'Полный доступ к финансам кейтеринга, кассам, сметам и аналитике дивидендов.';
+        return 'Полный доступ к финансам компании, кассам, сметам и аналитике дивидендов.';
       case 'accountant':
       case 'admin':
-        return 'Внесение и проверка операций, счетов, категорий и детальных отчётов по выездным барам.';
+        return 'Внесение и проверка операций, счетов, категорий и детальных отчётов по мероприятиям.';
       case 'staff':
       default:
-        return 'Моментальный мобильный ввод чеков, расходов на закупки льда/алкоголя и чаевых прямо с телефона на мероприятии.';
+        return 'Моментальный мобильный ввод чеков, расходов на закупки и чаевых прямо с телефона на мероприятии.';
     }
   };
 
@@ -157,7 +157,7 @@ export const InviteAcceptView: React.FC<InviteAcceptViewProps> = ({ token, onSuc
             Проверка ссылки-приглашения...
           </h3>
           <p style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>
-            Секунду, подключаемся к системе кейтеринга
+            Секунду, подключаемся к рабочему пространству компании
           </p>
         </div>
       </div>

@@ -34,7 +34,7 @@ export const AccountsGrid: React.FC<AccountsGridProps> = ({ onOpenEntryWithAccou
   };
 
   return (
-    <section className="accounts-section" aria-label="Счета кейтеринга">
+    <section className="accounts-section" aria-label="Счета организации">
       {/* Section Header */}
       <div className="section-header-row">
         <div className="section-title-group">
@@ -42,7 +42,7 @@ export const AccountsGrid: React.FC<AccountsGridProps> = ({ onOpenEntryWithAccou
             <WalletCards size={18} />
           </div>
           <div>
-            <h2 className="section-heading">Счета кейтеринга ({getAccountsWord(accounts.length)})</h2>
+            <h2 className="section-heading">Счета организации ({getAccountsWord(accounts.length)})</h2>
             <p className="section-subtext">
               Раздельный учёт кассы на площадке, сейфа, расчетных счетов и СБП
             </p>

@@ -66,6 +66,21 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
     ? list.filter((c) => !c.isEventSpecific || c.type === 'both')
     : list;
 
+  // Prioritize core catering categories for the 4 primary quick chips
+  const priorityIds = ['supplies', 'alcohol', 'staff', 'logistics', 'contract_prepayment', 'contract_final', 'onsite_sales', 'tips'];
+  const sortedList = [...filteredList].sort((a, b) => {
+    const idxA = priorityIds.indexOf(a.id);
+    const idxB = priorityIds.indexOf(b.id);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return 0;
+  });
+
+  const primaryChips = sortedList.slice(0, 4);
+  const extraCategories = sortedList.slice(4);
+  const isExtraSelected = extraCategories.some((c) => c.id === selectedCategoryId);
+
   // Choose appropriate Lucide icon
   const getCategoryIcon = (id: string) => {
     switch (id) {
@@ -131,7 +146,7 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
   return (
     <div className="category-chips-wrapper" role="group" aria-label="Выбор статьи операции">
       <div className="category-chips-grid">
-        {filteredList.map((cat) => {
+        {primaryChips.map((cat) => {
           const isSelected = selectedCategoryId === cat.id;
           return (
             <button
@@ -148,18 +163,57 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
             </button>
           );
         })}
+      </div>
 
-        {/* Inline Category Quick Add Button or Form (using div to prevent submitting parent form) */}
-        {isCreating ? (
+      {/* Second compact row: Extra categories dropdown + Clean inline creation */}
+      <div className="category-extra-actions-row">
+        {!isCreating ? (
+          <>
+            {extraCategories.length > 0 && (
+              <select
+                value={isExtraSelected ? selectedCategoryId : ''}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    onSelectCategory(e.target.value);
+                  }
+                }}
+                className={`category-more-select ${isExtraSelected ? 'category-more-select-active' : ''}`}
+                aria-label="Дополнительные статьи операции"
+              >
+                <option value="" disabled>
+                  Ещё статьи ({extraCategories.length})…
+                </option>
+                {extraCategories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsCreating(true);
+              }}
+              className="btn-category-inline-add"
+              title="Создать новую статью расходов/доходов"
+            >
+              <Plus size={14} />
+              <span>Новая статья</span>
+            </button>
+          </>
+        ) : (
           <div
             className="category-inline-form"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
             onClick={(e) => e.stopPropagation()}
           >
             <input
               type="text"
               autoFocus
-              placeholder="Название..."
+              placeholder="Название новой статьи..."
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
               onKeyDown={(e) => {
@@ -174,8 +228,7 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
                   setNewCategoryName('');
                 }
               }}
-              className="settings-text-input"
-              style={{ padding: '4px 8px', fontSize: '0.8rem', width: '130px' }}
+              className="category-inline-input"
             />
             <button
               type="button"
@@ -185,20 +238,11 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
                 handleQuickCreateCategory(e);
               }}
               disabled={isSaving || !newCategoryName.trim()}
-              style={{
-                padding: '5px 8px',
-                backgroundColor: 'var(--color-accent, #6B1D2F)',
-                color: '#fff',
-                borderRadius: '4px',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
+              className="btn-category-inline-save"
               title="Создать статью"
             >
               {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+              <span>Создать</span>
             </button>
             <button
               type="button"
@@ -208,34 +252,12 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
                 setIsCreating(false);
                 setNewCategoryName('');
               }}
-              style={{
-                padding: '5px',
-                color: 'var(--color-text-muted)',
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-              }}
+              className="btn-category-inline-cancel"
               title="Отмена"
             >
-              <X size={13} />
+              <X size={14} />
             </button>
           </div>
-        ) : (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setIsCreating(true);
-            }}
-            className="btn-category-inline-add"
-            title="Создать новую статью расходов/доходов"
-          >
-            <Plus size={14} />
-            <span>Новая статья</span>
-          </button>
         )}
       </div>
     </div>

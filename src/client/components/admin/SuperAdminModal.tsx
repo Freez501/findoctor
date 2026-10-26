@@ -316,7 +316,7 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({ isOpen, onClos
               {/* Create Company Form */}
               <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
                 <h5 className="text-xs font-bold text-emerald-400 uppercase tracking-wide">
-                  + Создать новый бизнес кейтеринга
+                  + Создать новую организацию
                 </h5>
                 <form onSubmit={handleCreateCompany} className="flex gap-2">
                   <input

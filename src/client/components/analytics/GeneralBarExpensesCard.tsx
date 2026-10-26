@@ -44,7 +44,7 @@ export const GeneralBarExpensesCard: React.FC<Props> = ({
             <Warehouse size={20} aria-hidden="true" />
           </div>
           <div>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>Общие расходы бара (Overhead)</h3>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>Общие расходы компании (Overhead)</h3>
             <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
               Не привязаны к мероприятиям
             </span>

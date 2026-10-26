@@ -4,7 +4,6 @@
  */
 
 import React, { useState } from 'react';
-import { Plus } from 'lucide-react';
 import { Header, TabType } from './components/common/Header.js';
 import { TotalCapitalBanner } from './components/accounts/TotalCapitalBanner.js';
 import { AccountsGrid } from './components/accounts/AccountsGrid.js';
