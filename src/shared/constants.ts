@@ -25,6 +25,12 @@ import {
 export const DEFAULT_COMPANY_ID = 'company_truespace_default';
 export const DEFAULT_COMPANY_NAME = 'Truespace Catering';
 
+export const DEFAULT_TAX_SETTINGS = {
+  system: 'usn_income' as const,
+  rate: 6,
+  applyOnlyToBank: false,
+};
+
 export const INITIAL_COMPANIES_SEED: readonly Company[] = [
   {
     id: DEFAULT_COMPANY_ID,
@@ -33,6 +39,9 @@ export const INITIAL_COMPANIES_SEED: readonly Company[] = [
     plan: 'pro',
     isActive: true,
     ownerId: 'user_nikita',
+    taxSystem: 'usn_income',
+    taxRate: 6,
+    taxSettings: DEFAULT_TAX_SETTINGS,
     createdAt: '2026-03-01T00:00:00Z',
     updatedAt: '2026-03-01T00:00:00Z',
   },

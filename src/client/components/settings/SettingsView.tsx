@@ -48,7 +48,8 @@ import { useFinance } from '../../context/FinanceContext.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { api } from '../../api/apiClient.js';
 import { formatRubles } from '../../utils/formatters.js';
-import { Account, Category, Partner, TransactionDirection, UserRole, CompanyInvite } from '../../../shared/types.js';
+import { Account, Category, Partner, TransactionDirection, UserRole, CompanyInvite, TaxSystem, CompanyTaxSettings } from '../../../shared/types.js';
+import { calculateTaxReserve } from '../../utils/taxCalculator.js';
 
 type SettingsTab = 'accounts' | 'partners' | 'categories' | 'organization' | 'profile';
 
@@ -112,6 +113,7 @@ export const SettingsView: React.FC = () => {
     refreshCategories,
     resetAccountBalances,
     addToast,
+    transactions,
   } = useFinance();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
@@ -541,6 +543,57 @@ export const SettingsView: React.FC = () => {
       addToast(err.message || 'Ошибка обновления организации', 'error');
     } finally {
       setIsSavingOrg(false);
+    }
+  };
+
+  // Taxation system state
+  const [taxSystem, setTaxSystem] = useState<TaxSystem>(() => {
+    return currentCompany?.taxSystem || currentCompany?.taxSettings?.system || 'usn_income';
+  });
+  const [taxRate, setTaxRate] = useState<number>(() => {
+    return currentCompany?.taxRate ?? currentCompany?.taxSettings?.rate ?? 6;
+  });
+  const [applyOnlyToBank, setApplyOnlyToBank] = useState<boolean>(() => {
+    return currentCompany?.taxSettings?.applyOnlyToBank ?? false;
+  });
+  const [isSavingTax, setIsSavingTax] = useState(false);
+
+  useEffect(() => {
+    if (currentCompany) {
+      setTaxSystem(currentCompany.taxSystem || currentCompany.taxSettings?.system || 'usn_income');
+      setTaxRate(currentCompany.taxRate ?? currentCompany.taxSettings?.rate ?? 6);
+      setApplyOnlyToBank(currentCompany.taxSettings?.applyOnlyToBank ?? false);
+    }
+  }, [currentCompany]);
+
+  const liveTaxPreview = useMemo(() => {
+    return calculateTaxReserve(transactions, accounts, {
+      system: taxSystem,
+      rate: Number(taxRate) || 0,
+      applyOnlyToBank,
+    });
+  }, [transactions, accounts, taxSystem, taxRate, applyOnlyToBank]);
+
+  const handleSaveTaxSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentCompany) return;
+    setIsSavingTax(true);
+    try {
+      const newTaxSettings: CompanyTaxSettings = {
+        system: taxSystem,
+        rate: Number(taxRate) || 0,
+        applyOnlyToBank,
+      };
+      await updateCompanyDetails(currentCompany.id, {
+        taxSystem,
+        taxRate: Number(taxRate) || 0,
+        taxSettings: newTaxSettings,
+      });
+      addToast('Настройки налогообложения успешно сохранены', 'success');
+    } catch (err: any) {
+      addToast(err.message || 'Ошибка сохранения настроек налогов', 'error');
+    } finally {
+      setIsSavingTax(false);
     }
   };
 
@@ -1502,6 +1555,249 @@ export const SettingsView: React.FC = () => {
                 </span>
               </div>
             </div>
+          </section>
+
+          {/* Taxation System & Tax Reserve */}
+          <section className="settings-section-card">
+            <div className="settings-section-header">
+              <div>
+                <h3 className="settings-section-title">Система налогообложения и резерв</h3>
+                <p className="settings-section-subtitle">
+                  Автоматический расчёт резерва на налоги за текущий квартал, чтобы защитить компанию от кассового разрыва
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveTaxSettings} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div className="settings-row-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '12px' }}>
+                <div className="settings-row-info">
+                  <div className="settings-row-label">Налоговый режим</div>
+                  <div className="settings-row-desc">
+                    Выберите систему налогообложения вашей компании для автоматической оценки налога
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px', width: '100%' }}>
+                  <button
+                    type="button"
+                    onClick={() => { setTaxSystem('usn_income'); setTaxRate(6); }}
+                    className="ui-tab-pill"
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      textAlign: 'left',
+                      background: taxSystem === 'usn_income' ? '#f6f2ea' : 'var(--card)',
+                      borderColor: taxSystem === 'usn_income' ? '#c5b08e' : 'var(--border)',
+                      color: taxSystem === 'usn_income' ? 'var(--foreground)' : 'var(--muted-foreground)',
+                      borderWidth: '1px',
+                      borderStyle: 'solid',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                    }}
+                  >
+                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>УСН «Доходы» (6%)</span>
+                    <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>Для агентств и услуг</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setTaxSystem('usn_income_expense'); setTaxRate(15); }}
+                    className="ui-tab-pill"
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      textAlign: 'left',
+                      background: taxSystem === 'usn_income_expense' ? '#f6f2ea' : 'var(--card)',
+                      borderColor: taxSystem === 'usn_income_expense' ? '#c5b08e' : 'var(--border)',
+                      color: taxSystem === 'usn_income_expense' ? 'var(--foreground)' : 'var(--muted-foreground)',
+                      borderWidth: '1px',
+                      borderStyle: 'solid',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                    }}
+                  >
+                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>УСН «Доходы-Расходы» (15%)</span>
+                    <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>С чистой прибыли</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setTaxSystem('npd'); setTaxRate(6); }}
+                    className="ui-tab-pill"
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      textAlign: 'left',
+                      background: taxSystem === 'npd' ? '#f6f2ea' : 'var(--card)',
+                      borderColor: taxSystem === 'npd' ? '#c5b08e' : 'var(--border)',
+                      color: taxSystem === 'npd' ? 'var(--foreground)' : 'var(--muted-foreground)',
+                      borderWidth: '1px',
+                      borderStyle: 'solid',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                    }}
+                  >
+                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>Самозанятость / НПД (6%)</span>
+                    <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>Соло-организаторы</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setTaxSystem('custom'); }}
+                    className="ui-tab-pill"
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      textAlign: 'left',
+                      background: taxSystem === 'custom' ? '#f6f2ea' : 'var(--card)',
+                      borderColor: taxSystem === 'custom' ? '#c5b08e' : 'var(--border)',
+                      color: taxSystem === 'custom' ? 'var(--foreground)' : 'var(--muted-foreground)',
+                      borderWidth: '1px',
+                      borderStyle: 'solid',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                    }}
+                  >
+                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>Своя ставка (%)</span>
+                    <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>Региональные льготы</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setTaxSystem('none'); }}
+                    className="ui-tab-pill"
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      textAlign: 'left',
+                      background: taxSystem === 'none' ? '#f6f2ea' : 'var(--card)',
+                      borderColor: taxSystem === 'none' ? '#c5b08e' : 'var(--border)',
+                      color: taxSystem === 'none' ? 'var(--foreground)' : 'var(--muted-foreground)',
+                      borderWidth: '1px',
+                      borderStyle: 'solid',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                    }}
+                  >
+                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>Не рассчитывать налоги</span>
+                    <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>Чистая управленка</span>
+                  </button>
+                </div>
+              </div>
+
+              {taxSystem !== 'none' && (
+                <>
+                  <div className="settings-row-item">
+                    <div className="settings-row-info">
+                      <div className="settings-row-label">Применяемая ставка налога (%)</div>
+                      <div className="settings-row-desc">
+                        Процент отчислений, используемый для расчёта квартального резерва
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        value={taxRate}
+                        onChange={(e) => setTaxRate(Number(e.target.value) || 0)}
+                        className="settings-text-input"
+                        style={{ width: '90px', textAlign: 'center', fontWeight: 700 }}
+                      />
+                      <span style={{ fontWeight: 600, color: 'var(--muted-foreground)' }}>%</span>
+                    </div>
+                  </div>
+
+                  <div className="settings-row-item">
+                    <div className="settings-row-info">
+                      <div className="settings-row-label">Только безналичные счета (Р/С и эквайринг)</div>
+                      <div className="settings-row-desc">
+                        Если включено, расчёт налога ведётся только с официальных безналичных поступлений в банк (нал на площадке не учитывается)
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={applyOnlyToBank}
+                          onChange={(e) => setApplyOnlyToBank(e.target.checked)}
+                          style={{ width: '18px', height: '18px', accentColor: '#8c734b', cursor: 'pointer' }}
+                        />
+                        <span style={{ fontSize: '13px', fontWeight: 500 }}>Только банк</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Live calculation banner */}
+                  <div style={{
+                    background: '#fcfaf6',
+                    border: '1px solid #e7ded0',
+                    borderRadius: '8px',
+                    padding: '14px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '16px',
+                    flexWrap: 'wrap',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#f5efe4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8c734b' }}>
+                        <Landmark size={18} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--foreground)' }}>
+                          Оценка резерва за {liveTaxPreview.quarterLabel}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>
+                          Налоговая база: {formatRubles(liveTaxPreview.taxableBase)} ({liveTaxPreview.systemLabel})
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)', display: 'block' }}>К резервированию на налог:</span>
+                      <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#d97706' }}>
+                        {formatRubles(liveTaxPreview.taxAmount)}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {(userRole === 'owner' || userRole === 'admin' || currentUser?.isSuperAdmin) && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '8px' }}>
+                  <button
+                    type="submit"
+                    disabled={isSavingTax}
+                    className="btn-settings-save"
+                    style={{ padding: '8px 20px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    {isSavingTax ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>Сохранение...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check size={14} />
+                        <span>Сохранить настройки налогообложения</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </form>
           </section>
 
           {/* Team & Members */}

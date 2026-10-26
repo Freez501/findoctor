@@ -6,16 +6,41 @@
  * dynamic account chips, and an account-driven multi-segment liquidity bar.
  */
 
-import React from 'react';
-import { TrendingUp, Sparkles, ShieldCheck, ArrowUpRight } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { TrendingUp, Sparkles, ShieldCheck, ArrowUpRight, Landmark } from 'lucide-react';
 import { useAccounts } from '../../hooks/useAccounts.js';
+import { useFinance } from '../../context/FinanceContext.js';
+import { useAuth } from '../../context/AuthContext.js';
+import { calculateTaxReserve } from '../../utils/taxCalculator.js';
 import { formatRubles, formatPercent } from '../../utils/formatters.js';
 
 export const TotalCapitalBanner: React.FC = () => {
   const { accounts, totalBalance, isLoading } = useAccounts();
+  const { currentCompany } = useAuth();
+  const { transactions } = useFinance();
 
   const activeAccounts = accounts.filter((a) => a.isActive !== false);
   const isInitialColdLoad = isLoading && accounts.length === 0;
+
+  const taxResult = useMemo(() => {
+    const currentQ = calculateTaxReserve(transactions, accounts, currentCompany?.taxSettings || {
+      system: currentCompany?.taxSystem || 'usn_income',
+      rate: currentCompany?.taxRate ?? 6,
+      applyOnlyToBank: false,
+    });
+    if (currentQ.taxAmount > 0) return currentQ;
+
+    // If current quarter has no transactions yet, check previous quarter (e.g. III кв. where initial seed data lives)
+    const prevDate = new Date();
+    prevDate.setMonth(prevDate.getMonth() - 2);
+    const prevQ = calculateTaxReserve(transactions, accounts, currentCompany?.taxSettings || {
+      system: currentCompany?.taxSystem || 'usn_income',
+      rate: currentCompany?.taxRate ?? 6,
+      applyOnlyToBank: false,
+    }, prevDate);
+
+    return prevQ.taxAmount > 0 ? prevQ : currentQ;
+  }, [transactions, accounts, currentCompany]);
 
   return (
     <section className="total-capital-banner hero-glow-banner" aria-label="Сводный баланс и ликвидность">
@@ -49,6 +74,34 @@ export const TotalCapitalBanner: React.FC = () => {
               formatRubles(totalBalance)
             )}
           </div>
+
+          {taxResult && taxResult.system !== 'none' && taxResult.taxAmount > 0 && (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginTop: '10px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                background: 'rgba(217, 119, 6, 0.12)',
+                border: '1px solid rgba(217, 119, 6, 0.3)',
+                fontSize: '0.8rem',
+                color: '#d97706',
+                flexWrap: 'wrap',
+              }}
+              title={`Налоговая база за ${taxResult.quarterLabel}: ${formatRubles(taxResult.taxableBase)} (${taxResult.systemLabel})`}
+            >
+              <Landmark size={14} />
+              <span>
+                Резерв налога ({taxResult.quarterLabel}): <strong>{formatRubles(taxResult.taxAmount)}</strong>
+              </span>
+              <span style={{ opacity: 0.5 }}>|</span>
+              <span style={{ color: 'var(--foreground)' }}>
+                Свободный капитал: <strong>{formatRubles(Math.max(0, totalBalance - taxResult.taxAmount))}</strong>
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Right Side: Visual WOW Dynamic Chart / Sparkline */}

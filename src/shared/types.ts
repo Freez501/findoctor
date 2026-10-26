@@ -59,6 +59,22 @@ export type TransactionDirection = 'operational' | 'business' | 'dividends' | 't
 export type UserRole = 'super_admin' | 'owner' | 'admin' | 'accountant' | 'staff';
 
 /**
+ * Taxation System options for Russian business / agencies:
+ * - none: Pure management accounting without automated tax estimates
+ * - usn_income: УСН «Доходы» (standard 6%, or regional 1-6%)
+ * - usn_income_expense: УСН «Доходы минус Расходы» (standard 15%, or regional 5-15%)
+ * - npd: Самозанятость / НПД (4% from individuals, 6% from legal entities)
+ * - custom: Custom user-defined rate (%)
+ */
+export type TaxSystem = 'none' | 'usn_income' | 'usn_income_expense' | 'npd' | 'custom';
+
+export interface CompanyTaxSettings {
+  system: TaxSystem;
+  rate: number; // e.g. 6.0 or 15.0 or 4.0
+  applyOnlyToBank: boolean; // only calculate tax on bank accounts (bank, card) vs all accounts including cash
+}
+
+/**
  * Company (Tenant / Organization) entity
  */
 export interface Company {
@@ -70,6 +86,9 @@ export interface Company {
   ownerId?: string;
   trialEndsAt?: string | null;
   paidUntil?: string | null;
+  taxSystem?: TaxSystem;
+  taxRate?: number;
+  taxSettings?: CompanyTaxSettings;
   createdAt: string;
   updatedAt?: string;
 }

@@ -22,6 +22,7 @@ import {
   PieChart,
 } from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext.js';
+import { useAuth } from '../../context/AuthContext.js';
 import { api } from '../../api/apiClient.js';
 import {
   EventPaymentMilestone,
@@ -43,6 +44,7 @@ type StatementTab = 'cashflow' | 'pnl' | 'economics' | 'balance' | 'payroll';
 
 export const ReportsView: React.FC = () => {
   const { accounts, events, transactions, categories, addToast } = useFinance();
+  const { currentCompany } = useAuth();
   const [activeTab, setActiveTab] = useState<StatementTab>('cashflow');
   const [period, setPeriod] = useState<ReportPeriod>('current_month');
   const [allMilestones, setAllMilestones] = useState<EventPaymentMilestone[]>([]);
@@ -100,8 +102,18 @@ export const ReportsView: React.FC = () => {
   }, [transactions, accounts, categories, dateRange, currentPeriodLabel]);
 
   const pnl = useMemo(() => {
-    return generatePnLStatement(transactions, categories, dateRange, currentPeriodLabel);
-  }, [transactions, categories, dateRange, currentPeriodLabel]);
+    return generatePnLStatement(
+      transactions,
+      categories,
+      dateRange,
+      currentPeriodLabel,
+      currentCompany?.taxSettings || {
+        system: currentCompany?.taxSystem || 'usn_income',
+        rate: currentCompany?.taxRate ?? 6,
+        applyOnlyToBank: false,
+      }
+    );
+  }, [transactions, categories, dateRange, currentPeriodLabel, currentCompany]);
 
   const eventEconomics = useMemo(() => {
     return generateEventEconomicsReport(events, transactions, dateRange);
@@ -148,7 +160,13 @@ export const ReportsView: React.FC = () => {
           ['--- ОБЩЕХОЗЯЙСТВЕННЫЕ РАСХОДЫ (OPEX) ---', '', ''],
           ...pnl.opexItems.map((i) => [i.name, i.amount, `${i.share}%`]),
           ['Итого постоянные расходы', pnl.totalOPEX, `${pnl.revenue > 0 ? ((pnl.totalOPEX / pnl.revenue) * 100).toFixed(1) : 0}%`],
-          ['ЧИСТАЯ ОПЕРАЦИОННАЯ ПРИБЫЛЬ', pnl.operatingProfit, `${pnl.netMarginPercent}%`],
+          ['ОПЕРАЦИОННАЯ ПРИБЫЛЬ (EBITDA)', pnl.operatingProfit, `${pnl.netMarginPercent}%`],
+          ...(pnl.taxEstimated > 0
+            ? [
+                [pnl.taxLabel || 'Оценочный налог', -pnl.taxEstimated, `${pnl.revenue > 0 ? ((pnl.taxEstimated / pnl.revenue) * 100).toFixed(1) : 0}%`],
+                ['ЧИСТАЯ ПРИБЫЛЬ К РАСПРЕДЕЛЕНИЮ ПОСЛЕ НАЛОГОВ', pnl.netProfitAfterTax, `${pnl.netMarginAfterTaxPercent}%`],
+              ]
+            : []),
         ];
         exportReportToExcel('ОПиУ (P&L)', `ОПиУ_${dateRange.startDate}_${dateRange.endDate}`, headers, rows);
       } else if (activeTab === 'economics') {
@@ -542,7 +560,7 @@ export const ReportsView: React.FC = () => {
 
                 {/* Net Operating Profit */}
                 <tr className="statement-row-grandtotal">
-                  <td>ЧИСТАЯ ОПЕРАЦИОННАЯ ПРИБЫЛЬ (Net Profit)</td>
+                  <td>ОПЕРАЦИОННАЯ ПРИБЫЛЬ (EBITDA)</td>
                   <td className="num-col" style={{ color: pnl.operatingProfit >= 0 ? '#059669' : '#dc2626' }}>
                     {formatRubles(pnl.operatingProfit)}
                   </td>
@@ -550,6 +568,33 @@ export const ReportsView: React.FC = () => {
                     {formatPercent(pnl.netMarginPercent, 1)}
                   </td>
                 </tr>
+
+                {pnl.taxEstimated > 0 && (
+                  <>
+                    <tr className="statement-row-subitem" style={{ background: '#fefce8' }}>
+                      <td style={{ fontWeight: 600, color: '#854d0e', paddingLeft: '24px' }}>
+                        {pnl.taxLabel || 'Оценочный налог'}
+                      </td>
+                      <td className="num-col" style={{ color: '#dc2626', fontWeight: 600 }}>
+                        -{formatRubles(pnl.taxEstimated)}
+                      </td>
+                      <td className="num-col" style={{ color: '#854d0e' }}>
+                        {pnl.revenue > 0 ? formatPercent((pnl.taxEstimated / pnl.revenue) * 100, 1) : '0%'}
+                      </td>
+                    </tr>
+                    <tr className="statement-row-grandtotal" style={{ background: '#f0fdf4', borderTop: '2px solid #86efac' }}>
+                      <td style={{ fontWeight: 800, color: '#166534' }}>
+                        ЧИСТАЯ ПРИБЫЛЬ К РАСПРЕДЕЛЕНИЮ ПОСЛЕ НАЛОГОВ
+                      </td>
+                      <td className="num-col" style={{ color: pnl.netProfitAfterTax >= 0 ? '#166534' : '#dc2626', fontWeight: 800 }}>
+                        {formatRubles(pnl.netProfitAfterTax)}
+                      </td>
+                      <td className="num-col" style={{ color: pnl.netProfitAfterTax >= 0 ? '#166534' : '#dc2626', fontWeight: 800 }}>
+                        {formatPercent(pnl.netMarginAfterTaxPercent, 1)}
+                      </td>
+                    </tr>
+                  </>
+                )}
               </tbody>
             </table>
           </div>

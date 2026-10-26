@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Calendar, User, MapPin, PieChart, Users, Receipt } from 'lucide-react';
 import { CateringEvent } from '../../../shared/types.js';
 import { useFinance } from '../../context/FinanceContext.js';
+import { useAuth } from '../../context/AuthContext.js';
 import { formatRubles, formatDateRu } from '../../utils/formatters.js';
 import { EventBudgetTab } from './EventBudgetTab.js';
 import { EventContractorsTab } from './EventContractorsTab.js';
@@ -45,6 +46,12 @@ export const EventDossierModal: React.FC<EventDossierModalProps> = ({ event, isO
   const contractAmount = event.contractAmount || totalIncome;
   const clientDebt = Math.max(0, contractAmount - totalIncome);
   const currentMargin = totalIncome - totalExpense;
+
+  const { currentCompany } = useAuth();
+  const taxRate = currentCompany?.taxRate ?? currentCompany?.taxSettings?.rate ?? 6;
+  const isTaxActive = (currentCompany?.taxSystem || currentCompany?.taxSettings?.system || 'usn_income') !== 'none';
+  const estimatedTax = isTaxActive ? Math.round(totalIncome * (taxRate / 100)) : 0;
+  const marginAfterTax = currentMargin - estimatedTax;
 
   return (
     <div className="dossier-modal-backdrop" onClick={onClose}>
@@ -119,6 +126,14 @@ export const EventDossierModal: React.FC<EventDossierModalProps> = ({ event, isO
               {formatRubles(currentMargin)}
             </span>
           </div>
+          {isTaxActive && totalIncome > 0 && (
+            <div className="dossier-strip-item">
+              <span className="strip-label">Налог ({taxRate}%)</span>
+              <span className="strip-val" style={{ color: '#d97706' }} title={`Оценка налога: ${formatRubles(estimatedTax)} • Чистая прибыль после налога: ${formatRubles(marginAfterTax)}`}>
+                -{formatRubles(estimatedTax)}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Navigation Tabs */}

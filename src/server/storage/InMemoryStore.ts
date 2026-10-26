@@ -62,6 +62,9 @@ export class InMemoryStore implements IFinanceStore {
       paidUntil: companyInput.paidUntil,
       isActive: companyInput.isActive ?? true,
       ownerId: companyInput.ownerId,
+      taxSystem: companyInput.taxSystem || 'usn_income',
+      taxRate: companyInput.taxRate !== undefined ? companyInput.taxRate : 6,
+      taxSettings: companyInput.taxSettings || { system: 'usn_income', rate: 6, applyOnlyToBank: false },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

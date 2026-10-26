@@ -21,6 +21,8 @@ import {
   EventPaymentMilestone,
   EventBudgetItem,
   EventVendor,
+  TaxSystem,
+  CompanyTaxSettings,
 } from '../../shared/types.js';
 import { DEFAULT_COMPANY_ID } from '../../shared/constants.js';
 import { DatabaseState, createInitialDatabaseState } from '../data/seed.js';
@@ -80,13 +82,16 @@ export class MySqlStore implements IFinanceStore {
       paidUntil: companyInput.paidUntil ?? null,
       isActive: companyInput.isActive ?? true,
       ownerId: companyInput.ownerId,
+      taxSystem: companyInput.taxSystem || 'usn_income',
+      taxRate: companyInput.taxRate !== undefined ? companyInput.taxRate : 6,
+      taxSettings: companyInput.taxSettings || { system: 'usn_income', rate: 6, applyOnlyToBank: false },
       createdAt: now,
       updatedAt: now,
     };
 
     await this.pool.query(`
-      INSERT INTO companies (id, name, slug, plan, trial_ends_at, paid_until, is_active, owner_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO companies (id, name, slug, plan, trial_ends_at, paid_until, is_active, owner_id, tax_system, tax_rate, tax_settings, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         name = VALUES(name),
         slug = VALUES(slug),
@@ -95,6 +100,9 @@ export class MySqlStore implements IFinanceStore {
         paid_until = VALUES(paid_until),
         is_active = VALUES(is_active),
         owner_id = VALUES(owner_id),
+        tax_system = VALUES(tax_system),
+        tax_rate = VALUES(tax_rate),
+        tax_settings = VALUES(tax_settings),
         updated_at = VALUES(updated_at)
     `, [
       comp.id,
@@ -105,6 +113,9 @@ export class MySqlStore implements IFinanceStore {
       comp.paidUntil || null,
       comp.isActive ? 1 : 0,
       comp.ownerId || null,
+      comp.taxSystem || 'usn_income',
+      comp.taxRate !== undefined ? comp.taxRate : 6,
+      comp.taxSettings ? JSON.stringify(comp.taxSettings) : null,
       comp.createdAt,
       comp.updatedAt,
     ]);
@@ -123,7 +134,7 @@ export class MySqlStore implements IFinanceStore {
 
     await this.pool.query(`
       UPDATE companies
-      SET name = ?, slug = ?, plan = ?, trial_ends_at = ?, paid_until = ?, is_active = ?, owner_id = ?, updated_at = ?
+      SET name = ?, slug = ?, plan = ?, trial_ends_at = ?, paid_until = ?, is_active = ?, owner_id = ?, tax_system = ?, tax_rate = ?, tax_settings = ?, updated_at = ?
       WHERE id = ?
     `, [
       updated.name,
@@ -133,6 +144,9 @@ export class MySqlStore implements IFinanceStore {
       updated.paidUntil !== undefined ? updated.paidUntil : existing.paidUntil || null,
       updated.isActive ? 1 : 0,
       updated.ownerId || null,
+      updated.taxSystem !== undefined ? updated.taxSystem : (existing.taxSystem || 'usn_income'),
+      updated.taxRate !== undefined ? updated.taxRate : (existing.taxRate !== undefined ? existing.taxRate : 6),
+      updated.taxSettings !== undefined ? JSON.stringify(updated.taxSettings) : (existing.taxSettings ? JSON.stringify(existing.taxSettings) : null),
       updated.updatedAt,
       id,
     ]);
@@ -1239,6 +1253,15 @@ export class MySqlStore implements IFinanceStore {
   // =========================================================================
 
   private mapCompany(r: any): Company {
+    let taxSettings: CompanyTaxSettings | undefined = undefined;
+    if (r.tax_settings) {
+      try {
+        taxSettings = typeof r.tax_settings === 'string' ? JSON.parse(r.tax_settings) : r.tax_settings;
+      } catch {}
+    }
+    const taxSystem = (r.tax_system as TaxSystem) || (taxSettings?.system) || 'usn_income';
+    const taxRate = r.tax_rate !== undefined && r.tax_rate !== null ? Number(r.tax_rate) : (taxSettings?.rate ?? 6);
+
     return {
       id: r.id,
       name: r.name,
@@ -1248,6 +1271,9 @@ export class MySqlStore implements IFinanceStore {
       paidUntil: r.paid_until || null,
       isActive: Boolean(r.is_active),
       ownerId: r.owner_id || undefined,
+      taxSystem,
+      taxRate,
+      taxSettings: taxSettings || { system: taxSystem, rate: taxRate, applyOnlyToBank: false },
       createdAt: r.created_at || new Date().toISOString(),
       updatedAt: r.updated_at || new Date().toISOString(),
     };

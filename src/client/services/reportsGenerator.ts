@@ -18,6 +18,7 @@ import {
   EventPaymentMilestone,
   EventVendor,
   Transaction,
+  CompanyTaxSettings,
 } from '../../shared/types.js';
 
 const round2 = (val: number): number => Math.round((val + Number.EPSILON) * 100) / 100;
@@ -192,13 +193,18 @@ export interface PnLStatementData {
   totalOPEX: number;
   operatingProfit: number;
   netMarginPercent: number;
+  taxEstimated: number;
+  taxLabel: string;
+  netProfitAfterTax: number;
+  netMarginAfterTaxPercent: number;
 }
 
 export function generatePnLStatement(
   transactions: Transaction[],
   categories: Category[],
   range: DateRange,
-  periodLabel: string
+  periodLabel: string,
+  taxSettings?: CompanyTaxSettings
 ): PnLStatementData {
   const catMap = new Map(categories.map((c) => [c.id, c.name]));
 
@@ -236,6 +242,26 @@ export function generatePnLStatement(
   const grossMarginPercent = revenue > 0 ? round2((grossProfit / revenue) * 100) : 0;
   const netMarginPercent = revenue > 0 ? round2((operatingProfit / revenue) * 100) : 0;
 
+  // Taxation calculations for P&L
+  let taxEstimated = 0;
+  let taxLabel = '';
+  if (taxSettings && taxSettings.system !== 'none') {
+    const rate = taxSettings.rate ?? 6;
+    if (taxSettings.system === 'usn_income' || taxSettings.system === 'npd' || taxSettings.system === 'custom') {
+      taxEstimated = round2(revenue * (rate / 100));
+      taxLabel = `Расчётный налог (${taxSettings.system === 'usn_income' ? 'УСН Доходы' : taxSettings.system === 'npd' ? 'НПД' : 'Ставка'} ${rate}%)`;
+    } else if (taxSettings.system === 'usn_income_expense') {
+      const taxableBase = Math.max(0, operatingProfit);
+      const standardTax = round2(taxableBase * (rate / 100));
+      const minTax = round2(revenue * 0.01);
+      taxEstimated = Math.max(standardTax, minTax);
+      taxLabel = `Расчётный налог (УСН Доходы-Расходы ${rate}%)`;
+    }
+  }
+
+  const netProfitAfterTax = round2(operatingProfit - taxEstimated);
+  const netMarginAfterTaxPercent = revenue > 0 ? round2((netProfitAfterTax / revenue) * 100) : 0;
+
   return {
     periodLabel,
     revenue: round2(revenue),
@@ -255,6 +281,10 @@ export function generatePnLStatement(
     totalOPEX: round2(totalOPEX),
     operatingProfit,
     netMarginPercent,
+    taxEstimated,
+    taxLabel,
+    netProfitAfterTax,
+    netMarginAfterTaxPercent,
   };
 }
 
