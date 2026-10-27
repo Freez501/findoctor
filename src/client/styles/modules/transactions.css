@@ -1,6 +1,33 @@
 /* ========================================================================= */
 /* Structured Cash Flow Grid Table (Desktop & Tablet)                        */
 /* ========================================================================= */
+.tx-table-scroll-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(197, 176, 142, 0.4) transparent;
+  padding-bottom: 8px;
+}
+
+.tx-table-scroll-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.tx-table-scroll-container::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 4px;
+}
+
+.tx-table-scroll-container::-webkit-scrollbar-thumb {
+  background: rgba(197, 176, 142, 0.5);
+  border-radius: 4px;
+}
+
+.tx-table-inner {
+  min-width: 980px;
+}
+
 .tx-table-header {
   display: grid;
   grid-template-columns: 28px 28px 90px minmax(180px, 2fr) minmax(120px, 1.2fr) minmax(100px, 1fr) minmax(140px, 1.3fr) minmax(130px, 1.2fr) 110px 32px;
@@ -220,42 +247,11 @@
 }
 
 /* ========================================================================= */
-/* Mobile Fallback (< 880px)                                                 */
+/* Mobile View (< 880px): Table scrolls horizontally with clean indicator    */
 /* ========================================================================= */
 @media (max-width: 880px) {
-  .tx-table-header {
-    display: none;
-  }
-
-  .compact-tx-row {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    padding: 12px;
-  }
-
-  .mobile-top-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .mobile-mid-row {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .mobile-bot-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-top: 1px dashed var(--border);
-    padding-top: 6px;
-    font-size: 0.75rem;
+  .tx-table-inner {
+    min-width: 960px;
   }
 }
 
@@ -672,13 +668,23 @@
   align-items: center;
   gap: 6px;
   overflow-x: auto;
-  padding: 2px 0;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  padding: 4px 0 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(197, 176, 142, 0.4) transparent;
+  -webkit-overflow-scrolling: touch;
 }
 
 .filter-accounts-track::-webkit-scrollbar {
-  display: none;
+  height: 4px;
+}
+
+.filter-accounts-track::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.filter-accounts-track::-webkit-scrollbar-thumb {
+  background: rgba(197, 176, 142, 0.4);
+  border-radius: 4px;
 }
 
 .filter-account-chip {

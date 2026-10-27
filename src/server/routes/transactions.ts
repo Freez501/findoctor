@@ -86,7 +86,8 @@ export function createTransactionsRouter(financeService?: FinanceService): Route
   router.post('/', async (req: Request, res: Response) => {
     try {
       const companyId = req.body.companyId || (req.headers['x-company-id'] as string) || undefined;
-      const result = await service.createTransaction({ ...req.body, companyId });
+      const createdBy = req.body.createdBy || (req.headers['x-user-id'] as string) || (req as any).user?.id || undefined;
+      const result = await service.createTransaction({ ...req.body, companyId, createdBy });
       res.status(201).json({
         success: true,
         transaction: result.transaction,

@@ -469,30 +469,34 @@ export const TransactionHistory: React.FC = () => {
           <span style={{ fontSize: '0.8rem' }}>Попробуйте изменить параметры фильтрации</span>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {/* Table Header (как в эталонном прототипе ДДС) */}
-          <div className="tx-table-header" aria-hidden="true">
-            <div className="tx-table-header-col" style={{ textAlign: 'center' }}>✓</div>
-            <div className="tx-table-header-col" style={{ textAlign: 'center' }}>Тип</div>
-            <div className="tx-table-header-col">Дата</div>
-            <div className="tx-table-header-col">Операция / Автор</div>
-            <div className="tx-table-header-col">Статья ДДС</div>
-            <div className="tx-table-header-col">Проект</div>
-            <div className="tx-table-header-col">Счёт / Юрлицо</div>
-            <div className="tx-table-header-col">НДС / Доки</div>
-            <div className="tx-table-header-col num-col">Сумма</div>
-            <div className="tx-table-header-col" style={{ textAlign: 'right' }}></div>
-          </div>
+        <div className="tx-table-scroll-container">
+          <div className="tx-table-inner">
+            {/* Table Header (как в эталонном прототипе ДДС) */}
+            <div className="tx-table-header" aria-hidden="true">
+              <div className="tx-table-header-col" style={{ textAlign: 'center' }}>✓</div>
+              <div className="tx-table-header-col" style={{ textAlign: 'center' }}>Тип</div>
+              <div className="tx-table-header-col">Дата</div>
+              <div className="tx-table-header-col">Операция / Автор</div>
+              <div className="tx-table-header-col">Статья ДДС</div>
+              <div className="tx-table-header-col">Проект</div>
+              <div className="tx-table-header-col">Счёт / Юрлицо</div>
+              <div className="tx-table-header-col">НДС / Доки</div>
+              <div className="tx-table-header-col num-col">Сумма</div>
+              <div className="tx-table-header-col" style={{ textAlign: 'right' }}></div>
+            </div>
 
-          {filtered.map((tx) => (
-            <TransactionRow
-              key={tx.id}
-              transaction={tx}
-              isSelected={selectedIds.has(tx.id)}
-              onToggleSelect={handleToggleSelectOne}
-              onClick={(selected) => setEditingTx(selected)}
-            />
-          ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {filtered.map((tx) => (
+                <TransactionRow
+                  key={tx.id}
+                  transaction={tx}
+                  isSelected={selectedIds.has(tx.id)}
+                  onToggleSelect={handleToggleSelectOne}
+                  onClick={(selected) => setEditingTx(selected)}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       )}
 

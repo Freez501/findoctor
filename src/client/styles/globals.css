@@ -732,21 +732,38 @@ textarea {
 
 /* Responsive adjustment for header tabs on mobile */
 @media (max-width: 959px) {
+  .app-header {
+    padding: 8px 12px;
+  }
   .app-header .header-container {
     flex-wrap: wrap;
+    gap: 8px;
   }
   .app-header .header-nav-tabs {
     display: flex;
     order: 3;
     width: 100%;
     overflow-x: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    margin-top: 6px;
-    padding: 3px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(197, 176, 142, 0.4) transparent;
+    -webkit-overflow-scrolling: touch;
+    margin-top: 4px;
+    padding: 3px 2px 5px;
   }
   .app-header .header-nav-tabs::-webkit-scrollbar {
-    display: none;
+    height: 3px;
+  }
+  .app-header .header-nav-tabs::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .app-header .header-nav-tabs::-webkit-scrollbar-thumb {
+    background: rgba(197, 176, 142, 0.4);
+    border-radius: 3px;
+  }
+  .app-header .header-nav-tab {
+    padding: 6px 10px;
+    font-size: 0.78rem;
+    flex-shrink: 0;
   }
 }
 
