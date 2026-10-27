@@ -263,18 +263,26 @@ export const TotalCapitalBanner: React.FC = () => {
                 </div>
 
                 <div style={{ padding: '12px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 600 }}>Чистый свободный капитал</div>
+                  <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 600 }}>Можно тратить</div>
                   <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#059669', marginTop: '2px' }}>
                     {formatRubles(Math.max(0, totalBalance - taxResult.taxAmount))}
                   </div>
                 </div>
 
                 <div style={{ padding: '12px', background: '#f6f2ea', border: '1px solid #c5b08e', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '0.72rem', color: '#8c734b', fontWeight: 600 }}>Входящий НДС к вычету</div>
+                  <div style={{ fontSize: '0.72rem', color: '#8c734b', fontWeight: 600 }}>НДС к вычету (уменьшает налог)</div>
                   <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#8c734b', marginTop: '2px' }}>
                     {formatRubles(taxResult.totalVatIncoming || 0)}
                   </div>
                 </div>
+              </div>
+
+              {/* Plain-language formula: users confused «свободный капитал» with the tax reserve */}
+              <div style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', lineHeight: 1.5, padding: '10px 12px', borderRadius: '10px', border: '1px dashed var(--border)' }}>
+                Деньги на всех счетах <strong style={{ color: 'var(--foreground)' }}>{formatRubles(totalBalance)}</strong>
+                {' − '}отложить на налоги <strong style={{ color: '#d97706' }}>{formatRubles(taxResult.taxAmount)}</strong>
+                {' = '}можно тратить <strong style={{ color: '#059669' }}>{formatRubles(Math.max(0, totalBalance - taxResult.taxAmount))}</strong>.
+                {' '}Входящий НДС из документов поставщиков уменьшает налог только у юрлиц на ОСНО. На УСН с НДС 5% или 7% вычета нет — документы всё равно нужны для учёта.
               </div>
 
               {/* Entities Breakdown Cards */}
@@ -331,7 +339,9 @@ export const TotalCapitalBanner: React.FC = () => {
                           <strong style={{ color: 'var(--foreground)' }}>{formatRubles(ent.income)}</strong>
                         </div>
                         <div>
-                          <span style={{ color: 'var(--muted-foreground)' }}>Расходы: </span>
+                          <span style={{ color: 'var(--muted-foreground)' }}>
+                            {ent.taxSystem === 'osno' || ent.taxSystem === 'usn_income_expense' ? 'Расходы: ' : 'Расходы (не уменьшают налог): '}
+                          </span>
                           <strong style={{ color: 'var(--foreground)' }}>{formatRubles(ent.expense)}</strong>
                         </div>
 
@@ -369,13 +379,22 @@ export const TotalCapitalBanner: React.FC = () => {
                           </>
                         )}
 
-                        {ent.taxSystem === 'usn_income' && (
+                        {(ent.taxSystem === 'usn_income' || ent.taxSystem === 'usn_income_expense' || ent.taxSystem === 'npd' || ent.taxSystem === 'custom') && (
                           <div>
                             <span style={{ color: 'var(--muted-foreground)' }}>Налог УСН: </span>
                             <strong style={{ color: '#d97706' }}>{formatRubles(ent.taxAmount)}</strong>
                           </div>
                         )}
                       </div>
+
+                      {(ent.docsCount || 0) > 0 && (
+                        <div style={{ fontSize: '0.74rem', color: ent.taxSystem === 'osno' ? '#059669' : 'var(--muted-foreground)', background: ent.taxSystem === 'osno' ? 'rgba(16, 185, 129, 0.08)' : 'var(--background)', borderRadius: '8px', padding: '6px 10px' }}>
+                          📄 Документов с НДС: <strong>{ent.docsCount}</strong>, НДС в них: <strong>{formatRubles(ent.vatInDocs || 0)}</strong>
+                          {ent.taxSystem === 'osno'
+                            ? ' — принят к вычету и уменьшил НДС к уплате.'
+                            : ' — к вычету не принимается: этот налоговый режим не даёт права на вычет НДС.'}
+                        </div>
+                      )}
 
                       {/* Total due for this entity */}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', borderTop: '1px solid var(--border)', paddingTop: '6px', marginTop: '2px' }}>

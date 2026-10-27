@@ -20,6 +20,7 @@ import {
   Scale,
   Users,
   PieChart,
+  Landmark,
 } from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext.js';
 import { useAuth } from '../../context/AuthContext.js';
@@ -29,6 +30,7 @@ import {
   EventVendor,
 } from '../../../shared/types.js';
 import { formatRubles, formatPercent, formatDateRu } from '../../utils/formatters.js';
+import { calculateTaxReserve } from '../../utils/taxCalculator.js';
 import {
   ReportPeriod,
   getDateRangeForPeriod,
@@ -40,10 +42,10 @@ import {
   exportReportToExcel,
 } from '../../services/reportsGenerator.js';
 
-type StatementTab = 'cashflow' | 'pnl' | 'economics' | 'balance' | 'payroll';
+type StatementTab = 'cashflow' | 'pnl' | 'economics' | 'balance' | 'payroll' | 'taxes';
 
 export const ReportsView: React.FC = () => {
-  const { accounts, events, transactions, categories, addToast } = useFinance();
+  const { accounts, events, transactions, categories, legalEntities, addToast } = useFinance();
   const { currentCompany } = useAuth();
   const [activeTab, setActiveTab] = useState<StatementTab>('cashflow');
   const [period, setPeriod] = useState<ReportPeriod>('current_month');
@@ -128,6 +130,21 @@ export const ReportsView: React.FC = () => {
     return generateVendorPayrollStatement(allVendors, events);
   }, [allVendors, events]);
 
+  const taxReport = useMemo(() => {
+    return calculateTaxReserve(
+      transactions,
+      accounts,
+      currentCompany?.taxSettings || {
+        system: currentCompany?.taxSystem || 'usn_income',
+        rate: currentCompany?.taxRate ?? 6,
+        applyOnlyToBank: false,
+      },
+      new Date(),
+      events,
+      legalEntities
+    );
+  }, [transactions, accounts, currentCompany, events, legalEntities]);
+
   // --------------------------------------------------------------------------
   // EXPORT TO EXCEL
   // --------------------------------------------------------------------------
@@ -210,6 +227,20 @@ export const ReportsView: React.FC = () => {
           v.dueDate || '',
         ]);
         exportReportToExcel('Ведомость расчётов с подрядчиками', `Ведомость_подрядчиков_${new Date().toISOString().slice(0, 10)}`, headers, rows);
+      } else if (activeTab === 'taxes') {
+        const headers = ['Юрлицо', 'Режим', 'Выручка (₽)', 'Расходы (₽)', 'Исходящий НДС (₽)', 'Вычет НДС по УПД (₽)', 'НДС к уплате (₽)', 'Налог УСН/Прибыль (₽)', 'Итого к уплате (₽)'];
+        const rows = (taxReport.entitiesBreakdown || []).map((ent) => [
+          ent.entityName,
+          ent.taxSystemLabel,
+          ent.income,
+          ent.expense,
+          ent.vatOutgoing,
+          ent.vatIncoming,
+          ent.vatNet,
+          ent.taxAmount,
+          ent.totalDue,
+        ]);
+        exportReportToExcel(`Налоги и вычет НДС (${taxReport.quarterLabel})`, `Налоги_и_НДС_${taxReport.quarterLabel.replace(/\s+/g, '_')}`, headers, rows);
       }
 
       addToast('Отчёт успешно экспортирован в Excel (.xlsx)', 'success');
@@ -338,6 +369,14 @@ export const ReportsView: React.FC = () => {
         >
           <Users size={16} />
           <span>5. Ведомость подрядчиков</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('taxes')}
+          className={`reports-tab-item ${activeTab === 'taxes' ? 'active' : ''}`}
+        >
+          <Landmark size={16} />
+          <span>6. Налоги и вычет НДС</span>
         </button>
       </div>
 
@@ -863,6 +902,100 @@ export const ReportsView: React.FC = () => {
                         {formatRubles(vendorPayroll.totalRemaining)}
                       </td>
                       <td></td>
+                    </tr>
+                  </>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------------------------- */}
+      {/* 6. TAXES & VAT DEDUCTION STATEMENT TAB */}
+      {/* -------------------------------------------------------------------- */}
+      {activeTab === 'taxes' && (
+        <div className="financial-statement-card">
+          <div className="statement-title-bar">
+            <div>
+              <h3 className="statement-main-title">Ведомость налогов и вычетов НДС по юрлицам ({taxReport.quarterLabel})</h3>
+              <span className="statement-subtitle">
+                Расчёт исходящего НДС с выручки, входящего НДС по закрывающим документам (УПД/СФ) и итоговых налогов к уплате
+              </span>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block' }}>Входящий НДС к вычету (возврату):</span>
+              <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#059669' }}>
+                {formatRubles(taxReport.totalVatIncoming || 0)}
+              </span>
+            </div>
+          </div>
+
+          <div className="statement-table-wrapper">
+            <table className="statement-table">
+              <thead>
+                <tr>
+                  <th>Юрлицо / Контур</th>
+                  <th>Режим налогообложения</th>
+                  <th className="num-col">Выручка</th>
+                  <th className="num-col">Расходы</th>
+                  <th className="num-col">Исходящий НДС</th>
+                  <th className="num-col">Вычет НДС (по УПД)</th>
+                  <th className="num-col">НДС к уплате</th>
+                  <th className="num-col">Налог (УСН / Прибыль)</th>
+                  <th className="num-col">Итого к уплате</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(taxReport.entitiesBreakdown || []).length === 0 ? (
+                  <tr>
+                    <td colSpan={9} style={{ textAlign: 'center', padding: '30px', color: 'var(--color-text-muted)' }}>
+                      Юрлица ещё не настроены. Перейдите в «Настройки → Юрлица группы», чтобы добавить ООО или ИП.
+                    </td>
+                  </tr>
+                ) : (
+                  <>
+                    {(taxReport.entitiesBreakdown || []).map((ent) => (
+                      <tr key={ent.entityId}>
+                        <td>
+                          <strong>{ent.entityName}</strong>
+                          {(ent.docsCount || 0) > 0 && (
+                            <div style={{ fontSize: '0.72rem', color: ent.taxSystem === 'osno' ? '#059669' : 'var(--color-text-muted)', marginTop: '2px' }}>
+                              📄 Документов с НДС: {ent.docsCount} шт. ({formatRubles(ent.vatInDocs || 0)})
+                              {ent.taxSystem !== 'osno' && ' • без вычета на спецрежиме'}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem' }}>{ent.taxSystemLabel}</td>
+                        <td className="num-col" style={{ color: '#059669', fontWeight: 600 }}>{formatRubles(ent.income)}</td>
+                        <td className="num-col" style={{ color: '#dc2626' }}>{formatRubles(ent.expense)}</td>
+                        <td className="num-col">{formatRubles(ent.vatOutgoing)}</td>
+                        <td className="num-col" style={{ color: ent.vatIncoming > 0 ? '#059669' : 'var(--color-text-muted)', fontWeight: ent.vatIncoming > 0 ? 700 : 400 }}>
+                          {ent.vatIncoming > 0 ? `−${formatRubles(ent.vatIncoming)}` : '0 ₽'}
+                        </td>
+                        <td className="num-col" style={{ color: ent.vatNet > 0 ? '#d97706' : 'var(--color-text)', fontWeight: 600 }}>
+                          {formatRubles(ent.vatNet)}
+                        </td>
+                        <td className="num-col" style={{ fontWeight: 600 }}>{formatRubles(ent.taxAmount)}</td>
+                        <td className="num-col" style={{ color: ent.totalDue > 0 ? '#d97706' : '#059669', fontWeight: 800 }}>
+                          {formatRubles(ent.totalDue)}
+                        </td>
+                      </tr>
+                    ))}
+
+                    <tr className="statement-row-grandtotal">
+                      <td colSpan={2}>ИТОГО ПО ГРУППЕ КОМПАНИЙ ({taxReport.quarterLabel})</td>
+                      <td className="num-col">{formatRubles(taxReport.incomeBase)}</td>
+                      <td className="num-col">{formatRubles(taxReport.expenseBase)}</td>
+                      <td className="num-col">{formatRubles(taxReport.totalVatOutgoing || 0)}</td>
+                      <td className="num-col" style={{ color: '#059669' }}>−{formatRubles(taxReport.totalVatIncoming || 0)}</td>
+                      <td className="num-col">
+                        {formatRubles((taxReport.entitiesBreakdown || []).reduce((s, e) => s + e.vatNet, 0))}
+                      </td>
+                      <td className="num-col">
+                        {formatRubles((taxReport.entitiesBreakdown || []).reduce((s, e) => s + e.taxAmount, 0))}
+                      </td>
+                      <td className="num-col" style={{ color: '#d97706' }}>{formatRubles(taxReport.taxAmount)}</td>
                     </tr>
                   </>
                 )}

@@ -51,7 +51,10 @@ export function createAccountsRouter(financeService?: FinanceService): Router {
         res.status(400).json({ error: 'Название счёта обязательно', statusCode: 400 });
         return;
       }
+      // Без companyId счёт уходил в демо-компанию и не появлялся у пользователя
+      const companyId = req.body.companyId || (req.headers['x-company-id'] as string) || (req.query.companyId as string) || undefined;
       const account = await service.createAccount({
+        companyId,
         name: name.trim(),
         type: type || 'checking',
         initialBalance: typeof initialBalance === 'number' ? initialBalance : 0,

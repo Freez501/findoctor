@@ -59,6 +59,33 @@ export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelect
     ? `${accMap.get(transaction.fromAccountId || '') || '—'} → ${accMap.get(transaction.toAccountId || '') || '—'}`
     : isExpense ? `Счёт: ${accMap.get(transaction.fromAccountId || '') || '—'}` : `Счёт: ${accMap.get(transaction.toAccountId || '') || '—'}`;
 
+  // Юрлицо: явно указанное в операции или унаследованное от счёта
+  const linkedAccount = accounts.find((a) => a.id === (isExpense ? transaction.fromAccountId : transaction.toAccountId));
+  const legalEntityLabel = transaction.type !== 'transfer'
+    ? transaction.legalEntityName || linkedAccount?.legalEntityName || ''
+    : '';
+
+  // Отчётный налоговый период (квартал), в который попадает операция
+  const txDateObj = new Date(transaction.transactionDate);
+  const quarterLabel = Number.isNaN(txDateObj.getTime())
+    ? ''
+    : `${['I', 'II', 'III', 'IV'][Math.floor(txDateObj.getMonth() / 3)]} кв. ${txDateObj.getFullYear()}`;
+
+  const vatRateValue = transaction.vatRate ?? 20;
+  const vatAmountValue = transaction.vatAmount ?? (vatRateValue > 0 ? Math.round((transaction.amount * vatRateValue) / (100 + vatRateValue)) : 0);
+  const vatBadgeLabel = isExpense && transaction.hasVat
+    ? vatRateValue > 0
+      ? `📄 Документы · НДС ${vatRateValue}% · ${formatRubles(vatAmountValue)}`
+      : '📄 Документы · без НДС'
+    : '';
+
+  const metaBadgeStyle: React.CSSProperties = {
+    fontSize: '0.675rem',
+    padding: '1px 6px',
+    borderRadius: '4px',
+    whiteSpace: 'nowrap',
+  };
+
   return (
     <div
       className={`compact-tx-row ${needsReview ? 'compact-tx-needs-review' : ''}`}
@@ -139,6 +166,30 @@ export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelect
             )}
           </div>
           <span className="compact-tx-account-tag">{accountLabel}</span>
+          {legalEntityLabel && (
+            <span
+              style={{ ...metaBadgeStyle, background: '#f6f2ea', border: '1px solid #c5b08e', color: '#8c734b', fontWeight: 600 }}
+              title="Юрлицо, к которому относится операция"
+            >
+              🏛️ {legalEntityLabel}
+            </span>
+          )}
+          {vatBadgeLabel && (
+            <span
+              style={{ ...metaBadgeStyle, background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#047857', fontWeight: 600 }}
+              title="По расходу есть закрывающие документы (УПД / Акт / ЭДО)"
+            >
+              {vatBadgeLabel}
+            </span>
+          )}
+          {quarterLabel && transaction.type !== 'transfer' && (
+            <span
+              style={{ ...metaBadgeStyle, background: 'rgba(100, 116, 139, 0.08)', color: 'var(--color-mid-gray)' }}
+              title="Налоговый период, в который попадает операция"
+            >
+              {quarterLabel}
+            </span>
+          )}
           {transaction.description && (
             <span className="compact-tx-memo" title={transaction.description}>
               «{transaction.description}»

@@ -88,15 +88,27 @@ export const AccountChips: React.FC<AccountChipsProps> = ({
               </span>
 
               <span className="chip-content">
-                <span className="chip-account-name">
-                  {acc.name}
+                <span className="chip-account-name">{acc.name}</span>
+                <span className="chip-account-balance" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span>{formatRubles(acc.currentBalance)}</span>
                   {acc.legalEntityName && (
-                    <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#8c734b', marginLeft: '5px' }}>
-                      • {acc.legalEntityName}
+                    <span
+                      style={{
+                        fontSize: '0.66rem',
+                        fontWeight: 600,
+                        color: '#8c734b',
+                        background: '#f6f2ea',
+                        border: '1px solid #c5b08e',
+                        borderRadius: '4px',
+                        padding: '0 5px',
+                        lineHeight: 1.5,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {acc.legalEntityName}
                     </span>
                   )}
                 </span>
-                <span className="chip-account-balance">{formatRubles(acc.currentBalance)}</span>
               </span>
             </button>
           );

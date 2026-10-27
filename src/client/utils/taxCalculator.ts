@@ -22,6 +22,8 @@ export interface LegalEntityTaxBreakdown {
   expense: number;
   vatOutgoing: number; // Исходящий НДС с продаж
   vatIncoming: number; // Входящий НДС к вычету (по УПД)
+  vatInDocs?: number;  // НДС во всех документах, даже если режим не даёт права на вычет
+  docsCount?: number;  // Сколько расходов с закрывающими документами за период
   vatNet: number;      // Итого НДС к уплате
   taxAmount: number;   // Налог на прибыль или УСН
   totalDue: number;    // Суммарная налоговая обязанность (НДС + налог)
@@ -116,6 +118,7 @@ export function calculateTaxReserve(
       let entIncome = 0;
       let entExpense = 0;
       let entVatIncoming = 0;
+      let entDocsCount = 0;
 
       for (const tx of periodTx) {
         // Resolve entity for tx: explicit legalEntityId or derived from account
@@ -146,9 +149,10 @@ export function calculateTaxReserve(
         } else if (tx.type === 'expense') {
           entExpense += tx.amount;
           if (tx.hasVat) {
-            const vRate = tx.vatRate || 20;
+            const vRate = tx.vatRate ?? 20;
             const vAmt = tx.vatAmount !== undefined && tx.vatAmount !== null ? tx.vatAmount : Math.round(tx.amount * vRate / (100 + vRate));
             entVatIncoming += vAmt;
+            entDocsCount += 1;
           }
         }
       }
@@ -223,6 +227,8 @@ export function calculateTaxReserve(
         expense: entExpense,
         vatOutgoing,
         vatIncoming,
+        vatInDocs: entVatIncoming,
+        docsCount: entDocsCount,
         vatNet,
         taxAmount,
         totalDue,
