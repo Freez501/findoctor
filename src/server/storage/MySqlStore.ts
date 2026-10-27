@@ -28,6 +28,12 @@ import {
 import { DEFAULT_COMPANY_ID, INITIAL_LEGAL_ENTITIES_SEED } from '../../shared/constants.js';
 import { DatabaseState, createInitialDatabaseState } from '../data/seed.js';
 import { IFinanceStore, NewEventInput, NewTransactionInput } from './interfaces.js';
+import {
+  encodeAccMetaIntoDescription,
+  parseAccMetaFromDescription,
+  encodeTxMetaIntoDescription,
+  parseTxMetaFromDescription,
+} from './SupabaseStore.js';
 
 const round2 = (n: number | string | undefined | null): number => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -456,9 +462,26 @@ export class MySqlStore implements IFinanceStore {
     const existing = await this.getAccountById(accountInput.id);
     if (!existing) throw new Error(`Счёт не найден: ${accountInput.id}`);
     const now = new Date().toISOString();
+    const nextLegalEntityId =
+      accountInput.legalEntityId !== undefined
+        ? accountInput.legalEntityId || undefined
+        : existing.legalEntityId;
+    const nextLegalEntityName =
+      accountInput.legalEntityName !== undefined
+        ? accountInput.legalEntityName || undefined
+        : existing.legalEntityName;
+    const baseDesc = accountInput.description !== undefined ? accountInput.description : existing.description || '';
+    const encodedDesc = encodeAccMetaIntoDescription(baseDesc, {
+      legalEntityId: nextLegalEntityId,
+      legalEntityName: nextLegalEntityName,
+    });
+
     const updated: Account = {
       ...existing,
       ...accountInput,
+      description: baseDesc,
+      legalEntityId: nextLegalEntityId,
+      legalEntityName: nextLegalEntityName,
       updatedAt: now,
     };
 
@@ -469,7 +492,7 @@ export class MySqlStore implements IFinanceStore {
     `, [
       updated.name,
       updated.type,
-      updated.description || null,
+      encodedDesc || null,
       updated.initialBalance,
       updated.currentBalance,
       updated.color || null,
@@ -485,6 +508,10 @@ export class MySqlStore implements IFinanceStore {
   public async createAccount(accountInput: Partial<Account> & { name: string }): Promise<Account> {
     const now = new Date().toISOString();
     const initBal = round2(accountInput.initialBalance || 0);
+    const encodedDesc = encodeAccMetaIntoDescription(accountInput.description || '', {
+      legalEntityId: accountInput.legalEntityId || undefined,
+      legalEntityName: accountInput.legalEntityName || undefined,
+    });
     const acc: Account = {
       id: accountInput.id || `acc_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       companyId: accountInput.companyId || DEFAULT_COMPANY_ID,
@@ -496,6 +523,8 @@ export class MySqlStore implements IFinanceStore {
       description: accountInput.description || '',
       color: accountInput.color,
       icon: accountInput.icon,
+      legalEntityId: accountInput.legalEntityId || undefined,
+      legalEntityName: accountInput.legalEntityName || undefined,
       isActive: accountInput.isActive ?? true,
       updatedAt: now,
     };
@@ -508,7 +537,7 @@ export class MySqlStore implements IFinanceStore {
       acc.companyId,
       acc.name,
       acc.type,
-      acc.description || null,
+      encodedDesc || null,
       acc.initialBalance,
       acc.currentBalance,
       acc.currency,
@@ -1235,6 +1264,30 @@ export class MySqlStore implements IFinanceStore {
   public async createTransaction(txInput: NewTransactionInput): Promise<Transaction> {
     const now = new Date().toISOString();
     const txId = ('id' in txInput && txInput.id) || `tx-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+    const hasVat = Boolean((txInput as any).hasVat);
+    const vatRate =
+      (txInput as any).vatRate !== undefined && (txInput as any).vatRate !== null
+        ? Number((txInput as any).vatRate)
+        : hasVat
+          ? 20
+          : null;
+    let vatAmount =
+      (txInput as any).vatAmount !== undefined && (txInput as any).vatAmount !== null
+        ? Number((txInput as any).vatAmount)
+        : null;
+    if (hasVat && vatRate !== null && vatAmount === null) {
+      vatAmount = vatRate > 0 ? round2((Number(txInput.amount) * vatRate) / (100 + vatRate)) : 0;
+    }
+
+    const encodedDesc = encodeTxMetaIntoDescription(txInput.description || '', {
+      hasVat,
+      vatRate,
+      vatAmount,
+      legalEntityId: (txInput as any).legalEntityId || null,
+      legalEntityName: (txInput as any).legalEntityName || null,
+    });
+
     const tx: Transaction = {
       id: txId,
       companyId: (txInput as any).companyId || DEFAULT_COMPANY_ID,
@@ -1249,6 +1302,11 @@ export class MySqlStore implements IFinanceStore {
       partnerName: (txInput as any).partnerName,
       vendorId: (txInput as any).vendorId,
       vendorName: (txInput as any).vendorName,
+      legalEntityId: (txInput as any).legalEntityId || null,
+      legalEntityName: (txInput as any).legalEntityName || null,
+      hasVat,
+      vatRate,
+      vatAmount,
       description: txInput.description || '',
       transactionDate: txInput.transactionDate || now,
       isDeleted: false,
@@ -1274,7 +1332,7 @@ export class MySqlStore implements IFinanceStore {
       tx.eventId || null,
       tx.partnerId || null,
       tx.partnerName || null,
-      tx.description || '',
+      encodedDesc || '',
       tx.transactionDate,
       0,
       tx.needsReview ? 1 : 0,
@@ -1296,6 +1354,14 @@ export class MySqlStore implements IFinanceStore {
       updatedAt: now,
     };
 
+    const encodedDesc = encodeTxMetaIntoDescription(updated.description || '', {
+      hasVat: updated.hasVat,
+      vatRate: updated.vatRate,
+      vatAmount: updated.vatAmount,
+      legalEntityId: updated.legalEntityId,
+      legalEntityName: updated.legalEntityName,
+    });
+
     await this.pool.query(`
       UPDATE transactions
       SET type = ?, direction = ?, amount = ?, from_account_id = ?, to_account_id = ?, category_id = ?, event_id = ?, partner_id = ?, partner_name = ?, description = ?, transaction_date = ?, is_deleted = ?, needs_review = ?, updated_at = ?
@@ -1310,7 +1376,7 @@ export class MySqlStore implements IFinanceStore {
       updated.eventId || null,
       updated.partnerId || null,
       updated.partnerName || null,
-      updated.description || '',
+      encodedDesc || '',
       updated.transactionDate,
       updated.isDeleted ? 1 : 0,
       updated.needsReview ? 1 : 0,
@@ -1436,20 +1502,21 @@ export class MySqlStore implements IFinanceStore {
   }
 
   private mapAccount(r: any): Account {
+    const { cleanDesc, meta } = parseAccMetaFromDescription(r.description);
     return {
       id: r.id,
       companyId: r.company_id || DEFAULT_COMPANY_ID,
       name: r.name,
       type: r.type,
-      description: r.description || '',
+      description: cleanDesc,
       initialBalance: round2(r.initial_balance),
       currentBalance: round2(r.current_balance),
       currency: r.currency || 'RUB',
       isActive: Boolean(r.is_active),
       color: r.color || undefined,
       icon: r.icon || undefined,
-      legalEntityId: r.legal_entity_id || undefined,
-      legalEntityName: r.legal_entity_name || undefined,
+      legalEntityId: r.legal_entity_id || meta.legalEntityId || undefined,
+      legalEntityName: r.legal_entity_name || meta.legalEntityName || undefined,
       updatedAt: r.updated_at || new Date().toISOString(),
     };
   }
@@ -1521,6 +1588,21 @@ export class MySqlStore implements IFinanceStore {
   }
 
   private mapTransaction(r: any): Transaction {
+    const { cleanDesc, meta } = parseTxMetaFromDescription(r.description);
+    const hasVat = Boolean(r.has_vat || meta.hasVat);
+    const vatRate =
+      r.vat_rate !== null && r.vat_rate !== undefined
+        ? Number(r.vat_rate)
+        : meta.vatRate !== null && meta.vatRate !== undefined
+          ? Number(meta.vatRate)
+          : undefined;
+    const vatAmount =
+      r.vat_amount !== null && r.vat_amount !== undefined
+        ? Number(r.vat_amount)
+        : meta.vatAmount !== null && meta.vatAmount !== undefined
+          ? Number(meta.vatAmount)
+          : undefined;
+
     return {
       id: r.id,
       companyId: r.company_id || DEFAULT_COMPANY_ID,
@@ -1533,12 +1615,12 @@ export class MySqlStore implements IFinanceStore {
       eventId: r.event_id || null,
       partnerId: r.partner_id || undefined,
       partnerName: r.partner_name || undefined,
-      legalEntityId: r.legal_entity_id || undefined,
-      legalEntityName: r.legal_entity_name || undefined,
-      hasVat: Boolean(r.has_vat),
-      vatRate: r.vat_rate !== null && r.vat_rate !== undefined ? Number(r.vat_rate) : undefined,
-      vatAmount: r.vat_amount !== null && r.vat_amount !== undefined ? Number(r.vat_amount) : undefined,
-      description: r.description || '',
+      legalEntityId: r.legal_entity_id || meta.legalEntityId || undefined,
+      legalEntityName: r.legal_entity_name || meta.legalEntityName || undefined,
+      hasVat,
+      vatRate,
+      vatAmount,
+      description: cleanDesc,
       transactionDate: r.transaction_date || r.created_at,
       isDeleted: Boolean(r.is_deleted),
       needsReview: Boolean(r.needs_review),

@@ -88,7 +88,14 @@ export const AccountChips: React.FC<AccountChipsProps> = ({
               </span>
 
               <span className="chip-content">
-                <span className="chip-account-name">{acc.name}</span>
+                <span className="chip-account-name">
+                  {acc.name}
+                  {acc.legalEntityName && (
+                    <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#8c734b', marginLeft: '5px' }}>
+                      • {acc.legalEntityName}
+                    </span>
+                  )}
+                </span>
                 <span className="chip-account-balance">{formatRubles(acc.currentBalance)}</span>
               </span>
             </button>

@@ -221,6 +221,11 @@ export class FinanceService {
         partnerName,
         vendorId: dto.vendorId,
         vendorName: dto.vendorName,
+        legalEntityId: dto.legalEntityId,
+        legalEntityName: dto.legalEntityName,
+        hasVat: dto.hasVat,
+        vatRate: dto.vatRate,
+        vatAmount: dto.vatAmount,
         direction,
         description,
         transactionDate,
@@ -236,6 +241,11 @@ export class FinanceService {
         eventId,
         partnerId,
         partnerName,
+        legalEntityId: dto.legalEntityId,
+        legalEntityName: dto.legalEntityName,
+        hasVat: dto.hasVat,
+        vatRate: dto.vatRate,
+        vatAmount: dto.vatAmount,
         direction,
         description,
         transactionDate,
@@ -586,6 +596,11 @@ export class FinanceService {
     partnerName?: string | null;
     vendorId?: string | null;
     vendorName?: string | null;
+    legalEntityId?: string | null;
+    legalEntityName?: string | null;
+    hasVat?: boolean;
+    vatRate?: number | null;
+    vatAmount?: number | null;
     direction?: TransactionDirection;
     description: string;
     transactionDate: string;
@@ -617,6 +632,11 @@ export class FinanceService {
       partnerName: params.partnerName,
       vendorId: params.vendorId,
       vendorName: params.vendorName,
+      legalEntityId: params.legalEntityId || source.legalEntityId || null,
+      legalEntityName: params.legalEntityName || source.legalEntityName || null,
+      hasVat: params.hasVat,
+      vatRate: params.vatRate,
+      vatAmount: params.vatAmount,
       direction: params.direction,
       description: params.description,
       transactionDate: params.transactionDate,
@@ -640,6 +660,11 @@ export class FinanceService {
     eventId: string | null;
     partnerId?: string | null;
     partnerName?: string | null;
+    legalEntityId?: string | null;
+    legalEntityName?: string | null;
+    hasVat?: boolean;
+    vatRate?: number | null;
+    vatAmount?: number | null;
     direction?: TransactionDirection;
     description: string;
     transactionDate: string;
@@ -669,6 +694,11 @@ export class FinanceService {
       eventId: params.eventId,
       partnerId: params.partnerId,
       partnerName: params.partnerName,
+      legalEntityId: params.legalEntityId || target.legalEntityId || null,
+      legalEntityName: params.legalEntityName || target.legalEntityName || null,
+      hasVat: params.hasVat,
+      vatRate: params.vatRate,
+      vatAmount: params.vatAmount,
       direction: params.direction,
       description: params.description,
       transactionDate: params.transactionDate,

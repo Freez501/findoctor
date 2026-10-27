@@ -665,6 +665,13 @@ export const SettingsView: React.FC = () => {
   const [leInn, setLeInn] = useState('');
   const [leDesc, setLeDesc] = useState('');
   const [leIsDefault, setLeIsDefault] = useState(false);
+  const [hideLeIntro, setHideLeIntro] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('findoctor_hide_le_intro') === '1';
+    } catch {
+      return false;
+    }
+  });
 
   const [modalPartner, setModalPartner] = useState<
     { mode: 'create' } | { mode: 'edit'; partner: Partner } | null
@@ -746,8 +753,8 @@ export const SettingsView: React.FC = () => {
           initialBalance: accBalance || 0,
           color: accColor,
           icon: accIcon,
-          legalEntityId: accLegalEntityId || undefined,
-          legalEntityName: targetLe ? targetLe.name : undefined,
+          legalEntityId: accLegalEntityId || '',
+          legalEntityName: targetLe ? targetLe.name : '',
         });
         addToast('Новый счёт создан', 'success');
       } else if (modalAccount?.mode === 'edit') {
@@ -759,8 +766,8 @@ export const SettingsView: React.FC = () => {
           initialBalance: accBalance,
           color: accColor,
           icon: accIcon,
-          legalEntityId: accLegalEntityId || undefined,
-          legalEntityName: targetLe ? targetLe.name : undefined,
+          legalEntityId: accLegalEntityId || '',
+          legalEntityName: targetLe ? targetLe.name : '',
         });
         addToast('Счёт и остаток успешно сохранены', 'success');
       }
@@ -1286,6 +1293,21 @@ export const SettingsView: React.FC = () => {
               <p className="settings-subtext">ООО, ИП, спецрежимы (УСН 6%, УСН 15%, ОСНО с НДС) и касса. Счета привязываются к юрлицам для автоматического учёта входящего и исходящего НДС и налога на прибыль</p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {hideLeIntro && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHideLeIntro(false);
+                    try {
+                      localStorage.removeItem('findoctor_hide_le_intro');
+                    } catch {}
+                  }}
+                  className="ui-chip"
+                  style={{ fontSize: '0.78rem', padding: '6px 12px' }}
+                >
+                  Как это работает?
+                </button>
+              )}
               <button
                 type="button"
                 onClick={openCreateLegalEntity}
@@ -1297,27 +1319,52 @@ export const SettingsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Educational Callout */}
-          <div
-            style={{
-              padding: '16px 20px',
-              borderRadius: '12px',
-              background: '#f6f2ea',
-              border: '1px solid #c5b08e',
-              marginBottom: '20px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '6px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: '#8c734b', fontSize: '0.95rem' }}>
-              <Briefcase size={16} />
-              <span>Реальный финансовый контур группы компаний</span>
+          {/* Educational Callout (One-Time Dismissible Onboarding Banner) */}
+          {!hideLeIntro && (
+            <div
+              style={{
+                padding: '16px 20px',
+                borderRadius: '12px',
+                background: '#f6f2ea',
+                border: '1px solid #c5b08e',
+                marginBottom: '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: '#8c734b', fontSize: '0.95rem' }}>
+                  <Briefcase size={16} />
+                  <span>Реальный финансовый контур группы компаний</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHideLeIntro(true);
+                    try {
+                      localStorage.setItem('findoctor_hide_le_intro', '1');
+                    } catch {}
+                  }}
+                  style={{
+                    background: 'rgba(140, 115, 75, 0.12)',
+                    border: '1px solid rgba(197, 176, 142, 0.6)',
+                    borderRadius: '8px',
+                    padding: '4px 10px',
+                    fontSize: '0.76rem',
+                    fontWeight: 700,
+                    color: '#8c734b',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Понятно, скрыть ✕
+                </button>
+              </div>
+              <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--foreground)', lineHeight: 1.5 }}>
+                Привязывайте расчётные счета к юрлицам. Если операция проходит по счёту ООО на ОСНО, система автоматически начислит НДС с выручки и уменьшит налог на входящий НДС по расходам с УПД/СФ. Для счетов ИП (УСН + НДС) налоги рассчитаются автоматически без лишних кликов.
+              </p>
             </div>
-            <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--foreground)', lineHeight: 1.5 }}>
-              Привязывайте расчётные счета к юрлицам. Если операция проходит по счёту ООО на ОСНО, система автоматически начислит 20% НДС с выручки и уменьшит налог на входящий НДС по расходам с УПД/СФ. Для счетов ИП (УСН 6% + 5% НДС) налоги рассчитаются по правилам 2025 года без лишних кликов.
-            </p>
-          </div>
+          )}
 
           {/* Legal Entities Cards Grid */}
           <div className="settings-card-grid">
@@ -3320,11 +3367,22 @@ export const SettingsView: React.FC = () => {
                   className="settings-text-input"
                 >
                   <option value="">Без привязки (управленческий счёт / касса)</option>
-                  {legalEntities.map((le) => (
-                    <option key={le.id} value={le.id}>
-                      {le.name} ({le.type === 'llc' ? 'ООО' : le.type === 'sole_proprietor' ? 'ИП' : 'Касса'}, {le.taxSystem.toUpperCase()})
-                    </option>
-                  ))}
+                  {legalEntities.map((le) => {
+                    const taxLabel =
+                      le.taxSystem === 'osno' ? `ОСНО, НДС ${le.vatRate}%` :
+                      le.taxSystem === 'usn_income_vat5' ? `УСН ${le.taxRate}% + НДС ${le.vatRate}%` :
+                      le.taxSystem === 'usn_income_vat7' ? `УСН ${le.taxRate}% + НДС ${le.vatRate}%` :
+                      le.taxSystem === 'usn_income' ? `УСН Доходы ${le.taxRate}%` :
+                      le.taxSystem === 'usn_income_expense' ? `УСН Д-Р ${le.taxRate}%` :
+                      le.taxSystem === 'custom' ? `Своя ставка ${le.taxRate}%` :
+                      le.taxSystem === 'npd' ? `НПД ${le.taxRate}%` :
+                      'Без налога';
+                    return (
+                      <option key={le.id} value={le.id}>
+                        {le.name} ({le.type === 'llc' ? 'ООО' : le.type === 'sole_proprietor' ? 'ИП' : 'Касса'} • {taxLabel})
+                      </option>
+                    );
+                  })}
                 </select>
                 <span style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)', marginTop: '4px' }}>
                   Операции по этому счёту автоматически относятся к выбранному юрлицу для расчёта налогов и НДС

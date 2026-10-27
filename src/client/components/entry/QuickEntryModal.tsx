@@ -87,6 +87,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
   const [description, setDescription] = useState<string>('');
   const [hasVat, setHasVat] = useState<boolean>(false);
   const [vatRate, setVatRate] = useState<number>(20);
+  const [isCustomVat, setIsCustomVat] = useState<boolean>(false);
 
   // Fetch vendors when selected event changes for operational expense
   useEffect(() => {
@@ -109,7 +110,8 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setSelectedDate(getTodayDateStr());
-    setHasVat(false);
+      setHasVat(false);
+      setIsCustomVat(false);
       setHighlightedField(null);
       setValidationError(null);
       if (initialAccountId && accounts.some((a) => a.id === initialAccountId)) {
@@ -296,7 +298,12 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
       vendorName: type === 'expense' && direction === 'operational' && selectedVendor ? `${selectedVendor.role} ${selectedVendor.name}` : undefined,
       hasVat: type === 'expense' ? hasVat : undefined,
       vatRate: type === 'expense' && hasVat ? vatRate : undefined,
-      vatAmount: type === 'expense' && hasVat && amount > 0 ? Math.round((amount * vatRate / (100 + vatRate)) * 100) / 100 : undefined,
+      vatAmount:
+        type === 'expense' && hasVat && amount > 0
+          ? vatRate > 0
+            ? Math.round(((amount * vatRate) / (100 + vatRate)) * 100) / 100
+            : 0
+          : undefined,
       legalEntityId: type === 'expense'
         ? accounts.find((a) => a.id === fromAccountId)?.legalEntityId
         : (type === 'income' ? accounts.find((a) => a.id === toAccountId)?.legalEntityId : undefined),
@@ -357,7 +364,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="quick-entry-form">
+        <form onSubmit={handleSubmit} noValidate className="quick-entry-form">
           {/* Type Selector (shadcn/ui Segmented Tabs) */}
           <div className="entry-step-block">
             <div className="type-pills-row" role="radiogroup" aria-label="Тип операции">
@@ -654,7 +661,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
               </div>
             )}
 
-            {/* Incoming Deductible VAT Toggle (УПД / ЭДО) */}
+            {/* Incoming Deductible VAT Toggle (УПД / Акт / ЭДО) */}
             {type === 'expense' && (
               <div
                 style={{
@@ -666,42 +673,108 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                   transition: 'all 0.2s ease',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: 'var(--foreground)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.84rem', fontWeight: 600, color: 'var(--foreground)' }}>
                     <input
                       type="checkbox"
                       checked={hasVat}
                       onChange={(e) => setHasVat(e.target.checked)}
                       style={{ width: '16px', height: '16px', accentColor: '#c5b08e', cursor: 'pointer' }}
                     />
-                    <span>Есть закрывающие документы с НДС (УПД / ЭДО)</span>
+                    <span>Есть закрывающие документы (УПД / Акт / ЭДО)</span>
                   </label>
+
                   {hasVat && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>Ставка:</span>
-                      <select
-                        value={vatRate}
-                        onChange={(e) => setVatRate(Number(e.target.value))}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', paddingTop: '2px' }}>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--muted-foreground)', marginRight: '2px' }}>НДС в документах:</span>
+                      {[
+                        { label: 'Без НДС', rate: 0 },
+                        { label: '10%', rate: 10 },
+                        { label: '20%', rate: 20 },
+                        { label: '22%', rate: 22 },
+                      ].map((opt) => {
+                        const isSelected = !isCustomVat && vatRate === opt.rate;
+                        return (
+                          <button
+                            key={opt.rate}
+                            type="button"
+                            onClick={() => {
+                              setIsCustomVat(false);
+                              setVatRate(opt.rate);
+                            }}
+                            style={{
+                              fontSize: '0.75rem',
+                              padding: '3px 9px',
+                              borderRadius: '6px',
+                              border: isSelected ? '1px solid #8c734b' : '1px solid #d8cfc0',
+                              background: isSelected ? '#8c734b' : '#ffffff',
+                              color: isSelected ? '#ffffff' : 'var(--foreground)',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomVat(true)}
                         style={{
-                          fontSize: '0.78rem',
-                          padding: '3px 8px',
+                          fontSize: '0.75rem',
+                          padding: '3px 9px',
                           borderRadius: '6px',
-                          border: '1px solid #c5b08e',
-                          background: '#fff',
-                          color: 'var(--foreground)',
+                          border: isCustomVat ? '1px solid #8c734b' : '1px solid #d8cfc0',
+                          background: isCustomVat ? '#8c734b' : '#ffffff',
+                          color: isCustomVat ? '#ffffff' : 'var(--foreground)',
                           fontWeight: 600,
+                          cursor: 'pointer',
                         }}
                       >
-                        <option value={20}>20%</option>
-                        <option value={10}>10%</option>
-                      </select>
+                        Свой %
+                      </button>
+
+                      {isCustomVat && (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step="any"
+                            value={vatRate}
+                            onChange={(e) => setVatRate(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                            placeholder="%"
+                            aria-label="Своя ставка НДС"
+                            style={{
+                              width: '62px',
+                              fontSize: '0.78rem',
+                              padding: '3px 6px',
+                              borderRadius: '6px',
+                              border: '1px solid #8c734b',
+                              background: '#ffffff',
+                              color: 'var(--foreground)',
+                              fontWeight: 700,
+                            }}
+                          />
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#8c734b' }}>%</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-                {hasVat && amount > 0 && (
-                  <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#8c734b', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <span>✓ Входящий НДС к вычету: <strong>{formatRubles(Math.round((amount * vatRate / (100 + vatRate)) * 100) / 100)}</strong></span>
-                    <span style={{ opacity: 0.7 }}>(уменьшит НДС к уплате для ООО)</span>
+
+                {hasVat && (
+                  <div style={{ marginTop: '6px', fontSize: '0.75rem', color: '#8c734b', display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                    {vatRate === 0 ? (
+                      <span>✓ Документы учтены для подтверждения расходов (без вычета НДС)</span>
+                    ) : amount > 0 ? (
+                      <>
+                        <span>✓ Входящий НДС к вычету ({vatRate}%): <strong>{formatRubles(Math.round((amount * vatRate / (100 + vatRate)) * 100) / 100)}</strong></span>
+                        <span style={{ opacity: 0.75 }}>(уменьшит НДС к уплате)</span>
+                      </>
+                    ) : (
+                      <span>✓ Ставка НДС {vatRate}% будет выделена из суммы расхода к вычету</span>
+                    )}
                   </div>
                 )}
               </div>

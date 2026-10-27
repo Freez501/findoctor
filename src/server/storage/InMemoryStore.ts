@@ -339,8 +339,8 @@ export class InMemoryStore implements IFinanceStore {
     if (accountInput.isActive !== undefined) acc.isActive = accountInput.isActive;
     if (accountInput.color !== undefined) acc.color = accountInput.color;
     if (accountInput.icon !== undefined) acc.icon = accountInput.icon;
-    if (accountInput.legalEntityId !== undefined) acc.legalEntityId = accountInput.legalEntityId;
-    if (accountInput.legalEntityName !== undefined) acc.legalEntityName = accountInput.legalEntityName;
+    if (accountInput.legalEntityId !== undefined) acc.legalEntityId = accountInput.legalEntityId || undefined;
+    if (accountInput.legalEntityName !== undefined) acc.legalEntityName = accountInput.legalEntityName || undefined;
     if (accountInput.currentBalance !== undefined) {
       acc.currentBalance = Math.round(accountInput.currentBalance * 100) / 100;
     }
@@ -896,8 +896,8 @@ export class InMemoryStore implements IFinanceStore {
     const hasVat = Boolean((txInput as any).hasVat);
     const vatRate = (txInput as any).vatRate !== undefined && (txInput as any).vatRate !== null ? Number((txInput as any).vatRate) : (hasVat ? 20 : null);
     let vatAmount = (txInput as any).vatAmount !== undefined && (txInput as any).vatAmount !== null ? Number((txInput as any).vatAmount) : null;
-    if (hasVat && vatRate && vatAmount === null) {
-      vatAmount = Math.round((Number(txInput.amount) * vatRate / (100 + vatRate)) * 100) / 100;
+    if (hasVat && vatRate !== null && vatAmount === null) {
+      vatAmount = vatRate > 0 ? Math.round((Number(txInput.amount) * vatRate / (100 + vatRate)) * 100) / 100 : 0;
     }
 
     const newTx: Transaction = {

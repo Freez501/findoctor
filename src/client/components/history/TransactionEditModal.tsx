@@ -39,6 +39,7 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
   const [description, setDescription] = useState<string>('');
   const [hasVat, setHasVat] = useState<boolean>(false);
   const [vatRate, setVatRate] = useState<number>(20);
+  const [isCustomVat, setIsCustomVat] = useState<boolean>(false);
   const [dateTimeStr, setDateTimeStr] = useState<string>('');
   const [initialDateTimeStr, setInitialDateTimeStr] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -57,7 +58,9 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
       setPartnerId(transaction.partnerId || '');
       setDescription(transaction.description || '');
       setHasVat(Boolean(transaction.hasVat));
-      setVatRate(transaction.vatRate || 20);
+      const initRate = transaction.vatRate !== undefined && transaction.vatRate !== null ? Number(transaction.vatRate) : 20;
+      setVatRate(initRate);
+      setIsCustomVat(![0, 10, 20, 22].includes(initRate));
 
       let localIso = '';
       try {
@@ -178,7 +181,12 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
       partnerId: partnerId || null,
       hasVat: type === 'expense' ? hasVat : undefined,
       vatRate: type === 'expense' && hasVat ? vatRate : undefined,
-      vatAmount: type === 'expense' && hasVat && amount > 0 ? Math.round((amount * vatRate / (100 + vatRate)) * 100) / 100 : undefined,
+      vatAmount:
+        type === 'expense' && hasVat && amount > 0
+          ? vatRate > 0
+            ? Math.round(((amount * vatRate) / (100 + vatRate)) * 100) / 100
+            : 0
+          : undefined,
       legalEntityId: type === 'expense'
         ? accounts.find((a) => a.id === fromAccountId)?.legalEntityId
         : (type === 'income' ? accounts.find((a) => a.id === toAccountId)?.legalEntityId : undefined),
@@ -237,7 +245,7 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '16px' }}>
+        <form onSubmit={handleSave} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '16px' }}>
           {error && (
             <div className="modal-validation-error">
               <AlertCircle size={15} />
@@ -362,11 +370,11 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
                 background: hasVat ? '#f6f2ea' : 'var(--muted)',
                 border: hasVat ? '1px solid #c5b08e' : '1px solid var(--border)',
                 borderRadius: '8px',
-                padding: '8px 12px',
+                padding: '10px 12px',
                 marginBottom: '12px',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, color: 'var(--foreground)' }}>
                   <input
                     type="checkbox"
@@ -374,22 +382,91 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
                     onChange={(e) => setHasVat(e.target.checked)}
                     style={{ width: '15px', height: '15px', accentColor: '#c5b08e', cursor: 'pointer' }}
                   />
-                  <span>Есть закрывающие документы с НДС (УПД / ЭДО)</span>
+                  <span>Есть закрывающие документы (УПД / Акт / ЭДО)</span>
                 </label>
                 {hasVat && (
-                  <select
-                    value={vatRate}
-                    onChange={(e) => setVatRate(Number(e.target.value))}
-                    style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px', border: '1px solid #c5b08e', background: '#fff' }}
-                  >
-                    <option value={20}>20%</option>
-                    <option value={10}>10%</option>
-                  </select>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.73rem', color: 'var(--muted-foreground)' }}>НДС:</span>
+                    {[
+                      { label: 'Без НДС', rate: 0 },
+                      { label: '10%', rate: 10 },
+                      { label: '20%', rate: 20 },
+                      { label: '22%', rate: 22 },
+                    ].map((opt) => {
+                      const isSelected = !isCustomVat && vatRate === opt.rate;
+                      return (
+                        <button
+                          key={opt.rate}
+                          type="button"
+                          onClick={() => {
+                            setIsCustomVat(false);
+                            setVatRate(opt.rate);
+                          }}
+                          style={{
+                            fontSize: '0.73rem',
+                            padding: '2px 8px',
+                            borderRadius: '5px',
+                            border: isSelected ? '1px solid #8c734b' : '1px solid #d8cfc0',
+                            background: isSelected ? '#8c734b' : '#ffffff',
+                            color: isSelected ? '#ffffff' : 'var(--foreground)',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomVat(true)}
+                      style={{
+                        fontSize: '0.73rem',
+                        padding: '2px 8px',
+                        borderRadius: '5px',
+                        border: isCustomVat ? '1px solid #8c734b' : '1px solid #d8cfc0',
+                        background: isCustomVat ? '#8c734b' : '#ffffff',
+                        color: isCustomVat ? '#ffffff' : 'var(--foreground)',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Свой %
+                    </button>
+                    {isCustomVat && (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="any"
+                          value={vatRate}
+                          onChange={(e) => setVatRate(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                          style={{
+                            width: '56px',
+                            fontSize: '0.75rem',
+                            padding: '2px 6px',
+                            borderRadius: '5px',
+                            border: '1px solid #8c734b',
+                            background: '#fff',
+                            fontWeight: 700,
+                          }}
+                        />
+                        <span style={{ fontSize: '0.73rem', fontWeight: 600, color: '#8c734b' }}>%</span>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-              {hasVat && amount > 0 && (
-                <div style={{ marginTop: '4px', fontSize: '0.72rem', color: '#8c734b' }}>
-                  НДС к вычету: <strong>{formatRubles(Math.round((amount * vatRate / (100 + vatRate)) * 100) / 100)}</strong> (уменьшит итоговый налог ООО к уплате)
+              {hasVat && (
+                <div style={{ marginTop: '6px', fontSize: '0.72rem', color: '#8c734b' }}>
+                  {vatRate === 0 ? (
+                    <span>✓ Документы учтены для подтверждения расходов (без вычета НДС)</span>
+                  ) : (
+                    <span>
+                      ✓ НДС к вычету ({vatRate}%): <strong>{formatRubles(Math.round((amount * vatRate / (100 + vatRate)) * 100) / 100)}</strong> (уменьшит налог к уплате)
+                    </span>
+                  )}
                 </div>
               )}
             </div>

@@ -89,8 +89,8 @@ export function createAccountsRouter(financeService?: FinanceService): Router {
         isActive: typeof isActive === 'boolean' ? isActive : undefined,
         color: typeof color === 'string' ? color.trim() : undefined,
         icon: typeof icon === 'string' ? icon.trim() : undefined,
-        legalEntityId: legalEntityId !== undefined ? (legalEntityId || undefined) : undefined,
-        legalEntityName: legalEntityName !== undefined ? (legalEntityName || undefined) : undefined,
+        legalEntityId: legalEntityId !== undefined ? String(legalEntityId || '') : undefined,
+        legalEntityName: legalEntityName !== undefined ? String(legalEntityName || '') : undefined,
         currentBalance: typeof currentBalance === 'number' && !isNaN(currentBalance) ? currentBalance : undefined,
         initialBalance: typeof initialBalance === 'number' && !isNaN(initialBalance) ? initialBalance : undefined,
       });

@@ -61,6 +61,7 @@ export class JsonFileStore extends InMemoryStore implements IFinanceStore {
             if (!Array.isArray(parsed.milestones)) parsed.milestones = seed.milestones;
             if (!Array.isArray(parsed.budgetItems)) parsed.budgetItems = seed.budgetItems;
             if (!Array.isArray(parsed.vendors)) parsed.vendors = seed.vendors;
+            if (!Array.isArray(parsed.legalEntities)) parsed.legalEntities = seed.legalEntities || [];
             return parsed;
           }
         }

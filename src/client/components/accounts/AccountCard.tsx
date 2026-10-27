@@ -107,10 +107,32 @@ export const AccountCard: React.FC<AccountCardProps> = ({
         </Badge>
       </div>
 
-      {/* Account Title */}
-      <h3 className="account-name" title={account.name}>
-        {account.name}
-      </h3>
+      {/* Account Title & Bound Legal Entity Badge */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <h3 className="account-name" title={account.name} style={{ marginBottom: 0 }}>
+          {account.name}
+        </h3>
+        {account.legalEntityName && (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              width: 'fit-content',
+              fontSize: '0.7rem',
+              fontWeight: 600,
+              padding: '2px 8px',
+              borderRadius: '6px',
+              background: '#f6f2ea',
+              border: '1px solid #c5b08e',
+              color: '#8c734b',
+            }}
+            title={`Счёт привязан к юрлицу: ${account.legalEntityName}`}
+          >
+            <span>🏛️ {account.legalEntityName}</span>
+          </span>
+        )}
+      </div>
 
       {/* Live Balance */}
       <div className="account-balance">

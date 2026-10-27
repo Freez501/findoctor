@@ -101,6 +101,7 @@ interface SwrSnapshot {
   accounts: Account[];
   categories: Category[];
   partners: Partner[];
+  legalEntities?: LegalEntity[];
   events: CateringEvent[];
   transactions: Transaction[];
 }
@@ -145,7 +146,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   );
   const [categories, setCategories] = useState<Category[]>(() => initialSnap?.categories || []);
   const [partners, setPartners] = useState<Partner[]>(() => initialSnap?.partners || []);
-  const [legalEntities, setLegalEntities] = useState<LegalEntity[]>([]);
+  const [legalEntities, setLegalEntities] = useState<LegalEntity[]>(() => initialSnap?.legalEntities || []);
   const [events, setEvents] = useState<CateringEvent[]>(() => initialSnap?.events || []);
   const [transactions, setTransactions] = useState<Transaction[]>(() => initialSnap?.transactions || []);
   const [botStatus, setBotStatus] = useState<BotStatus | null>(null);
@@ -162,11 +163,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         accounts,
         categories,
         partners,
+        legalEntities,
         events,
         transactions,
       });
     }
-  }, [isAuthenticated, isInitialLoaded, currentCompany?.id, accounts, categories, partners, events, transactions]);
+  }, [isAuthenticated, isInitialLoaded, currentCompany?.id, accounts, categories, partners, legalEntities, events, transactions]);
 
   // Calculate aggregated capital safely
   const totalBalance = useMemo(() => {
@@ -351,6 +353,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setAccounts(sortAccounts(snap.accounts));
       setCategories(snap.categories || []);
       setPartners(snap.partners || []);
+      if (snap.legalEntities && snap.legalEntities.length > 0) {
+        setLegalEntities(snap.legalEntities);
+      }
       setEvents(snap.events || []);
       setTransactions(snap.transactions || []);
       setIsInitialLoaded(true);

@@ -61,6 +61,74 @@ export function encodeTaxMetaIntoNotes(cleanNotes?: string | null, meta?: EventT
   return base ? `${base}\n${tag}` : tag;
 }
 
+export interface AccountMeta {
+  legalEntityId?: string;
+  legalEntityName?: string;
+}
+
+const ACC_META_REGEX = /(?:\r?\n)?<!--__ACC_META__:(.*?)-->/;
+
+export function parseAccMetaFromDescription(desc?: string | null): { cleanDesc: string; meta: AccountMeta } {
+  if (!desc) return { cleanDesc: '', meta: {} };
+  const match = desc.match(ACC_META_REGEX);
+  if (!match) return { cleanDesc: desc, meta: {} };
+  let meta: AccountMeta = {};
+  try {
+    meta = JSON.parse(match[1]);
+  } catch {}
+  const cleanDesc = desc.replace(ACC_META_REGEX, '').trim();
+  return { cleanDesc, meta };
+}
+
+export function encodeAccMetaIntoDescription(cleanDesc?: string | null, meta?: AccountMeta): string {
+  const base = (cleanDesc || '').replace(ACC_META_REGEX, '').trim();
+  const cleanMeta: AccountMeta = {};
+  if (meta?.legalEntityId) cleanMeta.legalEntityId = meta.legalEntityId;
+  if (meta?.legalEntityName) cleanMeta.legalEntityName = meta.legalEntityName;
+  if (Object.keys(cleanMeta).length === 0) {
+    return base;
+  }
+  const tag = `<!--__ACC_META__:${JSON.stringify(cleanMeta)}-->`;
+  return base ? `${base}\n${tag}` : tag;
+}
+
+export interface TxTaxMeta {
+  hasVat?: boolean;
+  vatRate?: number | null;
+  vatAmount?: number | null;
+  legalEntityId?: string | null;
+  legalEntityName?: string | null;
+}
+
+const TX_META_REGEX = /(?:\r?\n)?<!--__TX_META__:(.*?)-->/;
+
+export function parseTxMetaFromDescription(desc?: string | null): { cleanDesc: string; meta: TxTaxMeta } {
+  if (!desc) return { cleanDesc: '', meta: {} };
+  const match = desc.match(TX_META_REGEX);
+  if (!match) return { cleanDesc: desc, meta: {} };
+  let meta: TxTaxMeta = {};
+  try {
+    meta = JSON.parse(match[1]);
+  } catch {}
+  const cleanDesc = desc.replace(TX_META_REGEX, '').trim();
+  return { cleanDesc, meta };
+}
+
+export function encodeTxMetaIntoDescription(cleanDesc?: string | null, meta?: TxTaxMeta): string {
+  const base = (cleanDesc || '').replace(TX_META_REGEX, '').trim();
+  const cleanMeta: TxTaxMeta = {};
+  if (meta?.hasVat) cleanMeta.hasVat = true;
+  if (meta?.vatRate !== undefined && meta?.vatRate !== null) cleanMeta.vatRate = Number(meta.vatRate);
+  if (meta?.vatAmount !== undefined && meta?.vatAmount !== null) cleanMeta.vatAmount = Number(meta.vatAmount);
+  if (meta?.legalEntityId) cleanMeta.legalEntityId = meta.legalEntityId;
+  if (meta?.legalEntityName) cleanMeta.legalEntityName = meta.legalEntityName;
+  if (Object.keys(cleanMeta).length === 0) {
+    return base;
+  }
+  const tag = `<!--__TX_META__:${JSON.stringify(cleanMeta)}-->`;
+  return base ? `${base}\n${tag}` : tag;
+}
+
 export class SupabaseStore implements IFinanceStore {
   private client: SupabaseClient;
   private fallbackMilestones: EventPaymentMilestone[] = [];
@@ -140,6 +208,7 @@ export class SupabaseStore implements IFinanceStore {
   }
 
   private mapAccount(row: any): Account {
+    const { cleanDesc, meta } = parseAccMetaFromDescription(row.description);
     return {
       id: row.id,
       companyId: row.company_id || DEFAULT_COMPANY_ID,
@@ -148,11 +217,11 @@ export class SupabaseStore implements IFinanceStore {
       initialBalance: round2(row.initial_balance),
       currentBalance: round2(row.current_balance),
       currency: 'RUB',
-      description: row.description || '',
+      description: cleanDesc,
       color: row.color || undefined,
       icon: row.icon || undefined,
-      legalEntityId: row.legal_entity_id || (row as any).legalEntityId || undefined,
-      legalEntityName: row.legal_entity_name || (row as any).legalEntityName || undefined,
+      legalEntityId: row.legal_entity_id || meta.legalEntityId || (row as any).legalEntityId || undefined,
+      legalEntityName: row.legal_entity_name || meta.legalEntityName || (row as any).legalEntityName || undefined,
       isActive: row.is_active ?? true,
       createdAt: row.created_at || new Date().toISOString(),
       updatedAt: row.updated_at || new Date().toISOString(),
@@ -230,6 +299,25 @@ export class SupabaseStore implements IFinanceStore {
   }
 
   private mapTransaction(row: any): Transaction {
+    const { cleanDesc, meta } = parseTxMetaFromDescription(row.description);
+    const hasVat = Boolean(row.has_vat || (row as any).hasVat || meta.hasVat);
+    const vatRate =
+      row.vat_rate != null
+        ? Number(row.vat_rate)
+        : (row as any).vatRate != null
+          ? Number((row as any).vatRate)
+          : meta.vatRate != null
+            ? Number(meta.vatRate)
+            : undefined;
+    const vatAmount =
+      row.vat_amount != null
+        ? Number(row.vat_amount)
+        : (row as any).vatAmount != null
+          ? Number((row as any).vatAmount)
+          : meta.vatAmount != null
+            ? Number(meta.vatAmount)
+            : undefined;
+
     return {
       id: row.id,
       companyId: row.company_id || DEFAULT_COMPANY_ID,
@@ -244,12 +332,12 @@ export class SupabaseStore implements IFinanceStore {
       partnerName: row.partner_name ?? null,
       vendorId: row.vendor_id ?? null,
       vendorName: row.vendor_name ?? null,
-      legalEntityId: row.legal_entity_id || (row as any).legalEntityId || undefined,
-      legalEntityName: row.legal_entity_name || (row as any).legalEntityName || undefined,
-      hasVat: Boolean(row.has_vat || (row as any).hasVat),
-      vatRate: row.vat_rate != null ? Number(row.vat_rate) : (row as any).vatRate != null ? Number((row as any).vatRate) : undefined,
-      vatAmount: row.vat_amount != null ? Number(row.vat_amount) : (row as any).vatAmount != null ? Number((row as any).vatAmount) : undefined,
-      description: row.description || '',
+      legalEntityId: row.legal_entity_id || (row as any).legalEntityId || meta.legalEntityId || undefined,
+      legalEntityName: row.legal_entity_name || (row as any).legalEntityName || meta.legalEntityName || undefined,
+      hasVat,
+      vatRate,
+      vatAmount,
+      description: cleanDesc,
       transactionDate: row.transaction_date,
       isDeleted: Boolean(row.is_deleted),
       needsReview: Boolean(row.needs_review),
@@ -682,15 +770,29 @@ export class SupabaseStore implements IFinanceStore {
   }
 
   public async saveAccount(accountInput: Partial<Account> & { id: string }): Promise<Account> {
+    const existing = await this.getAccountById(accountInput.id);
     const payload: Record<string, any> = { updated_at: new Date().toISOString() };
     if (accountInput.name !== undefined) payload.name = accountInput.name;
     if (accountInput.type !== undefined) payload.type = accountInput.type;
-    if (accountInput.description !== undefined) payload.description = accountInput.description;
     if (accountInput.isActive !== undefined) payload.is_active = accountInput.isActive;
     if (accountInput.color !== undefined) payload.color = accountInput.color;
     if (accountInput.icon !== undefined) payload.icon = accountInput.icon;
     if (accountInput.currentBalance !== undefined) payload.current_balance = round2(accountInput.currentBalance);
     if (accountInput.initialBalance !== undefined) payload.initial_balance = round2(accountInput.initialBalance);
+
+    const nextLegalEntityId =
+      accountInput.legalEntityId !== undefined
+        ? accountInput.legalEntityId || undefined
+        : existing?.legalEntityId;
+    const nextLegalEntityName =
+      accountInput.legalEntityName !== undefined
+        ? accountInput.legalEntityName || undefined
+        : existing?.legalEntityName;
+    const baseDesc = accountInput.description !== undefined ? accountInput.description : existing?.description || '';
+    payload.description = encodeAccMetaIntoDescription(baseDesc, {
+      legalEntityId: nextLegalEntityId,
+      legalEntityName: nextLegalEntityName,
+    });
 
     const { data, error } = await this.client
       .from('accounts')
@@ -706,6 +808,10 @@ export class SupabaseStore implements IFinanceStore {
   public async createAccount(accountInput: Partial<Account> & { name: string }): Promise<Account> {
     const now = new Date().toISOString();
     const initBal = round2(accountInput.initialBalance || 0);
+    const encodedDesc = encodeAccMetaIntoDescription(accountInput.description || '', {
+      legalEntityId: accountInput.legalEntityId || undefined,
+      legalEntityName: accountInput.legalEntityName || undefined,
+    });
     const row = {
       id: accountInput.id || `acc_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       company_id: accountInput.companyId || DEFAULT_COMPANY_ID,
@@ -714,7 +820,7 @@ export class SupabaseStore implements IFinanceStore {
       initial_balance: initBal,
       current_balance: initBal,
       currency: 'RUB',
-      description: accountInput.description || '',
+      description: encodedDesc,
       color: accountInput.color ?? null,
       icon: accountInput.icon ?? null,
       is_active: accountInput.isActive ?? true,
@@ -782,19 +888,52 @@ export class SupabaseStore implements IFinanceStore {
     const target = companyId || DEFAULT_COMPANY_ID;
     try {
       const { data, error } = await this.client.from('legal_entities').select('*').eq('company_id', target);
-      if (error) {
-        return this.fallbackLegalEntities.filter((le) => (le.companyId || DEFAULT_COMPANY_ID) === target);
-      }
-      if (data && data.length > 0) {
+      if (!error && data && data.length > 0) {
         return data.map((r: any) => this.mapLegalEntity(r));
       }
-      return this.fallbackLegalEntities.filter((le) => (le.companyId || DEFAULT_COMPANY_ID) === target);
-    } catch {
-      return this.fallbackLegalEntities.filter((le) => (le.companyId || DEFAULT_COMPANY_ID) === target);
-    }
+    } catch {}
+
+    // Durable fallback via categories table (name = '__legal_entity__')
+    try {
+      const { data: catRows, error: catErr } = await this.client
+        .from('categories')
+        .select('id, company_id, icon')
+        .eq('company_id', target)
+        .eq('name', '__legal_entity__');
+      if (!catErr && catRows && catRows.length > 0) {
+        const parsed: LegalEntity[] = [];
+        for (const cr of catRows) {
+          if (!cr.icon) continue;
+          try {
+            const le = JSON.parse(cr.icon) as LegalEntity;
+            if (le && le.id && le.isActive !== false) {
+              parsed.push(le);
+              const idx = this.fallbackLegalEntities.findIndex((x) => x.id === le.id);
+              if (idx >= 0) this.fallbackLegalEntities[idx] = le;
+              else this.fallbackLegalEntities.push(le);
+            }
+          } catch {}
+        }
+        return parsed.sort((a, b) => (Number(Boolean(b.isDefault)) - Number(Boolean(a.isDefault))) || a.name.localeCompare(b.name));
+      }
+    } catch {}
+
+    return this.fallbackLegalEntities.filter((le) => (le.companyId || DEFAULT_COMPANY_ID) === target);
   }
 
   public async getLegalEntityById(id: string): Promise<LegalEntity | null> {
+    const foundMem = this.fallbackLegalEntities.find((le) => le.id === id);
+    if (foundMem) return foundMem;
+    try {
+      const { data: catRow } = await this.client
+        .from('categories')
+        .select('icon')
+        .eq('id', `cat_le_${id}`)
+        .maybeSingle();
+      if (catRow && catRow.icon) {
+        return JSON.parse(catRow.icon) as LegalEntity;
+      }
+    } catch {}
     const list = await this.getLegalEntities();
     return list.find((le) => le.id === id) || null;
   }
@@ -802,9 +941,10 @@ export class SupabaseStore implements IFinanceStore {
   public async saveLegalEntity(entityInput: Omit<LegalEntity, 'createdAt' | 'updatedAt'> & { id?: string }): Promise<LegalEntity> {
     const now = new Date().toISOString();
     const id = entityInput.id || `le_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const targetCompanyId = entityInput.companyId || DEFAULT_COMPANY_ID;
     const row = {
       id,
-      company_id: entityInput.companyId || DEFAULT_COMPANY_ID,
+      company_id: targetCompanyId,
       name: entityInput.name,
       type: entityInput.type || 'llc',
       tax_system: entityInput.taxSystem || 'usn_income',
@@ -830,15 +970,51 @@ export class SupabaseStore implements IFinanceStore {
       description: row.description || undefined,
       isDefault: row.is_default,
       isActive: row.is_active,
-      createdAt: now,
+      createdAt: existingIdx >= 0 ? this.fallbackLegalEntities[existingIdx].createdAt || now : now,
       updatedAt: now,
     };
+
+    if (mappedObj.isDefault) {
+      // Unset previous defaults for the same company
+      for (const item of this.fallbackLegalEntities) {
+        if ((item.companyId || DEFAULT_COMPANY_ID) === targetCompanyId && item.id !== id && item.isDefault) {
+          item.isDefault = false;
+          try {
+            await this.client.from('categories').upsert({
+              id: `cat_le_${item.id}`,
+              company_id: targetCompanyId,
+              name: '__legal_entity__',
+              type: 'expense',
+              direction: 'overhead',
+              color: '#8c734b',
+              icon: JSON.stringify(item),
+              is_system: false,
+              is_event_specific: false,
+            });
+          } catch {}
+        }
+      }
+    }
 
     if (existingIdx >= 0) {
       this.fallbackLegalEntities[existingIdx] = mappedObj;
     } else {
       this.fallbackLegalEntities.push(mappedObj);
     }
+
+    try {
+      await this.client.from('categories').upsert({
+        id: `cat_le_${id}`,
+        company_id: targetCompanyId,
+        name: '__legal_entity__',
+        type: 'expense',
+        direction: 'overhead',
+        color: '#8c734b',
+        icon: JSON.stringify(mappedObj),
+        is_system: false,
+        is_event_specific: false,
+      });
+    } catch {}
 
     try {
       const { data, error } = await this.client.from('legal_entities').upsert(row).select('*').single();
@@ -852,6 +1028,9 @@ export class SupabaseStore implements IFinanceStore {
 
   public async deleteLegalEntity(id: string): Promise<boolean> {
     this.fallbackLegalEntities = this.fallbackLegalEntities.filter((le) => le.id !== id);
+    try {
+      await this.client.from('categories').delete().eq('id', `cat_le_${id}`);
+    } catch {}
     try {
       await this.client.from('legal_entities').delete().eq('id', id);
     } catch {}
@@ -1565,6 +1744,30 @@ export class SupabaseStore implements IFinanceStore {
       'id' in txInput && txInput.id
         ? txInput.id
         : `tx-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+    const hasVat = Boolean((txInput as any).hasVat);
+    const vatRate =
+      (txInput as any).vatRate !== undefined && (txInput as any).vatRate !== null
+        ? Number((txInput as any).vatRate)
+        : hasVat
+          ? 20
+          : null;
+    let vatAmount =
+      (txInput as any).vatAmount !== undefined && (txInput as any).vatAmount !== null
+        ? Number((txInput as any).vatAmount)
+        : null;
+    if (hasVat && vatRate !== null && vatAmount === null) {
+      vatAmount = vatRate > 0 ? round2((Number(txInput.amount) * vatRate) / (100 + vatRate)) : 0;
+    }
+
+    const encodedDesc = encodeTxMetaIntoDescription(txInput.description ?? '', {
+      hasVat,
+      vatRate,
+      vatAmount,
+      legalEntityId: (txInput as any).legalEntityId || null,
+      legalEntityName: (txInput as any).legalEntityName || null,
+    });
+
     const row: any = {
       id: txId,
       company_id: (txInput as any).companyId || DEFAULT_COMPANY_ID,
@@ -1579,7 +1782,7 @@ export class SupabaseStore implements IFinanceStore {
       partner_name: (txInput as any).partnerName ?? null,
       vendor_id: (txInput as any).vendorId ?? null,
       vendor_name: (txInput as any).vendorName ?? null,
-      description: txInput.description ?? '',
+      description: encodedDesc,
       transaction_date: txInput.transactionDate || now,
       is_deleted: false,
       needs_review: (txInput as any).needsReview ?? false,
@@ -1650,6 +1853,7 @@ export class SupabaseStore implements IFinanceStore {
   }
 
   public async updateTransaction(id: string, updates: Partial<Transaction>): Promise<Transaction> {
+    const existing = await this.getTransactionById(id);
     const payload: Record<string, any> = { updated_at: new Date().toISOString() };
     if (updates.type !== undefined) payload.type = updates.type;
     if (updates.direction !== undefined) payload.direction = updates.direction;
@@ -1660,11 +1864,25 @@ export class SupabaseStore implements IFinanceStore {
     if (updates.eventId !== undefined) payload.event_id = updates.eventId;
     if (updates.partnerId !== undefined) payload.partner_id = updates.partnerId;
     if (updates.partnerName !== undefined) payload.partner_name = updates.partnerName;
-    if (updates.description !== undefined) payload.description = updates.description;
     if (updates.transactionDate !== undefined) payload.transaction_date = updates.transactionDate;
     if (updates.needsReview !== undefined) payload.needs_review = updates.needsReview;
     if (updates.updatedBy !== undefined) payload.updated_by = updates.updatedBy;
     if (updates.isDeleted !== undefined) payload.is_deleted = updates.isDeleted;
+
+    const nextHasVat = updates.hasVat !== undefined ? updates.hasVat : existing?.hasVat;
+    const nextVatRate = updates.vatRate !== undefined ? updates.vatRate : existing?.vatRate;
+    const nextVatAmount = updates.vatAmount !== undefined ? updates.vatAmount : existing?.vatAmount;
+    const nextLeId = updates.legalEntityId !== undefined ? updates.legalEntityId : existing?.legalEntityId;
+    const nextLeName = updates.legalEntityName !== undefined ? updates.legalEntityName : existing?.legalEntityName;
+    const baseDesc = updates.description !== undefined ? updates.description : existing?.description || '';
+
+    payload.description = encodeTxMetaIntoDescription(baseDesc, {
+      hasVat: nextHasVat,
+      vatRate: nextVatRate,
+      vatAmount: nextVatAmount,
+      legalEntityId: nextLeId,
+      legalEntityName: nextLeName,
+    });
 
     const { data, error } = await this.client
       .from('transactions')
