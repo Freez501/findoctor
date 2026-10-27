@@ -21,6 +21,7 @@ import {
   EventPaymentMilestone,
   EventBudgetItem,
   EventVendor,
+  LegalEntity,
 } from '../../shared/types.js';
 import { createInitialDatabaseState, DatabaseState } from '../data/seed.js';
 import { InMemoryStore } from './InMemoryStore.js';
@@ -242,6 +243,18 @@ export class JsonFileStore extends InMemoryStore implements IFinanceStore {
 
   public override async deletePartner(id: string): Promise<boolean> {
     const result = await super.deletePartner(id);
+    if (result) await this.persist();
+    return result;
+  }
+
+  public override async saveLegalEntity(entityInput: any): Promise<LegalEntity> {
+    const result = await super.saveLegalEntity(entityInput);
+    await this.persist();
+    return result;
+  }
+
+  public override async deleteLegalEntity(id: string): Promise<boolean> {
+    const result = await super.deleteLegalEntity(id);
     if (result) await this.persist();
     return result;
   }

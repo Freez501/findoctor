@@ -25,6 +25,7 @@ import {
   EventBudgetItem,
   EventVendor,
   CashFlowForecast,
+  LegalEntity,
 } from '../../shared/types.js';
 import {
   CreateEventDTO,
@@ -188,7 +189,7 @@ export class ApiClient {
   }
 
   public createAccount(
-    data: { name: string; type?: string; initialBalance?: number; description?: string; color?: string; icon?: string },
+    data: { name: string; type?: string; initialBalance?: number; description?: string; color?: string; icon?: string; legalEntityId?: string; legalEntityName?: string },
     options?: RequestOptions
   ): Promise<{ account: Account }> {
     return this.request<{ account: Account }>('/api/accounts', {
@@ -200,7 +201,7 @@ export class ApiClient {
 
   public saveAccount(
     id: string,
-    data: { name?: string; description?: string; isActive?: boolean; type?: string; currentBalance?: number; initialBalance?: number; color?: string; icon?: string },
+    data: { name?: string; description?: string; isActive?: boolean; type?: string; currentBalance?: number; initialBalance?: number; color?: string; icon?: string; legalEntityId?: string; legalEntityName?: string },
     options?: RequestOptions
   ): Promise<{ account: Account }> {
     return this.request<{ account: Account }>(`/api/accounts/${encodeURIComponent(id)}`, {
@@ -298,6 +299,44 @@ export class ApiClient {
     options?: RequestOptions
   ): Promise<{ success: boolean; message: string }> {
     return this.request<{ success: boolean; message: string }>(`/api/partners/${encodeURIComponent(id)}`, {
+      ...options,
+      method: 'DELETE',
+    });
+  }
+
+  // --- Legal Entities (Юрлица группы компаний: ООО, ИП, Касса) ---
+  public getLegalEntities(options?: RequestOptions): Promise<{ legalEntities: LegalEntity[] }> {
+    return this.request<{ legalEntities: LegalEntity[] }>('/api/legal-entities', options);
+  }
+
+  public createLegalEntity(
+    data: Partial<LegalEntity> & { name: string },
+    options?: RequestOptions
+  ): Promise<{ legalEntity: LegalEntity }> {
+    return this.request<{ legalEntity: LegalEntity }>('/api/legal-entities', {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  public updateLegalEntity(
+    id: string,
+    data: Partial<LegalEntity>,
+    options?: RequestOptions
+  ): Promise<{ legalEntity: LegalEntity }> {
+    return this.request<{ legalEntity: LegalEntity }>(`/api/legal-entities/${encodeURIComponent(id)}`, {
+      ...options,
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  public deleteLegalEntity(
+    id: string,
+    options?: RequestOptions
+  ): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(`/api/legal-entities/${encodeURIComponent(id)}`, {
       ...options,
       method: 'DELETE',
     });

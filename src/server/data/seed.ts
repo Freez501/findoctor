@@ -19,6 +19,7 @@ import {
   EventPaymentMilestone,
   EventBudgetItem,
   EventVendor,
+  LegalEntity,
 } from '../../shared/types.js';
 import {
   ACCOUNT_IDS,
@@ -34,6 +35,7 @@ import {
   INITIAL_MILESTONES_SEED,
   INITIAL_BUDGET_ITEMS_SEED,
   INITIAL_VENDORS_SEED,
+  INITIAL_LEGAL_ENTITIES_SEED,
 } from '../../shared/constants.js';
 
 /**
@@ -410,6 +412,10 @@ export function getInitialVendors(): EventVendor[] {
   return JSON.parse(JSON.stringify(INITIAL_VENDORS_SEED));
 }
 
+export function getInitialLegalEntities(): LegalEntity[] {
+  return JSON.parse(JSON.stringify(INITIAL_LEGAL_ENTITIES_SEED));
+}
+
 export function getSeedTransactions(): Transaction[] {
   return JSON.parse(JSON.stringify(SEED_TRANSACTIONS));
 }
@@ -424,6 +430,7 @@ export interface DatabaseState {
   categories: Category[];
   partners: Partner[];
   transactions: Transaction[];
+  legalEntities?: LegalEntity[];
   milestones?: EventPaymentMilestone[];
   budgetItems?: EventBudgetItem[];
   vendors?: EventVendor[];
@@ -440,6 +447,7 @@ export function createInitialDatabaseState(): DatabaseState {
     categories: getInitialCategories(),
     partners: getInitialPartners(),
     transactions: getSeedTransactions(),
+    legalEntities: getInitialLegalEntities(),
     milestones: getInitialMilestones(),
     budgetItems: getInitialBudgetItems(),
     vendors: getInitialVendors(),

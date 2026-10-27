@@ -10,7 +10,22 @@
  * - Попроектный учёт: частные мероприятия (без налога) vs официальные договоры с индивидуальной ставкой (5%, 7%, 15%, 20%)
  */
 
-import { Transaction, Account, CompanyTaxSettings, TaxSystem, CateringEvent } from '../../shared/types.js';
+import { Transaction, Account, CompanyTaxSettings, TaxSystem, CateringEvent, LegalEntity, LegalEntityTaxSystem } from '../../shared/types.js';
+
+export interface LegalEntityTaxBreakdown {
+  entityId: string;
+  entityName: string;
+  type: string;
+  taxSystem: LegalEntityTaxSystem;
+  taxSystemLabel: string;
+  income: number;
+  expense: number;
+  vatOutgoing: number; // Исходящий НДС с продаж
+  vatIncoming: number; // Входящий НДС к вычету (по УПД)
+  vatNet: number;      // Итого НДС к уплате
+  taxAmount: number;   // Налог на прибыль или УСН
+  totalDue: number;    // Суммарная налоговая обязанность (НДС + налог)
+}
 
 export interface TaxCalculationResult {
   system: TaxSystem;
@@ -25,6 +40,9 @@ export interface TaxCalculationResult {
   isEffective: boolean;
   taxableEventsCount?: number;
   nonTaxableEventsCount?: number;
+  entitiesBreakdown?: LegalEntityTaxBreakdown[];
+  totalVatIncoming?: number;
+  totalVatOutgoing?: number;
 }
 
 export function getQuarterDateRange(date: Date = new Date()): { startDate: string; endDate: string; quarterLabel: string } {
@@ -50,7 +68,8 @@ export function calculateTaxReserve(
   accounts: Account[],
   taxSettings?: CompanyTaxSettings,
   targetDate: Date = new Date(),
-  events: CateringEvent[] = []
+  events: CateringEvent[] = [],
+  legalEntities: LegalEntity[] = []
 ): TaxCalculationResult {
   const system: TaxSystem = taxSettings?.system || 'usn_income';
   const rate: number = taxSettings?.rate ?? 6;
@@ -59,6 +78,9 @@ export function calculateTaxReserve(
   const labels: Record<TaxSystem, string> = {
     usn_income: `УСН «Доходы» (${rate}%)`,
     usn_income_expense: `УСН «Доходы минус Расходы» (${rate}%)`,
+    usn_income_vat5: `УСН «Доходы» + НДС 5%`,
+    usn_income_vat7: `УСН «Доходы» + НДС 7%`,
+    osno: `ОСНО (НДС 20% + Налог на прибыль)`,
     npd: `Самозанятость / НПД (${rate}%)`,
     custom: `Своя ставка (${rate}%)`,
     none: 'Без налога (чистый управленческий учёт)',
@@ -66,6 +88,165 @@ export function calculateTaxReserve(
 
   const { startDate, endDate, quarterLabel } = getQuarterDateRange(targetDate);
 
+  // If legal entities are defined, calculate multi-entity group breakdown
+  if (legalEntities && legalEntities.length > 0) {
+    const accountEntityMap = new Map<string, string>();
+    for (const acc of accounts) {
+      if (acc.legalEntityId) {
+        accountEntityMap.set(acc.id, acc.legalEntityId);
+      }
+    }
+
+    const eventMap = new Map<string, CateringEvent>(events.map((e) => [e.id, e]));
+    const periodTx = transactions.filter((tx) => {
+      if (tx.isDeleted) return false;
+      const txDate = tx.transactionDate.slice(0, 10);
+      return txDate >= startDate && txDate <= endDate;
+    });
+
+    const defaultEntity = legalEntities.find((le) => le.isDefault) || legalEntities[0];
+    const entitiesBreakdown: LegalEntityTaxBreakdown[] = [];
+    let groupIncome = 0;
+    let groupExpense = 0;
+    let totalTaxAmount = 0;
+    let totalVatIncoming = 0;
+    let totalVatOutgoing = 0;
+
+    for (const entity of legalEntities) {
+      let entIncome = 0;
+      let entExpense = 0;
+      let entVatIncoming = 0;
+
+      for (const tx of periodTx) {
+        // Resolve entity for tx: explicit legalEntityId or derived from account
+        let txEntityId = tx.legalEntityId;
+        if (!txEntityId) {
+          if (tx.type === 'income' && tx.toAccountId) {
+            txEntityId = accountEntityMap.get(tx.toAccountId);
+          } else if (tx.type === 'expense' && tx.fromAccountId) {
+            txEntityId = accountEntityMap.get(tx.fromAccountId);
+          }
+        }
+        if (!txEntityId) {
+          txEntityId = defaultEntity.id;
+        }
+
+        if (txEntityId !== entity.id) continue;
+
+        // Skip non-taxable private events
+        if (tx.eventId) {
+          const ev = eventMap.get(tx.eventId);
+          if (ev && ev.isTaxable === false) {
+            continue;
+          }
+        }
+
+        if (tx.type === 'income') {
+          entIncome += tx.amount;
+        } else if (tx.type === 'expense') {
+          entExpense += tx.amount;
+          if (tx.hasVat) {
+            const vRate = tx.vatRate || 20;
+            const vAmt = tx.vatAmount !== undefined && tx.vatAmount !== null ? tx.vatAmount : Math.round(tx.amount * vRate / (100 + vRate));
+            entVatIncoming += vAmt;
+          }
+        }
+      }
+
+      groupIncome += entIncome;
+      groupExpense += entExpense;
+
+      let vatOutgoing = 0;
+      let vatIncoming = 0;
+      let vatNet = 0;
+      let taxAmount = 0;
+      let totalDue = 0;
+
+      const entSys = entity.taxSystem || 'usn_income';
+      const entRate = entity.taxRate !== undefined ? entity.taxRate : 6;
+      const entVatRate = entity.vatRate !== undefined ? entity.vatRate : 20;
+
+      let entLabel = `УСН (${entRate}%)`;
+      if (entSys === 'osno') {
+        entLabel = `ОСНО (НДС ${entVatRate}% + Прибыль ${entRate}%)`;
+        vatOutgoing = Math.round(entIncome * (entVatRate / (100 + entVatRate)));
+        vatIncoming = entVatIncoming;
+        vatNet = Math.max(0, vatOutgoing - vatIncoming);
+        const taxableProfit = Math.max(0, (entIncome - vatOutgoing) - (entExpense - vatIncoming));
+        taxAmount = Math.round(taxableProfit * (entRate / 100));
+        totalDue = vatNet + taxAmount;
+      } else if (entSys === 'usn_income_vat5') {
+        entLabel = `УСН «Доходы» (${entRate}%) + НДС 5%`;
+        vatOutgoing = Math.round(entIncome * (5 / 105));
+        vatIncoming = 0; // No input VAT deductions allowed for 5% rate by law
+        vatNet = vatOutgoing;
+        taxAmount = Math.round(entIncome * (entRate / 100));
+        totalDue = vatNet + taxAmount;
+      } else if (entSys === 'usn_income_vat7') {
+        entLabel = `УСН «Доходы» (${entRate}%) + НДС 7%`;
+        vatOutgoing = Math.round(entIncome * (7 / 107));
+        vatIncoming = 0;
+        vatNet = vatOutgoing;
+        taxAmount = Math.round(entIncome * (entRate / 100));
+        totalDue = vatNet + taxAmount;
+      } else if (entSys === 'usn_income' || entSys === 'custom') {
+        entLabel = `УСН «Доходы» (${entRate}%)`;
+        taxAmount = Math.round(entIncome * (entRate / 100));
+        totalDue = taxAmount;
+      } else if (entSys === 'usn_income_expense') {
+        entLabel = `УСН «Доходы минус Расходы» (${entRate}%)`;
+        const taxableProfit = Math.max(0, entIncome - entExpense);
+        const standardTax = Math.round(taxableProfit * (entRate / 100));
+        const minTax = Math.round(entIncome * 0.01);
+        taxAmount = Math.max(standardTax, minTax);
+        totalDue = taxAmount;
+      } else if (entSys === 'npd') {
+        entLabel = `Самозанятость (${entRate}%)`;
+        taxAmount = Math.round(entIncome * (entRate / 100));
+        totalDue = taxAmount;
+      } else if (entSys === 'none') {
+        entLabel = 'Без налога';
+        totalDue = 0;
+      }
+
+      totalTaxAmount += totalDue;
+      totalVatIncoming += vatIncoming;
+      totalVatOutgoing += vatOutgoing;
+
+      entitiesBreakdown.push({
+        entityId: entity.id,
+        entityName: entity.name,
+        type: entity.type,
+        taxSystem: entSys,
+        taxSystemLabel: entLabel,
+        income: entIncome,
+        expense: entExpense,
+        vatOutgoing,
+        vatIncoming,
+        vatNet,
+        taxAmount,
+        totalDue,
+      });
+    }
+
+    return {
+      system,
+      systemLabel: 'Группа компаний (по юрлицам)',
+      rate,
+      applyOnlyToBank,
+      incomeBase: groupIncome,
+      expenseBase: groupExpense,
+      taxableBase: groupIncome,
+      taxAmount: totalTaxAmount,
+      quarterLabel,
+      isEffective: totalTaxAmount > 0 || groupIncome > 0,
+      entitiesBreakdown,
+      totalVatIncoming,
+      totalVatOutgoing,
+    };
+  }
+
+  // Fallback single-tenant calculation (when no legal entities configured)
   if (system === 'none') {
     return {
       system,

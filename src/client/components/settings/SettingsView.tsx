@@ -48,10 +48,10 @@ import { useFinance } from '../../context/FinanceContext.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { api } from '../../api/apiClient.js';
 import { formatRubles } from '../../utils/formatters.js';
-import { Account, Category, Partner, TransactionDirection, UserRole, CompanyInvite, TaxSystem, CompanyTaxSettings } from '../../../shared/types.js';
+import { Account, Category, Partner, TransactionDirection, UserRole, CompanyInvite, TaxSystem, CompanyTaxSettings, LegalEntity, LegalEntityType, LegalEntityTaxSystem } from '../../../shared/types.js';
 import { calculateTaxReserve } from '../../utils/taxCalculator.js';
 
-type SettingsTab = 'accounts' | 'partners' | 'categories' | 'organization' | 'profile';
+type SettingsTab = 'accounts' | 'partners' | 'categories' | 'organization' | 'profile' | 'legal_entities';
 
 const PRESET_COLORS = [
   '#10b981', // изумрудный (касса / наличные)
@@ -115,11 +115,15 @@ export const SettingsView: React.FC = () => {
     addToast,
     transactions,
     events,
+    legalEntities,
+    createLegalEntity,
+    updateLegalEntity,
+    deleteLegalEntity,
   } = useFinance();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
     const saved = localStorage.getItem('findoctor_settings_tab') as SettingsTab | null;
-    if (saved && ['accounts', 'partners', 'categories', 'organization', 'profile'].includes(saved)) {
+    if (saved && ['accounts', 'partners', 'categories', 'organization', 'profile', 'legal_entities'].includes(saved)) {
       return saved;
     }
     return 'accounts';
@@ -648,6 +652,19 @@ export const SettingsView: React.FC = () => {
   const [accDesc, setAccDesc] = useState('');
   const [accColor, setAccColor] = useState<string>('#10b981');
   const [accIcon, setAccIcon] = useState<string>('banknote');
+  const [accLegalEntityId, setAccLegalEntityId] = useState<string>('');
+
+  const [modalLegalEntity, setModalLegalEntity] = useState<
+    { mode: 'create' } | { mode: 'edit'; entity: LegalEntity } | null
+  >(null);
+  const [leName, setLeName] = useState('');
+  const [leType, setLeType] = useState<LegalEntityType>('llc');
+  const [leTaxSystem, setLeTaxSystem] = useState<LegalEntityTaxSystem>('osno');
+  const [leTaxRate, setLeTaxRate] = useState<number | string>(20);
+  const [leVatRate, setLeVatRate] = useState<number | string>(20);
+  const [leInn, setLeInn] = useState('');
+  const [leDesc, setLeDesc] = useState('');
+  const [leIsDefault, setLeIsDefault] = useState(false);
 
   const [modalPartner, setModalPartner] = useState<
     { mode: 'create' } | { mode: 'edit'; partner: Partner } | null
@@ -674,6 +691,7 @@ export const SettingsView: React.FC = () => {
     setAccDesc('');
     setAccColor('#10b981');
     setAccIcon('banknote');
+    setAccLegalEntityId('');
     setModalAccount({ mode: 'create' });
   };
 
@@ -705,6 +723,7 @@ export const SettingsView: React.FC = () => {
     );
     setAccColor(fallbackColor);
     setAccIcon(fallbackIcon);
+    setAccLegalEntityId(acc.legalEntityId || '');
     setModalAccount({ mode: 'edit', account: acc });
   };
 
@@ -715,6 +734,7 @@ export const SettingsView: React.FC = () => {
     const resolvedType = accTypeSelect === 'custom'
       ? (customAccTypeName.trim() || 'Счёт')
       : accTypeSelect;
+    const targetLe = legalEntities.find((le) => le.id === accLegalEntityId);
 
     setIsSaving(true);
     try {
@@ -726,6 +746,8 @@ export const SettingsView: React.FC = () => {
           initialBalance: accBalance || 0,
           color: accColor,
           icon: accIcon,
+          legalEntityId: accLegalEntityId || undefined,
+          legalEntityName: targetLe ? targetLe.name : undefined,
         });
         addToast('Новый счёт создан', 'success');
       } else if (modalAccount?.mode === 'edit') {
@@ -737,6 +759,8 @@ export const SettingsView: React.FC = () => {
           initialBalance: accBalance,
           color: accColor,
           icon: accIcon,
+          legalEntityId: accLegalEntityId || undefined,
+          legalEntityName: targetLe ? targetLe.name : undefined,
         });
         addToast('Счёт и остаток успешно сохранены', 'success');
       }
@@ -767,6 +791,118 @@ export const SettingsView: React.FC = () => {
       setModalAccount(null);
     } catch (err: any) {
       addToast(err.message || 'Ошибка удаления счёта', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // ==========================================
+  // ==========================================
+  // LEGAL ENTITY ACTIONS
+  // ==========================================
+  const openCreateLegalEntity = () => {
+    setLeName('');
+    setLeType('llc');
+    setLeTaxSystem('osno');
+    setLeTaxRate(20);
+    setLeVatRate(20);
+    setLeInn('');
+    setLeDesc('');
+    setLeIsDefault(false);
+    setModalLegalEntity({ mode: 'create' });
+  };
+
+  const openEditLegalEntity = (le: LegalEntity) => {
+    setLeName(le.name);
+    setLeType(le.type);
+    setLeTaxSystem(le.taxSystem);
+    setLeTaxRate(le.taxRate !== undefined ? le.taxRate : 20);
+    setLeVatRate(le.vatRate !== undefined ? le.vatRate : 20);
+    setLeInn(le.inn || '');
+    setLeDesc(le.description || '');
+    setLeIsDefault(Boolean(le.isDefault));
+    setModalLegalEntity({ mode: 'edit', entity: le });
+  };
+
+  const handleTaxSystemChange = (sys: LegalEntityTaxSystem) => {
+    setLeTaxSystem(sys);
+    if (sys === 'osno') {
+      setLeTaxRate(20);
+      setLeVatRate(20);
+    } else if (sys === 'usn_income_vat5') {
+      setLeTaxRate(6);
+      setLeVatRate(5);
+    } else if (sys === 'usn_income_vat7') {
+      setLeTaxRate(6);
+      setLeVatRate(7);
+    } else if (sys === 'usn_income') {
+      setLeTaxRate(6);
+      setLeVatRate(0);
+    } else if (sys === 'usn_income_expense') {
+      setLeTaxRate(15);
+      setLeVatRate(0);
+    } else if (sys === 'npd') {
+      setLeTaxRate(6);
+      setLeVatRate(0);
+    } else if (sys === 'none') {
+      setLeTaxRate(0);
+      setLeVatRate(0);
+    }
+  };
+
+  const handleLegalEntitySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!leName.trim()) return;
+
+    setIsSaving(true);
+    try {
+      if (modalLegalEntity?.mode === 'create') {
+        await createLegalEntity({
+          name: leName.trim(),
+          type: leType,
+          taxSystem: leTaxSystem,
+          taxRate: leTaxRate !== '' ? Number(leTaxRate) : undefined,
+          vatRate: leVatRate !== '' ? Number(leVatRate) : undefined,
+          inn: leInn.trim() || undefined,
+          description: leDesc.trim() || undefined,
+          isDefault: leIsDefault,
+        });
+        addToast('Новое юрлицо добавлено в контур группы', 'success');
+      } else if (modalLegalEntity?.mode === 'edit') {
+        await updateLegalEntity(modalLegalEntity.entity.id, {
+          name: leName.trim(),
+          type: leType,
+          taxSystem: leTaxSystem,
+          taxRate: leTaxRate !== '' ? Number(leTaxRate) : undefined,
+          vatRate: leVatRate !== '' ? Number(leVatRate) : undefined,
+          inn: leInn.trim() || undefined,
+          description: leDesc.trim() || undefined,
+          isDefault: leIsDefault,
+        });
+        addToast('Параметры юрлица успешно сохранены', 'success');
+      }
+      setModalLegalEntity(null);
+    } catch (err: any) {
+      addToast(err.message || 'Ошибка сохранения юрлица', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteLegalEntity = async (id: string, name: string) => {
+    const attached = accounts.filter((a) => a.legalEntityId === id);
+    if (attached.length > 0) {
+      alert(`Невозможно удалить «${name}», так как к нему привязаны счета (${attached.map((a) => a.name).join(', ')}). Сначала отвяжите их или удалите.`);
+      return;
+    }
+    if (!window.confirm(`Вы уверены, что хотите удалить юрлицо «${name}» из контура группы?`)) return;
+    setIsSaving(true);
+    try {
+      await deleteLegalEntity(id);
+      addToast(`Юрлицо «${name}» удалено`, 'success');
+      setModalLegalEntity(null);
+    } catch (err: any) {
+      addToast(err.message || 'Ошибка удаления юрлица', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -958,6 +1094,7 @@ export const SettingsView: React.FC = () => {
         <div className="reports-header-title">
           <div className="reports-header-icon">
             {activeTab === 'organization' && <Building2 size={20} />}
+            {activeTab === 'legal_entities' && <Briefcase size={20} />}
             {activeTab === 'accounts' && <Wallet size={20} />}
             {activeTab === 'categories' && <Tag size={20} />}
             {activeTab === 'partners' && <Users size={20} />}
@@ -966,6 +1103,7 @@ export const SettingsView: React.FC = () => {
           <div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--foreground)', margin: 0 }}>
               {activeTab === 'organization' && 'Организация и тариф'}
+              {activeTab === 'legal_entities' && 'Юрлица и налоги группы'}
               {activeTab === 'accounts' && 'Управление счетами'}
               {activeTab === 'categories' && 'Классификатор статей'}
               {activeTab === 'partners' && 'Партнёры и соучредители'}
@@ -973,6 +1111,7 @@ export const SettingsView: React.FC = () => {
             </h2>
             <p style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', margin: '2px 0 0 0' }}>
               {activeTab === 'organization' && 'Реквизиты рабочего пространства, управление командой и параметрами доступа'}
+              {activeTab === 'legal_entities' && 'ООО, ИП и касса. Счета привязываются к юрлицам для раздельного расчёта НДС и налога на прибыль'}
               {activeTab === 'accounts' && 'Редактируйте назначение касс, тип учёта или добавляйте новые счета'}
               {activeTab === 'categories' && 'Статьи расходов и доходов для распределения операций и аналитики'}
               {activeTab === 'partners' && 'Участники бизнеса для выплаты дивидендов и персональных изъятий'}
@@ -982,6 +1121,12 @@ export const SettingsView: React.FC = () => {
         </div>
 
         <div className="reports-actions-group">
+          {activeTab === 'legal_entities' && (
+            <button type="button" onClick={openCreateLegalEntity} className="btn-settings-add" style={{ height: '38px', margin: 0 }}>
+              <Plus size={15} />
+              <span>Добавить юрлицо</span>
+            </button>
+          )}
           {activeTab === 'accounts' && (
             <>
               <button
@@ -1052,6 +1197,20 @@ export const SettingsView: React.FC = () => {
             <button
               type="button"
               role="tab"
+              aria-selected={activeTab === 'legal_entities'}
+              onClick={() => handleSelectTab('legal_entities')}
+              className={`settings-sidebar-link ${activeTab === 'legal_entities' ? 'active' : ''}`}
+            >
+              <div className="settings-sidebar-link-left">
+                <Briefcase size={16} />
+                <span>Юрлица группы</span>
+              </div>
+              <span className="settings-sidebar-count">{legalEntities.length}</span>
+            </button>
+
+            <button
+              type="button"
+              role="tab"
               aria-selected={activeTab === 'accounts'}
               onClick={() => handleSelectTab('accounts')}
               className={`settings-sidebar-link ${activeTab === 'accounts' ? 'active' : ''}`}
@@ -1116,6 +1275,209 @@ export const SettingsView: React.FC = () => {
       <main className="settings-main-panel">
 
       {/* ========================================================================= */}
+      {/* ========================================================================= */}
+      {/* TAB 0: LEGAL ENTITIES                                                     */}
+      {/* ========================================================================= */}
+      {activeTab === 'legal_entities' && (
+        <div className="settings-content-section animate-fade-in">
+          <div className="settings-subbar">
+            <div>
+              <h3 className="settings-subheading">Юрлица и системы налогообложения</h3>
+              <p className="settings-subtext">ООО, ИП, спецрежимы (УСН 6%, УСН 15%, ОСНО с НДС) и касса. Счета привязываются к юрлицам для автоматического учёта входящего и исходящего НДС и налога на прибыль</p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={openCreateLegalEntity}
+                className="btn-settings-add"
+              >
+                <Plus size={15} />
+                <span>Добавить юрлицо</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Educational Callout */}
+          <div
+            style={{
+              padding: '16px 20px',
+              borderRadius: '12px',
+              background: '#f6f2ea',
+              border: '1px solid #c5b08e',
+              marginBottom: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: '#8c734b', fontSize: '0.95rem' }}>
+              <Briefcase size={16} />
+              <span>Реальный финансовый контур группы компаний</span>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--foreground)', lineHeight: 1.5 }}>
+              Привязывайте расчётные счета к юрлицам. Если операция проходит по счёту ООО на ОСНО, система автоматически начислит 20% НДС с выручки и уменьшит налог на входящий НДС по расходам с УПД/СФ. Для счетов ИП (УСН 6% + 5% НДС) налоги рассчитаются по правилам 2025 года без лишних кликов.
+            </p>
+          </div>
+
+          {/* Legal Entities Cards Grid */}
+          <div className="settings-card-grid">
+            {legalEntities.map((le) => {
+              const attachedAccounts = accounts.filter((a) => a.legalEntityId === le.id);
+              const isLlc = le.type === 'llc';
+              const isIp = le.type === 'sole_proprietor';
+              const isCash = le.type === 'cash';
+
+              return (
+                <div
+                  key={le.id}
+                  className="settings-item-card"
+                  onClick={() => openEditLegalEntity(le)}
+                  style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
+                >
+                  <div>
+                    <div className="settings-card-header">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            background: isLlc ? 'rgba(37, 99, 235, 0.12)' : isIp ? '#f6f2ea' : isCash ? 'rgba(16, 185, 129, 0.12)' : 'var(--muted)',
+                            color: isLlc ? '#2563eb' : isIp ? '#8c734b' : isCash ? '#10b981' : 'var(--foreground)',
+                            border: isIp ? '1px solid #c5b08e' : isLlc ? '1px solid rgba(37, 99, 235, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)',
+                          }}
+                        >
+                          <Building2 size={11} />
+                          <span>{isLlc ? 'ООО' : isIp ? 'ИП' : isCash ? 'Касса и сейф' : 'Самозанятый'}</span>
+                        </span>
+
+                        {le.isDefault && (
+                          <span
+                            style={{
+                              fontSize: '0.7rem',
+                              fontWeight: 600,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              background: 'rgba(217, 119, 6, 0.12)',
+                              color: '#d97706',
+                              border: '1px solid rgba(217, 119, 6, 0.25)',
+                            }}
+                          >
+                            По умолчанию
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="category-card-actions" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => openEditLegalEntity(le)}
+                          className="btn-card-action"
+                          title="Редактировать юрлицо"
+                        >
+                          <Edit2 size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteLegalEntity(le.id, le.name)}
+                          className="btn-card-action btn-card-delete"
+                          title="Удалить юрлицо"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <h4 className="settings-card-title" style={{ marginTop: '8px' }}>{le.name}</h4>
+                    {le.inn && (
+                      <p style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)', margin: '2px 0 0 0' }}>
+                        ИНН: {le.inn}
+                      </p>
+                    )}
+                    {le.description && (
+                      <p className="settings-card-meta" style={{ marginTop: '4px' }}>{le.description}</p>
+                    )}
+
+                    {/* Tax System Pill */}
+                    <div style={{ marginTop: '10px' }}>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          padding: '3px 9px',
+                          borderRadius: '6px',
+                          background: le.taxSystem === 'osno' ? 'rgba(37, 99, 235, 0.08)' : le.taxSystem === 'none' ? 'var(--muted)' : 'rgba(217, 119, 6, 0.08)',
+                          color: le.taxSystem === 'osno' ? '#2563eb' : le.taxSystem === 'none' ? 'var(--muted-foreground)' : '#d97706',
+                          border: '1px solid var(--border)',
+                        }}
+                      >
+                        <Landmark size={12} />
+                        <span>
+                          {le.taxSystem === 'osno' && `ОСНО: НДС ${le.vatRate ?? 20}% + Прибыль ${le.taxRate ?? 20}%`}
+                          {le.taxSystem === 'usn_income_vat5' && 'УСН 6% + 5% НДС (без вычетов)'}
+                          {le.taxSystem === 'usn_income_vat7' && 'УСН 6% + 7% НДС (без вычетов)'}
+                          {le.taxSystem === 'usn_income' && `УСН «Доходы» (${le.taxRate ?? 6}%)`}
+                          {le.taxSystem === 'usn_income_expense' && `УСН «Доходы - Расходы» (${le.taxRate ?? 15}%)`}
+                          {le.taxSystem === 'npd' && `Самозанятость (${le.taxRate ?? 6}%)`}
+                          {le.taxSystem === 'none' && 'Без налога (Управленческий контур)'}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Attached Accounts Box */}
+                  <div
+                    style={{
+                      marginTop: '14px',
+                      paddingTop: '10px',
+                      borderTop: '1px solid var(--border)',
+                    }}
+                  >
+                    <div style={{ fontSize: '0.72rem', color: 'var(--muted-foreground)', marginBottom: '5px', fontWeight: 600 }}>
+                      Привязанные счета ({attachedAccounts.length}):
+                    </div>
+                    {attachedAccounts.length > 0 ? (
+                      <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                        {attachedAccounts.map((acc) => (
+                          <span
+                            key={acc.id}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '0.72rem',
+                              padding: '2px 7px',
+                              borderRadius: '4px',
+                              background: 'var(--muted)',
+                              color: 'var(--foreground)',
+                              border: '1px solid var(--border)',
+                            }}
+                          >
+                            <Wallet size={10} />
+                            <span>{acc.name}</span>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '0.72rem', color: 'var(--muted-foreground)', fontStyle: 'italic' }}>
+                        Нет привязанных счетов
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* TAB 1: ACCOUNTS                                                           */}
       {/* ========================================================================= */}
       {activeTab === 'accounts' && (
@@ -1206,6 +1568,27 @@ export const SettingsView: React.FC = () => {
                     </div>
 
                     <h4 className="settings-card-title">{acc.name}</h4>
+                    {acc.legalEntityName && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '4px' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            background: '#f6f2ea',
+                            color: '#8c734b',
+                            border: '1px solid #c5b08e',
+                          }}
+                        >
+                          <Briefcase size={11} />
+                          <span>{acc.legalEntityName}</span>
+                        </span>
+                      </div>
+                    )}
                     {acc.description && <p className="settings-card-meta">{acc.description}</p>}
                   </div>
 
@@ -2706,6 +3089,179 @@ export const SettingsView: React.FC = () => {
       {/* ========================================================================= */}
       {/* MODAL 1: ACCOUNT (CREATE / EDIT)                                          */}
       {/* ========================================================================= */}
+      {/* ========================================================================= */}
+      {/* MODAL: LEGAL ENTITY                                                       */}
+      {/* ========================================================================= */}
+      {modalLegalEntity && (
+        <div className="modal-backdrop animate-fade-in" onClick={() => setModalLegalEntity(null)}>
+          <div className="settings-modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+            <div className="settings-modal-header">
+              <div>
+                <h3 className="settings-modal-title">
+                  {modalLegalEntity.mode === 'create' ? 'Новое юрлицо группы' : 'Параметры юрлица'}
+                </h3>
+                <p className="settings-modal-subtitle">
+                  Задайте форму собственности и систему налогообложения для раздельного учёта
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalLegalEntity(null)}
+                className="btn-modal-close"
+                title="Закрыть"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleLegalEntitySubmit} className="settings-modal-form">
+              <div className="settings-input-group">
+                <label className="settings-input-label">Наименование компании / юрлица</label>
+                <input
+                  type="text"
+                  required
+                  value={leName}
+                  onChange={(e) => setLeName(e.target.value)}
+                  className="settings-text-input"
+                  placeholder="например: ООО «Ивент Групп» или ИП Иванов И.И."
+                />
+              </div>
+
+              <div className="settings-input-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="settings-input-group">
+                  <label className="settings-input-label">Организационная форма</label>
+                  <select
+                    value={leType}
+                    onChange={(e) => setLeType(e.target.value as LegalEntityType)}
+                    className="settings-text-input"
+                  >
+                    <option value="llc">ООО (Юрлицо)</option>
+                    <option value="sole_proprietor">ИП (Предприниматель)</option>
+                    <option value="cash">Касса и сейф (Наличные)</option>
+                    <option value="self_employed">Самозанятый (НПД)</option>
+                  </select>
+                </div>
+
+                <div className="settings-input-group">
+                  <label className="settings-input-label">ИНН (необязательно)</label>
+                  <input
+                    type="text"
+                    value={leInn}
+                    onChange={(e) => setLeInn(e.target.value)}
+                    className="settings-text-input"
+                    placeholder="7701234567"
+                  />
+                </div>
+              </div>
+
+              <div className="settings-input-group">
+                <label className="settings-input-label">Система налогообложения</label>
+                <select
+                  value={leTaxSystem}
+                  onChange={(e) => handleTaxSystemChange(e.target.value as LegalEntityTaxSystem)}
+                  className="settings-text-input"
+                >
+                  <option value="osno">ОСНО (НДС 20% с вычетом + Налог на прибыль 20%)</option>
+                  <option value="usn_income_vat5">УСН «Доходы» 6% + НДС 5% (правило 2025, без вычетов)</option>
+                  <option value="usn_income_vat7">УСН «Доходы» 6% + НДС 7% (правило 2025, без вычетов)</option>
+                  <option value="usn_income">УСН «Доходы» (6%)</option>
+                  <option value="usn_income_expense">УСН «Доходы минус расходы» (15%)</option>
+                  <option value="npd">НПД (Самозанятость 6%)</option>
+                  <option value="none">Без налога (Управленческая касса / сейф)</option>
+                </select>
+              </div>
+
+              {leTaxSystem !== 'none' && (
+                <div className="settings-input-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div className="settings-input-group">
+                    <label className="settings-input-label">
+                      {leTaxSystem === 'osno' ? 'Налог на прибыль (%)' : 'Ставка налога (%)'}
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={leTaxRate}
+                      onChange={(e) => setLeTaxRate(e.target.value)}
+                      className="settings-text-input"
+                      placeholder="20"
+                    />
+                  </div>
+
+                  {(leTaxSystem === 'osno' || leTaxSystem === 'usn_income_vat5' || leTaxSystem === 'usn_income_vat7') && (
+                    <div className="settings-input-group">
+                      <label className="settings-input-label">Ставка НДС (%)</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={leVatRate}
+                        onChange={(e) => setLeVatRate(e.target.value)}
+                        className="settings-text-input"
+                        placeholder="20"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="settings-input-group">
+                <label className="settings-input-label">Описание / Назначение</label>
+                <input
+                  type="text"
+                  value={leDesc}
+                  onChange={(e) => setLeDesc(e.target.value)}
+                  className="settings-text-input"
+                  placeholder="Основное юрлицо для безналичных договоров банкетов"
+                />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0' }}>
+                <input
+                  type="checkbox"
+                  id="le-default-checkbox"
+                  checked={leIsDefault}
+                  onChange={(e) => setLeIsDefault(e.target.checked)}
+                  style={{ width: '16px', height: '16px', accentColor: '#c5b08e', cursor: 'pointer' }}
+                />
+                <label htmlFor="le-default-checkbox" style={{ fontSize: '0.82rem', color: 'var(--foreground)', cursor: 'pointer' }}>
+                  Сделать основным юрлицом группы компаний
+                </label>
+              </div>
+
+              <div className="settings-modal-footer">
+                {modalLegalEntity.mode === 'edit' ? (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteLegalEntity(modalLegalEntity.entity.id, modalLegalEntity.entity.name)}
+                    className="btn-modal-danger"
+                  >
+                    <Trash2 size={14} />
+                    <span>Удалить юрлицо</span>
+                  </button>
+                ) : <div />}
+
+                <div className="settings-modal-footer-right">
+                  <button
+                    type="button"
+                    onClick={() => setModalLegalEntity(null)}
+                    className="btn-form-cancel"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="btn-form-submit"
+                  >
+                    {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                    <span>{modalLegalEntity.mode === 'create' ? 'Создать юрлицо' : 'Сохранить'}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {modalAccount && (
         <div className="modal-backdrop animate-fade-in" onClick={() => setModalAccount(null)}>
           <div className="settings-modal-dialog" onClick={(e) => e.stopPropagation()}>
@@ -2754,6 +3310,25 @@ export const SettingsView: React.FC = () => {
                   <option value="safe">Сейф / Резерв</option>
                   <option value="custom">+ Свой тип счёта...</option>
                 </select>
+              </div>
+
+              <div className="settings-input-group">
+                <label className="settings-input-label">Привязка к юрлицу группы</label>
+                <select
+                  value={accLegalEntityId}
+                  onChange={(e) => setAccLegalEntityId(e.target.value)}
+                  className="settings-text-input"
+                >
+                  <option value="">Без привязки (управленческий счёт / касса)</option>
+                  {legalEntities.map((le) => (
+                    <option key={le.id} value={le.id}>
+                      {le.name} ({le.type === 'llc' ? 'ООО' : le.type === 'sole_proprietor' ? 'ИП' : 'Касса'}, {le.taxSystem.toUpperCase()})
+                    </option>
+                  ))}
+                </select>
+                <span style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)', marginTop: '4px' }}>
+                  Операции по этому счёту автоматически относятся к выбранному юрлицу для расчёта налогов и НДС
+                </span>
               </div>
 
               {accTypeSelect === 'custom' && (

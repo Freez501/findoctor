@@ -21,10 +21,11 @@ import {
   EventPaymentMilestone,
   EventBudgetItem,
   EventVendor,
+  LegalEntity,
   TaxSystem,
   CompanyTaxSettings,
 } from '../../shared/types.js';
-import { DEFAULT_COMPANY_ID } from '../../shared/constants.js';
+import { DEFAULT_COMPANY_ID, INITIAL_LEGAL_ENTITIES_SEED } from '../../shared/constants.js';
 import { DatabaseState, createInitialDatabaseState } from '../data/seed.js';
 import { IFinanceStore, NewEventInput, NewTransactionInput } from './interfaces.js';
 
@@ -583,6 +584,119 @@ export class MySqlStore implements IFinanceStore {
   public async deletePartner(id: string): Promise<boolean> {
     const [res]: any = await this.pool.query('UPDATE partners SET is_active = 0 WHERE id = ?', [id]);
     return res.affectedRows > 0;
+  }
+
+  // =========================================================================
+  // LEGAL ENTITIES (Юрлица)
+  // =========================================================================
+
+  public async getLegalEntities(companyId?: string): Promise<LegalEntity[]> {
+    try {
+      let sql = 'SELECT * FROM legal_entities WHERE is_active = 1';
+      const params: any[] = [];
+      if (companyId) {
+        sql += ' AND company_id = ?';
+        params.push(companyId);
+      }
+      sql += ' ORDER BY is_default DESC, name ASC';
+      const [rows] = await this.pool.query<mysql.RowDataPacket[]>(sql, params);
+      if (rows && rows.length > 0) {
+        return rows.map((r: any) => this.mapLegalEntity(r));
+      }
+    } catch {
+      // Table might not exist yet, fallback to seed
+    }
+    return JSON.parse(JSON.stringify(INITIAL_LEGAL_ENTITIES_SEED)).filter(
+      (le: any) => !companyId || le.companyId === companyId
+    );
+  }
+
+  public async getLegalEntityById(id: string): Promise<LegalEntity | null> {
+    const list = await this.getLegalEntities();
+    return list.find((le) => le.id === id) || null;
+  }
+
+  public async saveLegalEntity(entityInput: Omit<LegalEntity, 'createdAt' | 'updatedAt'> & { id?: string }): Promise<LegalEntity> {
+    const now = new Date().toISOString();
+    const id = entityInput.id || `le_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const le: LegalEntity = {
+      id,
+      companyId: entityInput.companyId || DEFAULT_COMPANY_ID,
+      name: entityInput.name,
+      type: entityInput.type || 'llc',
+      taxSystem: entityInput.taxSystem || 'usn_income',
+      taxRate: entityInput.taxRate,
+      vatRate: entityInput.vatRate,
+      inn: entityInput.inn,
+      description: entityInput.description,
+      isDefault: entityInput.isDefault ?? false,
+      isActive: entityInput.isActive ?? true,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    try {
+      await this.pool.query(`
+        CREATE TABLE IF NOT EXISTS legal_entities (
+          id VARCHAR(64) PRIMARY KEY,
+          company_id VARCHAR(64) NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          type VARCHAR(32) NOT NULL,
+          tax_system VARCHAR(32) NOT NULL,
+          tax_rate DECIMAL(5,2) NULL,
+          vat_rate DECIMAL(5,2) NULL,
+          inn VARCHAR(32) NULL,
+          description TEXT NULL,
+          is_default TINYINT(1) DEFAULT 0,
+          is_active TINYINT(1) DEFAULT 1,
+          created_at VARCHAR(64) NOT NULL,
+          updated_at VARCHAR(64) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `);
+
+      await this.pool.query(`
+        INSERT INTO legal_entities (id, company_id, name, type, tax_system, tax_rate, vat_rate, inn, description, is_default, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          name = VALUES(name),
+          type = VALUES(type),
+          tax_system = VALUES(tax_system),
+          tax_rate = VALUES(tax_rate),
+          vat_rate = VALUES(vat_rate),
+          inn = VALUES(inn),
+          description = VALUES(description),
+          is_default = VALUES(is_default),
+          is_active = VALUES(is_active),
+          updated_at = VALUES(updated_at)
+      `, [
+        le.id,
+        le.companyId,
+        le.name,
+        le.type,
+        le.taxSystem,
+        le.taxRate ?? null,
+        le.vatRate ?? null,
+        le.inn || null,
+        le.description || null,
+        le.isDefault ? 1 : 0,
+        le.isActive ? 1 : 0,
+        le.createdAt,
+        le.updatedAt,
+      ]);
+    } catch (err) {
+      console.warn('[MySqlStore] saveLegalEntity notice:', err);
+    }
+
+    return le;
+  }
+
+  public async deleteLegalEntity(id: string): Promise<boolean> {
+    try {
+      const [res]: any = await this.pool.query('UPDATE legal_entities SET is_active = 0 WHERE id = ?', [id]);
+      return res.affectedRows > 0;
+    } catch {
+      return true;
+    }
   }
 
   // =========================================================================
@@ -1334,7 +1448,27 @@ export class MySqlStore implements IFinanceStore {
       isActive: Boolean(r.is_active),
       color: r.color || undefined,
       icon: r.icon || undefined,
+      legalEntityId: r.legal_entity_id || undefined,
+      legalEntityName: r.legal_entity_name || undefined,
       updatedAt: r.updated_at || new Date().toISOString(),
+    };
+  }
+
+  private mapLegalEntity(r: any): LegalEntity {
+    return {
+      id: r.id,
+      companyId: r.company_id || DEFAULT_COMPANY_ID,
+      name: r.name,
+      type: r.type || 'llc',
+      taxSystem: r.tax_system || 'usn_income',
+      taxRate: r.tax_rate !== null && r.tax_rate !== undefined ? Number(r.tax_rate) : undefined,
+      vatRate: r.vat_rate !== null && r.vat_rate !== undefined ? Number(r.vat_rate) : undefined,
+      inn: r.inn || undefined,
+      description: r.description || undefined,
+      isDefault: Boolean(r.is_default),
+      isActive: Boolean(r.is_active),
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
     };
   }
 
@@ -1399,6 +1533,11 @@ export class MySqlStore implements IFinanceStore {
       eventId: r.event_id || null,
       partnerId: r.partner_id || undefined,
       partnerName: r.partner_name || undefined,
+      legalEntityId: r.legal_entity_id || undefined,
+      legalEntityName: r.legal_entity_name || undefined,
+      hasVat: Boolean(r.has_vat),
+      vatRate: r.vat_rate !== null && r.vat_rate !== undefined ? Number(r.vat_rate) : undefined,
+      vatAmount: r.vat_amount !== null && r.vat_amount !== undefined ? Number(r.vat_amount) : undefined,
       description: r.description || '',
       transactionDate: r.transaction_date || r.created_at,
       isDeleted: Boolean(r.is_deleted),

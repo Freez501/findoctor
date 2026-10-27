@@ -16,6 +16,7 @@ import {
   EventPaymentMilestone,
   EventBudgetItem,
   EventVendor,
+  LegalEntity,
 } from './types.js';
 
 // ==========================================
@@ -24,6 +25,76 @@ import {
 
 export const DEFAULT_COMPANY_ID = 'company_truespace_default';
 export const DEFAULT_COMPANY_NAME = 'Truespace Catering';
+
+// ==========================================
+// 0.0. LEGAL ENTITIES CONSTANTS
+// ==========================================
+
+export const LEGAL_ENTITY_IDS = {
+  LLC_MAIN: 'le_llc_main',       // ООО «Ивент Групп» (ОСНО: НДС 20% + налог на прибыль)
+  IP_CATERING: 'le_ip_catering', // ИП «Кейтеринг» (УСН 6% + НДС 5%)
+  IP_PERSONAL: 'le_ip_personal', // ИП «Личное / Партнёр» (УСН 6%)
+  CASH: 'le_cash_pool',          // Касса и сейф (Наличные)
+} as const;
+
+export const INITIAL_LEGAL_ENTITIES_SEED: readonly LegalEntity[] = [
+  {
+    id: LEGAL_ENTITY_IDS.LLC_MAIN,
+    companyId: DEFAULT_COMPANY_ID,
+    name: 'ООО «Ивент Групп»',
+    type: 'llc',
+    taxSystem: 'osno',
+    taxRate: 20,
+    vatRate: 20,
+    description: 'Основное ООО с полным НДС (20%) под корпоративные договоры и вычеты по закупкам',
+    isDefault: true,
+    isActive: true,
+    createdAt: '2026-03-01T00:00:00Z',
+    updatedAt: '2026-03-01T00:00:00Z',
+  },
+  {
+    id: LEGAL_ENTITY_IDS.IP_CATERING,
+    companyId: DEFAULT_COMPANY_ID,
+    name: 'ИП «Кейтеринг»',
+    type: 'sole_proprietor',
+    taxSystem: 'usn_income_vat5',
+    taxRate: 6,
+    vatRate: 5,
+    description: 'Основное ИП с УСН 6% и 5% НДС (для частных и средних договоров)',
+    isDefault: false,
+    isActive: true,
+    createdAt: '2026-03-01T00:00:00Z',
+    updatedAt: '2026-03-01T00:00:00Z',
+  },
+  {
+    id: LEGAL_ENTITY_IDS.IP_PERSONAL,
+    companyId: DEFAULT_COMPANY_ID,
+    name: 'ИП «Личное / Партнёр»',
+    type: 'sole_proprietor',
+    taxSystem: 'usn_income',
+    taxRate: 6,
+    vatRate: 0,
+    description: 'Второе ИП для раздельных проектов и приёма прямых оплат',
+    isDefault: false,
+    isActive: true,
+    createdAt: '2026-03-01T00:00:00Z',
+    updatedAt: '2026-03-01T00:00:00Z',
+  },
+  {
+    id: LEGAL_ENTITY_IDS.CASH,
+    companyId: DEFAULT_COMPANY_ID,
+    name: 'Касса и сейф (Наличные)',
+    type: 'cash',
+    taxSystem: 'none',
+    taxRate: 0,
+    vatRate: 0,
+    description: 'Наличный контур (сейф, касса площадки, расчёты на руках)',
+    isDefault: false,
+    isActive: true,
+    createdAt: '2026-03-01T00:00:00Z',
+    updatedAt: '2026-03-01T00:00:00Z',
+  },
+];
 
 export const DEFAULT_TAX_SETTINGS = {
   system: 'usn_income' as const,
@@ -136,6 +207,8 @@ export const INITIAL_ACCOUNTS_SEED: readonly Account[] = [
     currentBalance: 25000,
     currency: 'RUB',
     description: 'Разменная касса барменов на площадке, чаевые, мелкие чеки (лёд, мята)',
+    legalEntityId: LEGAL_ENTITY_IDS.CASH,
+    legalEntityName: 'Касса и сейф (Наличные)',
     isActive: true,
     updatedAt: '2026-09-10T10:00:00Z',
   },
@@ -147,6 +220,8 @@ export const INITIAL_ACCOUNTS_SEED: readonly Account[] = [
     currentBalance: 180000,
     currency: 'RUB',
     description: 'Сейф в офисе: расчёты наличными, гонорары барменов, резерв наличных',
+    legalEntityId: LEGAL_ENTITY_IDS.CASH,
+    legalEntityName: 'Касса и сейф (Наличные)',
     isActive: true,
     updatedAt: '2026-09-10T10:00:00Z',
   },
@@ -158,6 +233,8 @@ export const INITIAL_ACCOUNTS_SEED: readonly Account[] = [
     currentBalance: 450000,
     currency: 'RUB',
     description: 'Расчётный счёт кейтеринга в банке (договоры с юрлицами, оптовые закупки алкоголя)',
+    legalEntityId: LEGAL_ENTITY_IDS.IP_CATERING,
+    legalEntityName: 'ИП «Кейтеринг»',
     isActive: true,
     updatedAt: '2026-09-10T10:00:00Z',
   },
@@ -169,6 +246,8 @@ export const INITIAL_ACCOUNTS_SEED: readonly Account[] = [
     currentBalance: 120000,
     currency: 'RUB',
     description: 'Торговый эквайринг на выезде (терминал на стойке) и резервный расчётный счёт',
+    legalEntityId: LEGAL_ENTITY_IDS.LLC_MAIN,
+    legalEntityName: 'ООО «Ивент Групп»',
     isActive: true,
     updatedAt: '2026-09-10T10:00:00Z',
   },
@@ -180,6 +259,8 @@ export const INITIAL_ACCOUNTS_SEED: readonly Account[] = [
     currentBalance: 65000,
     currency: 'RUB',
     description: 'Личная карта шеф-бармена для мгновенных оплат по СБП и срочных оплат такси',
+    legalEntityId: LEGAL_ENTITY_IDS.IP_PERSONAL,
+    legalEntityName: 'ИП «Личное / Партнёр»',
     isActive: true,
     updatedAt: '2026-09-10T10:00:00Z',
   },

@@ -20,6 +20,7 @@ import {
   EventPaymentMilestone,
   EventBudgetItem,
   EventVendor,
+  LegalEntity,
 } from '../../shared/types.js';
 import { CreateEventDTO, CreateTransactionDTO } from '../../shared/dto.js';
 import { DatabaseState } from '../data/seed.js';
@@ -67,6 +68,12 @@ export interface IFinanceStore {
   getPartnerById(id: string): Promise<Partner | null>;
   savePartner(partner: Omit<Partner, 'createdAt' | 'updatedAt'> & { id?: string }): Promise<Partner>;
   deletePartner(id: string): Promise<boolean>;
+
+  // Legal Entities (Юрлица группы компаний: ООО, ИП, Касса)
+  getLegalEntities(companyId?: string): Promise<LegalEntity[]>;
+  getLegalEntityById(id: string): Promise<LegalEntity | null>;
+  saveLegalEntity(entity: Omit<LegalEntity, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<LegalEntity>;
+  deleteLegalEntity(id: string): Promise<boolean>;
 
   // Events
   getEvents(companyId?: string): Promise<CateringEvent[]>;

@@ -19,8 +19,9 @@ import {
   EventPaymentMilestone,
   EventBudgetItem,
   EventVendor,
+  LegalEntity,
 } from '../../shared/types.js';
-import { DEFAULT_COMPANY_ID } from '../../shared/constants.js';
+import { DEFAULT_COMPANY_ID, INITIAL_LEGAL_ENTITIES_SEED } from '../../shared/constants.js';
 import { createInitialDatabaseState, DatabaseState } from '../data/seed.js';
 import { IFinanceStore, NewEventInput, NewTransactionInput } from './interfaces.js';
 
@@ -66,6 +67,7 @@ export class SupabaseStore implements IFinanceStore {
   private fallbackBudgetItems: EventBudgetItem[] = [];
   private fallbackVendors: EventVendor[] = [];
   private fallbackInvites: CompanyInvite[] = [];
+  private fallbackLegalEntities: LegalEntity[] = JSON.parse(JSON.stringify(INITIAL_LEGAL_ENTITIES_SEED));
 
   private isResilientFallbackNeeded(error: any): boolean {
     if (!error) return false;
@@ -149,6 +151,26 @@ export class SupabaseStore implements IFinanceStore {
       description: row.description || '',
       color: row.color || undefined,
       icon: row.icon || undefined,
+      legalEntityId: row.legal_entity_id || (row as any).legalEntityId || undefined,
+      legalEntityName: row.legal_entity_name || (row as any).legalEntityName || undefined,
+      isActive: row.is_active ?? true,
+      createdAt: row.created_at || new Date().toISOString(),
+      updatedAt: row.updated_at || new Date().toISOString(),
+    };
+  }
+
+  private mapLegalEntity(row: any): LegalEntity {
+    return {
+      id: row.id,
+      companyId: row.company_id || DEFAULT_COMPANY_ID,
+      name: row.name,
+      type: row.type || 'llc',
+      taxSystem: row.tax_system || 'usn_income',
+      taxRate: row.tax_rate != null ? Number(row.tax_rate) : undefined,
+      vatRate: row.vat_rate != null ? Number(row.vat_rate) : undefined,
+      inn: row.inn || undefined,
+      description: row.description || undefined,
+      isDefault: Boolean(row.is_default),
       isActive: row.is_active ?? true,
       createdAt: row.created_at || new Date().toISOString(),
       updatedAt: row.updated_at || new Date().toISOString(),
@@ -222,6 +244,11 @@ export class SupabaseStore implements IFinanceStore {
       partnerName: row.partner_name ?? null,
       vendorId: row.vendor_id ?? null,
       vendorName: row.vendor_name ?? null,
+      legalEntityId: row.legal_entity_id || (row as any).legalEntityId || undefined,
+      legalEntityName: row.legal_entity_name || (row as any).legalEntityName || undefined,
+      hasVat: Boolean(row.has_vat || (row as any).hasVat),
+      vatRate: row.vat_rate != null ? Number(row.vat_rate) : (row as any).vatRate != null ? Number((row as any).vatRate) : undefined,
+      vatAmount: row.vat_amount != null ? Number(row.vat_amount) : (row as any).vatAmount != null ? Number((row as any).vatAmount) : undefined,
       description: row.description || '',
       transactionDate: row.transaction_date,
       isDeleted: Boolean(row.is_deleted),
@@ -744,6 +771,90 @@ export class SupabaseStore implements IFinanceStore {
     if (!existing) return false;
     const { error } = await this.client.from('partners').delete().eq('id', id);
     if (error) throw new Error(error.message);
+    return true;
+  }
+
+  // =========================================================================
+  // LEGAL ENTITIES (Юрлица группы компаний: ООО, ИП, Касса)
+  // =========================================================================
+
+  public async getLegalEntities(companyId?: string): Promise<LegalEntity[]> {
+    const target = companyId || DEFAULT_COMPANY_ID;
+    try {
+      const { data, error } = await this.client.from('legal_entities').select('*').eq('company_id', target);
+      if (error) {
+        return this.fallbackLegalEntities.filter((le) => (le.companyId || DEFAULT_COMPANY_ID) === target);
+      }
+      if (data && data.length > 0) {
+        return data.map((r: any) => this.mapLegalEntity(r));
+      }
+      return this.fallbackLegalEntities.filter((le) => (le.companyId || DEFAULT_COMPANY_ID) === target);
+    } catch {
+      return this.fallbackLegalEntities.filter((le) => (le.companyId || DEFAULT_COMPANY_ID) === target);
+    }
+  }
+
+  public async getLegalEntityById(id: string): Promise<LegalEntity | null> {
+    const list = await this.getLegalEntities();
+    return list.find((le) => le.id === id) || null;
+  }
+
+  public async saveLegalEntity(entityInput: Omit<LegalEntity, 'createdAt' | 'updatedAt'> & { id?: string }): Promise<LegalEntity> {
+    const now = new Date().toISOString();
+    const id = entityInput.id || `le_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const row = {
+      id,
+      company_id: entityInput.companyId || DEFAULT_COMPANY_ID,
+      name: entityInput.name,
+      type: entityInput.type || 'llc',
+      tax_system: entityInput.taxSystem || 'usn_income',
+      tax_rate: entityInput.taxRate ?? null,
+      vat_rate: entityInput.vatRate ?? null,
+      inn: entityInput.inn ?? null,
+      description: entityInput.description ?? '',
+      is_default: entityInput.isDefault ?? false,
+      is_active: entityInput.isActive ?? true,
+      updated_at: now,
+    };
+
+    const existingIdx = this.fallbackLegalEntities.findIndex((le) => le.id === id);
+    const mappedObj: LegalEntity = {
+      id,
+      companyId: row.company_id,
+      name: row.name,
+      type: row.type as any,
+      taxSystem: row.tax_system as any,
+      taxRate: row.tax_rate ?? undefined,
+      vatRate: row.vat_rate ?? undefined,
+      inn: row.inn ?? undefined,
+      description: row.description || undefined,
+      isDefault: row.is_default,
+      isActive: row.is_active,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    if (existingIdx >= 0) {
+      this.fallbackLegalEntities[existingIdx] = mappedObj;
+    } else {
+      this.fallbackLegalEntities.push(mappedObj);
+    }
+
+    try {
+      const { data, error } = await this.client.from('legal_entities').upsert(row).select('*').single();
+      if (!error && data) {
+        return this.mapLegalEntity(data);
+      }
+    } catch {}
+
+    return mappedObj;
+  }
+
+  public async deleteLegalEntity(id: string): Promise<boolean> {
+    this.fallbackLegalEntities = this.fallbackLegalEntities.filter((le) => le.id !== id);
+    try {
+      await this.client.from('legal_entities').delete().eq('id', id);
+    } catch {}
     return true;
   }
 

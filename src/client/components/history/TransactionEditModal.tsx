@@ -16,6 +16,7 @@ import { X, Trash2, AlertCircle } from 'lucide-react';
 import { Transaction, TransactionType } from '../../../shared/types.js';
 import { useFinance } from '../../context/FinanceContext.js';
 import { useAuth } from '../../context/AuthContext.js';
+import { formatRubles } from '../../utils/formatters.js';
 
 interface Props {
   transaction: Transaction | null;
@@ -36,6 +37,8 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
   const [eventId, setEventId] = useState<string>('general');
   const [partnerId, setPartnerId] = useState<string>('');
   const [description, setDescription] = useState<string>('');
+  const [hasVat, setHasVat] = useState<boolean>(false);
+  const [vatRate, setVatRate] = useState<number>(20);
   const [dateTimeStr, setDateTimeStr] = useState<string>('');
   const [initialDateTimeStr, setInitialDateTimeStr] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -53,6 +56,8 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
       setEventId(transaction.eventId || 'general');
       setPartnerId(transaction.partnerId || '');
       setDescription(transaction.description || '');
+      setHasVat(Boolean(transaction.hasVat));
+      setVatRate(transaction.vatRate || 20);
 
       let localIso = '';
       try {
@@ -80,6 +85,8 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
       eventId !== (transaction.eventId || 'general') ||
       partnerId !== (transaction.partnerId || '') ||
       description !== (transaction.description || '') ||
+      hasVat !== Boolean(transaction.hasVat) ||
+      (hasVat && vatRate !== (transaction.vatRate || 20)) ||
       dateTimeStr !== initialDateTimeStr
     )
   );
@@ -169,6 +176,15 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
       categoryId,
       eventId: eventId === 'general' ? null : eventId,
       partnerId: partnerId || null,
+      hasVat: type === 'expense' ? hasVat : undefined,
+      vatRate: type === 'expense' && hasVat ? vatRate : undefined,
+      vatAmount: type === 'expense' && hasVat && amount > 0 ? Math.round((amount * vatRate / (100 + vatRate)) * 100) / 100 : undefined,
+      legalEntityId: type === 'expense'
+        ? accounts.find((a) => a.id === fromAccountId)?.legalEntityId
+        : (type === 'income' ? accounts.find((a) => a.id === toAccountId)?.legalEntityId : undefined),
+      legalEntityName: type === 'expense'
+        ? accounts.find((a) => a.id === fromAccountId)?.legalEntityName
+        : (type === 'income' ? accounts.find((a) => a.id === toAccountId)?.legalEntityName : undefined),
       description: description.trim(),
       transactionDate: parsedIsoDate,
       needsReview: false, // User explicitly reviewed and saved!
@@ -336,6 +352,46 @@ export const TransactionEditModal: React.FC<Props> = ({ transaction, isOpen, onC
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
+            </div>
+          )}
+
+          {/* Incoming VAT for Expense */}
+          {type === 'expense' && (
+            <div
+              style={{
+                background: hasVat ? '#f6f2ea' : 'var(--muted)',
+                border: hasVat ? '1px solid #c5b08e' : '1px solid var(--border)',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                marginBottom: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, color: 'var(--foreground)' }}>
+                  <input
+                    type="checkbox"
+                    checked={hasVat}
+                    onChange={(e) => setHasVat(e.target.checked)}
+                    style={{ width: '15px', height: '15px', accentColor: '#c5b08e', cursor: 'pointer' }}
+                  />
+                  <span>Есть закрывающие документы с НДС (УПД / ЭДО)</span>
+                </label>
+                {hasVat && (
+                  <select
+                    value={vatRate}
+                    onChange={(e) => setVatRate(Number(e.target.value))}
+                    style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px', border: '1px solid #c5b08e', background: '#fff' }}
+                  >
+                    <option value={20}>20%</option>
+                    <option value={10}>10%</option>
+                  </select>
+                )}
+              </div>
+              {hasVat && amount > 0 && (
+                <div style={{ marginTop: '4px', fontSize: '0.72rem', color: '#8c734b' }}>
+                  НДС к вычету: <strong>{formatRubles(Math.round((amount * vatRate / (100 + vatRate)) * 100) / 100)}</strong> (уменьшит итоговый налог ООО к уплате)
+                </div>
+              )}
             </div>
           )}
 

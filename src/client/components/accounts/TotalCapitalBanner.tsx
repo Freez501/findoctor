@@ -6,8 +6,8 @@
  * dynamic account chips, and an account-driven multi-segment liquidity bar.
  */
 
-import React, { useMemo } from 'react';
-import { TrendingUp, Sparkles, ShieldCheck, ArrowUpRight, Landmark } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { TrendingUp, Sparkles, ShieldCheck, ArrowUpRight, Landmark, Info, X } from 'lucide-react';
 import { useAccounts } from '../../hooks/useAccounts.js';
 import { useFinance } from '../../context/FinanceContext.js';
 import { useAuth } from '../../context/AuthContext.js';
@@ -15,9 +15,10 @@ import { calculateTaxReserve } from '../../utils/taxCalculator.js';
 import { formatRubles, formatPercent } from '../../utils/formatters.js';
 
 export const TotalCapitalBanner: React.FC = () => {
+  const [isTaxModalOpen, setIsTaxModalOpen] = useState(false);
   const { accounts, totalBalance, isLoading } = useAccounts();
   const { currentCompany } = useAuth();
-  const { transactions, events } = useFinance();
+  const { transactions, events, legalEntities } = useFinance();
 
   const activeAccounts = accounts.filter((a) => a.isActive !== false);
   const isInitialColdLoad = isLoading && accounts.length === 0;
@@ -27,7 +28,7 @@ export const TotalCapitalBanner: React.FC = () => {
       system: currentCompany?.taxSystem || 'usn_income',
       rate: currentCompany?.taxRate ?? 6,
       applyOnlyToBank: false,
-    }, new Date(), events);
+    }, new Date(), events, legalEntities);
     if (currentQ.taxAmount > 0) return currentQ;
 
     // If current quarter has no transactions yet, check previous quarter (e.g. III кв. where initial seed data lives)
@@ -37,10 +38,10 @@ export const TotalCapitalBanner: React.FC = () => {
       system: currentCompany?.taxSystem || 'usn_income',
       rate: currentCompany?.taxRate ?? 6,
       applyOnlyToBank: false,
-    }, prevDate, events);
+    }, prevDate, events, legalEntities);
 
     return prevQ.taxAmount > 0 ? prevQ : currentQ;
-  }, [transactions, accounts, currentCompany, events]);
+  }, [transactions, accounts, currentCompany, events, legalEntities]);
 
   return (
     <section className="total-capital-banner hero-glow-banner" aria-label="Сводный баланс и ликвидность">
@@ -77,6 +78,9 @@ export const TotalCapitalBanner: React.FC = () => {
 
           {taxResult && taxResult.system !== 'none' && taxResult.taxAmount > 0 && (
             <div
+              onClick={() => setIsTaxModalOpen(true)}
+              role="button"
+              tabIndex={0}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -89,8 +93,10 @@ export const TotalCapitalBanner: React.FC = () => {
                 fontSize: '0.8rem',
                 color: '#d97706',
                 flexWrap: 'wrap',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
               }}
-              title={`Налоговая база за ${taxResult.quarterLabel}: ${formatRubles(taxResult.taxableBase)} (${taxResult.systemLabel})`}
+              title="Нажмите, чтобы открыть подробный расчёт налогов и вычетов НДС по каждому юрлицу группы"
             >
               <Landmark size={14} />
               <span>
@@ -100,6 +106,7 @@ export const TotalCapitalBanner: React.FC = () => {
               <span style={{ color: 'var(--foreground)' }}>
                 Свободный капитал: <strong>{formatRubles(Math.max(0, totalBalance - taxResult.taxAmount))}</strong>
               </span>
+              <Info size={13} style={{ marginLeft: '2px', opacity: 0.8 }} />
             </div>
           )}
         </div>
@@ -212,6 +219,191 @@ export const TotalCapitalBanner: React.FC = () => {
           />
         )}
       </div>
-    </section>
+    
+      {/* Multi-Entity Tax & Deductible VAT Breakdown Modal */}
+      {isTaxModalOpen && taxResult && (
+        <div
+          className="modal-backdrop animate-fade-in"
+          onClick={() => setIsTaxModalOpen(false)}
+          style={{ zIndex: 9999 }}
+        >
+          <div
+            className="settings-modal-dialog"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '640px', width: '94%' }}
+          >
+            <div className="settings-modal-header">
+              <div>
+                <h3 className="settings-modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Landmark size={18} style={{ color: '#d97706' }} />
+                  <span>Налоговый контур группы ({taxResult.quarterLabel})</span>
+                </h3>
+                <p className="settings-modal-subtitle">
+                  Расчёт обязательств по юрлицам с учётом входящего НДС по УПД и спецрежимов
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTaxModalOpen(false)}
+                className="btn-modal-close"
+                title="Закрыть"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '75vh', overflowY: 'auto' }}>
+              {/* Summary 3 KPIs */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+                <div style={{ padding: '12px', background: 'rgba(217, 119, 6, 0.08)', border: '1px solid rgba(217, 119, 6, 0.25)', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '0.72rem', color: '#d97706', fontWeight: 600 }}>Общий резерв налогов</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#d97706', marginTop: '2px' }}>
+                    {formatRubles(taxResult.taxAmount)}
+                  </div>
+                </div>
+
+                <div style={{ padding: '12px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 600 }}>Чистый свободный капитал</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#059669', marginTop: '2px' }}>
+                    {formatRubles(Math.max(0, totalBalance - taxResult.taxAmount))}
+                  </div>
+                </div>
+
+                <div style={{ padding: '12px', background: '#f6f2ea', border: '1px solid #c5b08e', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '0.72rem', color: '#8c734b', fontWeight: 600 }}>Входящий НДС к вычету</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#8c734b', marginTop: '2px' }}>
+                    {formatRubles(taxResult.totalVatIncoming || 0)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Entities Breakdown Cards */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--foreground)' }}>
+                  Разбивка по компаниям контура:
+                </div>
+
+                {(taxResult.entitiesBreakdown || []).map((ent) => {
+                  const isLlc = ent.type === 'llc';
+                  const isIp = ent.type === 'sole_proprietor' || ent.type === 'ip';
+                  const isCash = ent.type === 'cash';
+
+                  return (
+                    <div
+                      key={ent.entityId}
+                      style={{
+                        padding: '14px',
+                        borderRadius: '10px',
+                        background: 'var(--muted)',
+                        border: '1px solid var(--border)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span
+                            style={{
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              padding: '2px 7px',
+                              borderRadius: '4px',
+                              background: isLlc ? 'rgba(37, 99, 235, 0.12)' : isIp ? '#f6f2ea' : 'rgba(16, 185, 129, 0.12)',
+                              color: isLlc ? '#2563eb' : isIp ? '#8c734b' : '#10b981',
+                              border: isIp ? '1px solid #c5b08e' : undefined,
+                            }}
+                          >
+                            {isLlc ? 'ООО' : isIp ? 'ИП' : isCash ? 'Касса' : 'Юрлицо'}
+                          </span>
+                          <strong style={{ fontSize: '0.9rem', color: 'var(--foreground)' }}>{ent.entityName}</strong>
+                        </div>
+
+                        <span style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>
+                          {ent.taxSystemLabel}
+                        </span>
+                      </div>
+
+                      {/* Detail metrics */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', fontSize: '0.75rem', marginTop: '4px' }}>
+                        <div>
+                          <span style={{ color: 'var(--muted-foreground)' }}>Поступления: </span>
+                          <strong style={{ color: 'var(--foreground)' }}>{formatRubles(ent.income)}</strong>
+                        </div>
+                        <div>
+                          <span style={{ color: 'var(--muted-foreground)' }}>Расходы: </span>
+                          <strong style={{ color: 'var(--foreground)' }}>{formatRubles(ent.expense)}</strong>
+                        </div>
+
+                        {ent.taxSystem === 'osno' && (
+                          <>
+                            <div>
+                              <span style={{ color: 'var(--muted-foreground)' }}>Исходящий НДС: </span>
+                              <strong>{formatRubles(ent.vatOutgoing)}</strong>
+                            </div>
+                            <div>
+                              <span style={{ color: 'var(--muted-foreground)' }}>Вычет НДС (УПД): </span>
+                              <strong style={{ color: '#059669' }}>-{formatRubles(ent.vatIncoming)}</strong>
+                            </div>
+                            <div>
+                              <span style={{ color: 'var(--muted-foreground)' }}>НДС к уплате: </span>
+                              <strong style={{ color: '#d97706' }}>{formatRubles(ent.vatNet)}</strong>
+                            </div>
+                            <div>
+                              <span style={{ color: 'var(--muted-foreground)' }}>Налог на прибыль: </span>
+                              <strong>{formatRubles(ent.taxAmount)}</strong>
+                            </div>
+                          </>
+                        )}
+
+                        {(ent.taxSystem === 'usn_income_vat5' || ent.taxSystem === 'usn_income_vat7') && (
+                          <>
+                            <div>
+                              <span style={{ color: 'var(--muted-foreground)' }}>НДС ({ent.taxSystem === 'usn_income_vat5' ? '5%' : '7%'}): </span>
+                              <strong style={{ color: '#d97706' }}>{formatRubles(ent.vatNet)}</strong>
+                            </div>
+                            <div>
+                              <span style={{ color: 'var(--muted-foreground)' }}>УСН (6%): </span>
+                              <strong>{formatRubles(ent.taxAmount)}</strong>
+                            </div>
+                          </>
+                        )}
+
+                        {ent.taxSystem === 'usn_income' && (
+                          <div>
+                            <span style={{ color: 'var(--muted-foreground)' }}>Налог УСН: </span>
+                            <strong style={{ color: '#d97706' }}>{formatRubles(ent.taxAmount)}</strong>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Total due for this entity */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', borderTop: '1px solid var(--border)', paddingTop: '6px', marginTop: '2px' }}>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--muted-foreground)' }}>Итого к уплате:</span>
+                        <strong style={{ fontSize: '0.92rem', color: ent.totalDue > 0 ? '#d97706' : '#059669' }}>
+                          {formatRubles(ent.totalDue)}
+                        </strong>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="settings-modal-footer">
+              <div />
+              <button
+                type="button"
+                onClick={() => setIsTaxModalOpen(false)}
+                className="btn-form-submit"
+                style={{ padding: '8px 20px' }}
+              >
+                Понятно
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+</section>
   );
 };

@@ -63,10 +63,35 @@ export type UserRole = 'super_admin' | 'owner' | 'admin' | 'accountant' | 'staff
  * - none: Pure management accounting without automated tax estimates
  * - usn_income: УСН «Доходы» (standard 6%, or regional 1-6%)
  * - usn_income_expense: УСН «Доходы минус Расходы» (standard 15%, or regional 5-15%)
+ * - usn_income_vat5: УСН «Доходы» 6% + 5% НДС (без права вычета входящего НДС, 2025)
+ * - usn_income_vat7: УСН «Доходы» 6% + 7% НДС (без права вычета входящего НДС, 2025)
+ * - osno: ОСНО (НДС 20% + Налог на прибыль 20%) с правом вычета входящего НДС
  * - npd: Самозанятость / НПД (4% from individuals, 6% from legal entities)
  * - custom: Custom user-defined rate (%)
  */
-export type TaxSystem = 'none' | 'usn_income' | 'usn_income_expense' | 'npd' | 'custom';
+export type TaxSystem = 'none' | 'usn_income' | 'usn_income_expense' | 'usn_income_vat5' | 'usn_income_vat7' | 'osno' | 'npd' | 'custom';
+
+export type LegalEntityType = 'llc' | 'sole_proprietor' | 'cash';
+export type LegalEntityTaxSystem = TaxSystem;
+
+/**
+ * Legal Entity within the business group (e.g. ООО «Ивент Групп», ИП «Кейтеринг», ИП Личное, Касса)
+ */
+export interface LegalEntity {
+  id: string;
+  companyId?: string;
+  name: string;
+  type: LegalEntityType;
+  taxSystem: LegalEntityTaxSystem;
+  taxRate?: number;
+  vatRate?: number;
+  inn?: string;
+  description?: string;
+  isDefault?: boolean;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 export interface CompanyTaxSettings {
   system: TaxSystem;
@@ -204,6 +229,10 @@ export interface Account {
   color?: string;
   /** Visual icon identifier (e.g. banknote, coins, landmark, credit-card, smartphone, wallet, shield) */
   icon?: string;
+  /** Associated legal entity identifier (e.g. 'le_llc', 'le_ip1') */
+  legalEntityId?: string;
+  /** Human-readable legal entity name cache */
+  legalEntityName?: string;
   /** Author who created this record */
   createdBy?: AuditUser;
   /** Author who last updated this record */
@@ -250,6 +279,8 @@ export interface CateringEvent {
   taxRate?: number;
   /** Legal entity conducting the contract (e.g. 'ООО Ивент Про', 'ИП Смирнов') */
   legalEntity?: string;
+  /** Associated legal entity identifier from directory (e.g. 'le_llc', 'le_ip1') */
+  legalEntityId?: string;
   /** Author who created this record */
   createdBy?: AuditUser;
   /** Author who last updated this record */
@@ -324,6 +355,16 @@ export interface Transaction {
   vendorId?: string | null;
   /** Vendor display name cache */
   vendorName?: string | null;
+  /** Associated legal entity identifier (e.g. 'le_llc', 'le_ip1', 'le_cash') */
+  legalEntityId?: string | null;
+  /** Human-readable legal entity name cache */
+  legalEntityName?: string | null;
+  /** Whether expense includes input VAT with formal invoice / UPD documents */
+  hasVat?: boolean;
+  /** Applied VAT rate in % (e.g. 20, 10, 5, 7) */
+  vatRate?: number | null;
+  /** Calculated input VAT amount in rubles (deductible for OSNO) */
+  vatAmount?: number | null;
   /** Freeform commentary or receipt memo */
   description?: string;
   /** Transaction date and time (ISO 8601 string) */
@@ -350,6 +391,7 @@ export interface TransactionFilter {
   accountId?: string;
   eventId?: string;
   partnerId?: string;
+  legalEntityId?: string;
   direction?: TransactionDirection;
   type?: TransactionType;
   categoryId?: string;

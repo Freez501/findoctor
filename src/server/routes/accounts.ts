@@ -46,7 +46,7 @@ export function createAccountsRouter(financeService?: FinanceService): Router {
 
   router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { name, type, initialBalance, description, color, icon } = req.body;
+      const { name, type, initialBalance, description, color, icon, legalEntityId, legalEntityName } = req.body;
       if (!name || typeof name !== 'string' || !name.trim()) {
         res.status(400).json({ error: 'Название счёта обязательно', statusCode: 400 });
         return;
@@ -58,6 +58,8 @@ export function createAccountsRouter(financeService?: FinanceService): Router {
         description: typeof description === 'string' ? description.trim() : '',
         color: typeof color === 'string' ? color.trim() : undefined,
         icon: typeof icon === 'string' ? icon.trim() : undefined,
+        legalEntityId: typeof legalEntityId === 'string' ? legalEntityId : undefined,
+        legalEntityName: typeof legalEntityName === 'string' ? legalEntityName : undefined,
       });
       res.status(201).json({ account });
     } catch (err) {
@@ -78,7 +80,7 @@ export function createAccountsRouter(financeService?: FinanceService): Router {
   router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const { name, description, isActive, type, currentBalance, initialBalance, color, icon } = req.body;
+      const { name, description, isActive, type, currentBalance, initialBalance, color, icon, legalEntityId, legalEntityName } = req.body;
       const account = await service.saveAccount({
         id,
         name: typeof name === 'string' ? name.trim() : undefined,
@@ -87,6 +89,8 @@ export function createAccountsRouter(financeService?: FinanceService): Router {
         isActive: typeof isActive === 'boolean' ? isActive : undefined,
         color: typeof color === 'string' ? color.trim() : undefined,
         icon: typeof icon === 'string' ? icon.trim() : undefined,
+        legalEntityId: legalEntityId !== undefined ? (legalEntityId || undefined) : undefined,
+        legalEntityName: legalEntityName !== undefined ? (legalEntityName || undefined) : undefined,
         currentBalance: typeof currentBalance === 'number' && !isNaN(currentBalance) ? currentBalance : undefined,
         initialBalance: typeof initialBalance === 'number' && !isNaN(initialBalance) ? initialBalance : undefined,
       });

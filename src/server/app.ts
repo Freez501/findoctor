@@ -24,6 +24,7 @@ import { createCategoriesRouter } from './routes/categories.js';
 import { createTransactionsRouter } from './routes/transactions.js';
 import { createAnalyticsRouter } from './routes/analytics.js';
 import { createPartnersRouter } from './routes/partners.js';
+import { createLegalEntitiesRouter } from './routes/legalEntities.js';
 import { createTelegramRouter } from './routes/telegram.js';
 import { createSystemRouter } from './routes/system.js';
 import { createCompaniesRouter } from './routes/companies.js';
@@ -113,6 +114,7 @@ export function createApp(options?: AppOptions): Express {
   app.use('/api/transactions', createTransactionsRouter(financeService));
   app.use('/api/analytics', createAnalyticsRouter(analyticsService));
   app.use('/api/partners', createPartnersRouter(financeService));
+  app.use('/api/legal-entities', createLegalEntitiesRouter(financeService));
   app.use('/api/telegram', createTelegramRouter(telegramService));
   app.use('/api/system', createSystemRouter(store));
   app.use('/api/companies', createCompaniesRouter(store));

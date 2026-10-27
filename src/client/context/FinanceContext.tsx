@@ -18,6 +18,7 @@ import {
   CateringEvent,
   Partner,
   Transaction,
+  LegalEntity,
 } from '../../shared/types.js';
 import { CreateTransactionDTO, CreateEventDTO, UpdateTransactionDTO } from '../../shared/dto.js';
 import { api } from '../api/apiClient.js';
@@ -37,6 +38,7 @@ export interface FinanceContextType {
   totalBalance: number;
   categories: Category[];
   partners: Partner[];
+  legalEntities: LegalEntity[];
   events: CateringEvent[];
   transactions: Transaction[];
   botStatus: BotStatus | null;
@@ -49,9 +51,13 @@ export interface FinanceContextType {
   refreshAccounts: () => Promise<void>;
   refreshCategories: () => Promise<void>;
   refreshPartners: () => Promise<void>;
+  refreshLegalEntities: () => Promise<void>;
   refreshEvents: () => Promise<void>;
   refreshTransactions: () => Promise<void>;
   refreshBotStatus: () => Promise<void>;
+  createLegalEntity: (data: Partial<LegalEntity> & { name: string }) => Promise<{ success: boolean; legalEntity?: LegalEntity; error?: string }>;
+  updateLegalEntity: (id: string, data: Partial<LegalEntity>) => Promise<{ success: boolean; legalEntity?: LegalEntity; error?: string }>;
+  deleteLegalEntity: (id: string) => Promise<{ success: boolean; error?: string }>;
   createTransaction: (dto: CreateTransactionDTO) => Promise<{ success: boolean; transaction?: Transaction; error?: string }>;
   updateTransaction: (id: string, updates: UpdateTransactionDTO) => Promise<{ success: boolean; transaction?: Transaction; error?: string }>;
   batchImportTransactions: (items: CreateTransactionDTO[]) => Promise<{ success: boolean; count?: number; error?: string }>;
@@ -139,6 +145,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   );
   const [categories, setCategories] = useState<Category[]>(() => initialSnap?.categories || []);
   const [partners, setPartners] = useState<Partner[]>(() => initialSnap?.partners || []);
+  const [legalEntities, setLegalEntities] = useState<LegalEntity[]>([]);
   const [events, setEvents] = useState<CateringEvent[]>(() => initialSnap?.events || []);
   const [transactions, setTransactions] = useState<Transaction[]>(() => initialSnap?.transactions || []);
   const [botStatus, setBotStatus] = useState<BotStatus | null>(null);
@@ -221,6 +228,15 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, []);
 
+  const refreshLegalEntities = useCallback(async () => {
+    try {
+      const res = await api.getLegalEntities();
+      setLegalEntities(res.legalEntities);
+    } catch (err: any) {
+      if (!import.meta.env.PROD) console.error('Failed to load legal entities:', err);
+    }
+  }, []);
+
   const refreshEvents = useCallback(async () => {
     try {
       const res = await api.getEvents();
@@ -262,13 +278,14 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setIsLoading(true);
     setError(null);
     try {
-      const [accRes, catRes, evRes, txRes, botRes, partRes] = await Promise.allSettled([
+      const [accRes, catRes, evRes, txRes, botRes, partRes, leRes] = await Promise.allSettled([
         api.getAccounts(),
         api.getCategories(),
         api.getEvents(),
         api.getTransactions({ includeDeleted: false }),
         api.getTelegramStatus(),
         api.getPartners(),
+        api.getLegalEntities(),
       ]);
 
       if (accRes.status === 'fulfilled') {
@@ -289,6 +306,9 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (partRes.status === 'fulfilled') {
         setPartners(partRes.value.partners);
       }
+      if (leRes.status === 'fulfilled') {
+        setLegalEntities(leRes.value.legalEntities);
+      }
 
       setIsInitialLoaded(true);
     } catch (err: any) {
@@ -304,6 +324,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setEvents([]);
     setCategories([]);
     setPartners([]);
+    setLegalEntities([]);
     setBotStatus(null);
     setIsInitialLoaded(false);
     if (typeof window !== 'undefined') {
@@ -664,6 +685,64 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     [addToast, refreshTransactions, refreshAccounts]
   );
 
+  // 4.1. Legal Entities management
+  const createLegalEntity = useCallback(
+    async (data: Partial<LegalEntity> & { name: string }): Promise<{ success: boolean; legalEntity?: LegalEntity; error?: string }> => {
+      try {
+        const res = await api.createLegalEntity(data);
+        if (res.legalEntity) {
+          setLegalEntities((cur) => [...cur, res.legalEntity]);
+          addToast(`Юрлицо «${res.legalEntity.name}» добавлено`, 'success');
+          return { success: true, legalEntity: res.legalEntity };
+        }
+        return { success: false, error: 'Не удалось сохранить юрлицо' };
+      } catch (err: any) {
+        const msg = err.message || 'Ошибка создания юрлица';
+        addToast(msg, 'error');
+        return { success: false, error: msg };
+      }
+    },
+    [addToast]
+  );
+
+  const updateLegalEntity = useCallback(
+    async (id: string, data: Partial<LegalEntity>): Promise<{ success: boolean; legalEntity?: LegalEntity; error?: string }> => {
+      try {
+        const res = await api.updateLegalEntity(id, data);
+        if (res.legalEntity) {
+          setLegalEntities((cur) => cur.map((le) => (le.id === id ? res.legalEntity : le)));
+          addToast(`Юрлицо «${res.legalEntity.name}» обновлено`, 'success');
+          return { success: true, legalEntity: res.legalEntity };
+        }
+        return { success: false, error: 'Не удалось обновить юрлицо' };
+      } catch (err: any) {
+        const msg = err.message || 'Ошибка обновления юрлица';
+        addToast(msg, 'error');
+        return { success: false, error: msg };
+      }
+    },
+    [addToast]
+  );
+
+  const deleteLegalEntity = useCallback(
+    async (id: string): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const res = await api.deleteLegalEntity(id);
+        if (res.success) {
+          setLegalEntities((cur) => cur.filter((le) => le.id !== id));
+          addToast('Юрлицо удалено', 'info');
+          return { success: true };
+        }
+        return { success: false, error: 'Не удалось удалить юрлицо' };
+      } catch (err: any) {
+        const msg = err.message || 'Ошибка удаления юрлица';
+        addToast(msg, 'error');
+        return { success: false, error: msg };
+      }
+    },
+    [addToast]
+  );
+
   // 5. Reset Demo Data
   const resetDemoData = useCallback(async (): Promise<boolean> => {
     setIsLoading(true);
@@ -708,6 +787,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       totalBalance,
       categories,
       partners,
+      legalEntities,
       events,
       transactions,
       botStatus,
@@ -718,9 +798,13 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       refreshAccounts,
       refreshCategories,
       refreshPartners,
+      refreshLegalEntities,
       refreshEvents,
       refreshTransactions,
       refreshBotStatus,
+      createLegalEntity,
+      updateLegalEntity,
+      deleteLegalEntity,
       createTransaction,
       updateTransaction,
       batchImportTransactions,
@@ -743,6 +827,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       totalBalance,
       categories,
       partners,
+      legalEntities,
       events,
       transactions,
       botStatus,
@@ -753,9 +838,13 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       refreshAccounts,
       refreshCategories,
       refreshPartners,
+      refreshLegalEntities,
       refreshEvents,
       refreshTransactions,
       refreshBotStatus,
+      createLegalEntity,
+      updateLegalEntity,
+      deleteLegalEntity,
       createTransaction,
       updateTransaction,
       batchImportTransactions,

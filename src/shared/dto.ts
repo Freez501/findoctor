@@ -23,6 +23,38 @@ import {
 export type { ParsedStatementItem };
 
 // ==========================================
+// 0. LEGAL ENTITIES DTOS
+// ==========================================
+
+export interface GetLegalEntitiesResponseDTO {
+  legalEntities: import('./types.js').LegalEntity[];
+}
+
+export interface CreateLegalEntityDTO {
+  name: string;
+  type: import('./types.js').LegalEntityType;
+  taxSystem: import('./types.js').LegalEntityTaxSystem;
+  taxRate?: number;
+  vatRate?: number;
+  inn?: string;
+  description?: string;
+  isDefault?: boolean;
+  companyId?: string;
+}
+
+export interface UpdateLegalEntityDTO {
+  name?: string;
+  type?: import('./types.js').LegalEntityType;
+  taxSystem?: import('./types.js').LegalEntityTaxSystem;
+  taxRate?: number;
+  vatRate?: number;
+  inn?: string;
+  description?: string;
+  isDefault?: boolean;
+  isActive?: boolean;
+}
+
+// ==========================================
 // 1. ACCOUNTS DTOS
 // ==========================================
 
@@ -57,6 +89,7 @@ export interface CreateEventDTO {
   taxSystem?: TaxSystem;
   taxRate?: number;
   legalEntity?: string;
+  legalEntityId?: string;
   companyId?: string;
   createdBy?: string;
   updatedBy?: string;
@@ -111,6 +144,16 @@ export interface CreateTransactionDTO {
   vendorId?: string | null;
   /** Vendor name */
   vendorName?: string | null;
+  /** Legal entity ID */
+  legalEntityId?: string | null;
+  /** Legal entity name */
+  legalEntityName?: string | null;
+  /** Whether expense has formal invoice with deductible input VAT */
+  hasVat?: boolean;
+  /** Applied VAT rate (e.g. 20, 10, 5, 7) */
+  vatRate?: number | null;
+  /** Calculated input VAT amount */
+  vatAmount?: number | null;
   /** Optional transaction memo or description */
   description?: string;
   /** ISO 8601 date string (optional, defaults to current time) */
@@ -140,6 +183,11 @@ export interface UpdateTransactionDTO {
   partnerName?: string | null;
   vendorId?: string | null;
   vendorName?: string | null;
+  legalEntityId?: string | null;
+  legalEntityName?: string | null;
+  hasVat?: boolean;
+  vatRate?: number | null;
+  vatAmount?: number | null;
   description?: string;
   transactionDate?: string;
   needsReview?: boolean;
@@ -340,6 +388,11 @@ export function validateCreateTransactionDTO(input: unknown): ValidationResult<C
       toAccountId: payload.toAccountId || null,
       categoryId: payload.categoryId!.trim(),
       eventId: payload.eventId || null,
+      legalEntityId: payload.legalEntityId || null,
+      legalEntityName: payload.legalEntityName || null,
+      hasVat: Boolean(payload.hasVat),
+      vatRate: payload.vatRate !== undefined && payload.vatRate !== null ? Number(payload.vatRate) : null,
+      vatAmount: payload.vatAmount !== undefined && payload.vatAmount !== null ? Number(payload.vatAmount) : null,
       description: payload.description ? payload.description.trim() : '',
       transactionDate: payload.transactionDate || new Date().toISOString(),
     },
@@ -402,6 +455,7 @@ export function validateCreateEventDTO(input: unknown): ValidationResult<CreateE
       taxSystem: payload.taxSystem,
       taxRate: typeof payload.taxRate === 'number' ? payload.taxRate : undefined,
       legalEntity: payload.legalEntity ? payload.legalEntity.trim() : undefined,
+      legalEntityId: payload.legalEntityId ? payload.legalEntityId.trim() : undefined,
     },
   };
 }

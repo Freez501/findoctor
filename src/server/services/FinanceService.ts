@@ -12,7 +12,7 @@
 
 import { IFinanceStore } from '../storage/interfaces.js';
 import { getStorageInstance } from '../storage/factory.js';
-import { Account, Category, Transaction, TransactionFilter, TransactionType, Partner, TransactionDirection } from '../../shared/types.js';
+import { Account, Category, Transaction, TransactionFilter, TransactionType, Partner, LegalEntity, TransactionDirection } from '../../shared/types.js';
 import { CreateTransactionDTO } from '../../shared/dto.js';
 import {
   DEFAULT_EXPENSE_CATEGORY_ID,
@@ -127,6 +127,22 @@ export class FinanceService {
 
   public async deletePartner(id: string): Promise<boolean> {
     return this.store.deletePartner(id);
+  }
+
+  public async getLegalEntities(companyId?: string): Promise<LegalEntity[]> {
+    return this.store.getLegalEntities(companyId);
+  }
+
+  public async getLegalEntityById(id: string): Promise<LegalEntity | null> {
+    return this.store.getLegalEntityById(id);
+  }
+
+  public async saveLegalEntity(entity: Omit<LegalEntity, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<LegalEntity> {
+    return this.store.saveLegalEntity(entity);
+  }
+
+  public async deleteLegalEntity(id: string): Promise<boolean> {
+    return this.store.deleteLegalEntity(id);
   }
 
   public async saveCategory(category: Partial<Category> & { id: string }): Promise<Category> {

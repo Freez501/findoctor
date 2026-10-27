@@ -20,6 +20,7 @@ import {
   EventPaymentMilestone,
   EventBudgetItem,
   EventVendor,
+  LegalEntity,
 } from '../../shared/types.js';
 import { DEFAULT_COMPANY_ID } from '../../shared/constants.js';
 import { createInitialDatabaseState, DatabaseState } from '../data/seed.js';
@@ -338,6 +339,8 @@ export class InMemoryStore implements IFinanceStore {
     if (accountInput.isActive !== undefined) acc.isActive = accountInput.isActive;
     if (accountInput.color !== undefined) acc.color = accountInput.color;
     if (accountInput.icon !== undefined) acc.icon = accountInput.icon;
+    if (accountInput.legalEntityId !== undefined) acc.legalEntityId = accountInput.legalEntityId;
+    if (accountInput.legalEntityName !== undefined) acc.legalEntityName = accountInput.legalEntityName;
     if (accountInput.currentBalance !== undefined) {
       acc.currentBalance = Math.round(accountInput.currentBalance * 100) / 100;
     }
@@ -361,6 +364,8 @@ export class InMemoryStore implements IFinanceStore {
       description: accountInput.description || '',
       color: accountInput.color,
       icon: accountInput.icon,
+      legalEntityId: accountInput.legalEntityId,
+      legalEntityName: accountInput.legalEntityName,
       companyId: accountInput.companyId || DEFAULT_COMPANY_ID,
       isActive: accountInput.isActive ?? true,
       createdAt: now,
@@ -426,6 +431,73 @@ export class InMemoryStore implements IFinanceStore {
     const idx = this.state.partners.findIndex((p) => p.id === id);
     if (idx === -1) return false;
     this.state.partners.splice(idx, 1);
+    return true;
+  }
+
+  // =========================================================================
+  // LEGAL ENTITIES (Юрлица группы компаний)
+  // =========================================================================
+
+  public async getLegalEntities(companyId?: string): Promise<LegalEntity[]> {
+    const target = companyId || DEFAULT_COMPANY_ID;
+    if (!this.state.legalEntities) {
+      this.state.legalEntities = [];
+    }
+    return clone(this.state.legalEntities.filter((le) => (le.companyId || DEFAULT_COMPANY_ID) === target));
+  }
+
+  public async getLegalEntityById(id: string): Promise<LegalEntity | null> {
+    if (!this.state.legalEntities) this.state.legalEntities = [];
+    const found = this.state.legalEntities.find((le) => le.id === id);
+    return found ? clone(found) : null;
+  }
+
+  public async saveLegalEntity(entityInput: Omit<LegalEntity, 'createdAt' | 'updatedAt'> & { id?: string }): Promise<LegalEntity> {
+    const now = new Date().toISOString();
+    if (!this.state.legalEntities) {
+      this.state.legalEntities = [];
+    }
+    const existing = entityInput.id ? this.state.legalEntities.find((le) => le.id === entityInput.id) : null;
+    if (existing) {
+      existing.name = entityInput.name;
+      existing.type = entityInput.type || existing.type;
+      existing.taxSystem = entityInput.taxSystem || existing.taxSystem;
+      if (entityInput.taxRate !== undefined) existing.taxRate = entityInput.taxRate;
+      if (entityInput.vatRate !== undefined) existing.vatRate = entityInput.vatRate;
+      if (entityInput.inn !== undefined) existing.inn = entityInput.inn;
+      if (entityInput.description !== undefined) existing.description = entityInput.description;
+      if (entityInput.isDefault !== undefined) existing.isDefault = entityInput.isDefault;
+      if (entityInput.companyId !== undefined) existing.companyId = entityInput.companyId;
+      existing.isActive = entityInput.isActive ?? existing.isActive;
+      existing.updatedAt = now;
+      return clone(existing);
+    } else {
+      const id = entityInput.id || `le_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const newEntity: LegalEntity = {
+        id,
+        companyId: entityInput.companyId || DEFAULT_COMPANY_ID,
+        name: entityInput.name,
+        type: entityInput.type || 'llc',
+        taxSystem: entityInput.taxSystem || 'usn_income',
+        taxRate: entityInput.taxRate,
+        vatRate: entityInput.vatRate,
+        inn: entityInput.inn,
+        description: entityInput.description,
+        isDefault: entityInput.isDefault ?? false,
+        isActive: entityInput.isActive ?? true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      this.state.legalEntities.push(newEntity);
+      return clone(newEntity);
+    }
+  }
+
+  public async deleteLegalEntity(id: string): Promise<boolean> {
+    if (!this.state.legalEntities) return false;
+    const idx = this.state.legalEntities.findIndex((le) => le.id === id);
+    if (idx === -1) return false;
+    this.state.legalEntities.splice(idx, 1);
     return true;
   }
 
@@ -765,6 +837,9 @@ export class InMemoryStore implements IFinanceStore {
       if (filter.partnerId) {
         result = result.filter((tx) => tx.partnerId === filter.partnerId);
       }
+      if (filter.legalEntityId) {
+        result = result.filter((tx) => tx.legalEntityId === filter.legalEntityId);
+      }
       if (filter.direction) {
         result = result.filter((tx) => tx.direction === filter.direction);
       }
@@ -805,6 +880,26 @@ export class InMemoryStore implements IFinanceStore {
       ? txInput.id
       : `tx-${Date.now()}-${++globalTxCounter}-${Math.random().toString(36).substring(2, 9)}`;
 
+    let legalEntityId = (txInput as any).legalEntityId || null;
+    let legalEntityName = (txInput as any).legalEntityName || null;
+    if (!legalEntityId) {
+      const accId = txInput.fromAccountId || txInput.toAccountId;
+      if (accId) {
+        const acc = this.state.accounts.find((a) => a.id === accId);
+        if (acc?.legalEntityId) {
+          legalEntityId = acc.legalEntityId;
+          legalEntityName = acc.legalEntityName || null;
+        }
+      }
+    }
+
+    const hasVat = Boolean((txInput as any).hasVat);
+    const vatRate = (txInput as any).vatRate !== undefined && (txInput as any).vatRate !== null ? Number((txInput as any).vatRate) : (hasVat ? 20 : null);
+    let vatAmount = (txInput as any).vatAmount !== undefined && (txInput as any).vatAmount !== null ? Number((txInput as any).vatAmount) : null;
+    if (hasVat && vatRate && vatAmount === null) {
+      vatAmount = Math.round((Number(txInput.amount) * vatRate / (100 + vatRate)) * 100) / 100;
+    }
+
     const newTx: Transaction = {
       id: txId,
       type: txInput.type,
@@ -818,6 +913,11 @@ export class InMemoryStore implements IFinanceStore {
       partnerName: (txInput as any).partnerName ?? null,
       vendorId: (txInput as any).vendorId ?? null,
       vendorName: (txInput as any).vendorName ?? null,
+      legalEntityId,
+      legalEntityName,
+      hasVat,
+      vatRate,
+      vatAmount,
       description: txInput.description ?? '',
       transactionDate: txInput.transactionDate || now,
       companyId: (txInput as any).companyId || DEFAULT_COMPANY_ID,
@@ -860,6 +960,11 @@ export class InMemoryStore implements IFinanceStore {
     if (updates.eventId !== undefined) tx.eventId = updates.eventId;
     if (updates.partnerId !== undefined) tx.partnerId = updates.partnerId;
     if (updates.partnerName !== undefined) tx.partnerName = updates.partnerName;
+    if (updates.legalEntityId !== undefined) tx.legalEntityId = updates.legalEntityId;
+    if (updates.legalEntityName !== undefined) tx.legalEntityName = updates.legalEntityName;
+    if (updates.hasVat !== undefined) tx.hasVat = updates.hasVat;
+    if (updates.vatRate !== undefined) tx.vatRate = updates.vatRate;
+    if (updates.vatAmount !== undefined) tx.vatAmount = updates.vatAmount;
     if (updates.description !== undefined) tx.description = updates.description;
     if (updates.transactionDate !== undefined) tx.transactionDate = updates.transactionDate;
     if (updates.needsReview !== undefined) tx.needsReview = updates.needsReview;
