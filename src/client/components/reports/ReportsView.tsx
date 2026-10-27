@@ -335,7 +335,7 @@ export const ReportsView: React.FC = () => {
           onClick={() => setActiveTab('cashflow')}
           className={`reports-tab-item ${activeTab === 'cashflow' ? 'active' : ''}`}
         >
-          <Wallet size={16} />
+          <Wallet size={15} />
           <span>1. ДДС (Cash Flow)</span>
         </button>
         <button
@@ -343,7 +343,7 @@ export const ReportsView: React.FC = () => {
           onClick={() => setActiveTab('pnl')}
           className={`reports-tab-item ${activeTab === 'pnl' ? 'active' : ''}`}
         >
-          <TrendingUp size={16} />
+          <TrendingUp size={15} />
           <span>2. ОПиУ (P&L)</span>
         </button>
         <button
@@ -351,32 +351,32 @@ export const ReportsView: React.FC = () => {
           onClick={() => setActiveTab('economics')}
           className={`reports-tab-item ${activeTab === 'economics' ? 'active' : ''}`}
         >
-          <PieChart size={16} />
-          <span>3. Маржинальность проектов</span>
+          <PieChart size={15} />
+          <span>3. Маржа проектов</span>
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('balance')}
           className={`reports-tab-item ${activeTab === 'balance' ? 'active' : ''}`}
         >
-          <Scale size={16} />
-          <span>4. Управленческий баланс</span>
+          <Scale size={15} />
+          <span>4. Баланс</span>
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('payroll')}
           className={`reports-tab-item ${activeTab === 'payroll' ? 'active' : ''}`}
         >
-          <Users size={16} />
-          <span>5. Ведомость подрядчиков</span>
+          <Users size={15} />
+          <span>5. Подрядчики</span>
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('taxes')}
           className={`reports-tab-item ${activeTab === 'taxes' ? 'active' : ''}`}
         >
-          <Landmark size={16} />
-          <span>6. Налоги и вычет НДС</span>
+          <Landmark size={15} />
+          <span>6. Налоги и НДС</span>
         </button>
       </div>
 
@@ -932,18 +932,18 @@ export const ReportsView: React.FC = () => {
           </div>
 
           <div className="statement-table-wrapper">
-            <table className="statement-table">
+            <table className="statement-table" style={{ minWidth: '940px' }}>
               <thead>
                 <tr>
-                  <th>Юрлицо / Контур</th>
-                  <th>Режим налогообложения</th>
-                  <th className="num-col">Выручка</th>
-                  <th className="num-col">Расходы</th>
-                  <th className="num-col">Исходящий НДС</th>
-                  <th className="num-col">Вычет НДС (по УПД)</th>
-                  <th className="num-col">НДС к уплате</th>
-                  <th className="num-col">Налог (УСН / Прибыль)</th>
-                  <th className="num-col">Итого к уплате</th>
+                  <th style={{ minWidth: '160px' }}>Юрлицо / Контур</th>
+                  <th style={{ minWidth: '170px' }}>Режим налогообложения</th>
+                  <th className="num-col" style={{ minWidth: '95px' }}>Выручка</th>
+                  <th className="num-col" style={{ minWidth: '95px' }}>Расходы</th>
+                  <th className="num-col" style={{ minWidth: '105px' }}>Исходящий НДС</th>
+                  <th className="num-col" style={{ minWidth: '120px' }}>Вычет НДС (УПД)</th>
+                  <th className="num-col" style={{ minWidth: '100px' }}>НДС к уплате</th>
+                  <th className="num-col" style={{ minWidth: '110px' }}>Налог (УСН/Прибыль)</th>
+                  <th className="num-col" style={{ minWidth: '105px' }}>Итого налог</th>
                 </tr>
               </thead>
               <tbody>
