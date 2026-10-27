@@ -1,98 +1,262 @@
 /* ========================================================================= */
-/* Compact Transaction Rows                                                  */
+/* Structured Cash Flow Grid Table (Desktop & Tablet)                        */
 /* ========================================================================= */
-.compact-tx-row {
-  display: flex;
+.tx-table-header {
+  display: grid;
+  grid-template-columns: 28px 28px 90px minmax(180px, 2fr) minmax(120px, 1.2fr) minmax(100px, 1fr) minmax(140px, 1.3fr) minmax(130px, 1.2fr) 110px 32px;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 14px;
-  min-height: 42px;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #f6f2ea;
+  border: 1px solid #c5b08e;
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #8c734b;
+  margin-bottom: 6px;
+  user-select: none;
+}
+
+.tx-table-header-col {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tx-table-header-col.num-col {
+  text-align: right;
+}
+
+.compact-tx-row {
+  display: grid;
+  grid-template-columns: 28px 28px 90px minmax(180px, 2fr) minmax(120px, 1.2fr) minmax(100px, 1fr) minmax(140px, 1.3fr) minmax(130px, 1.2fr) 110px 32px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  min-height: 48px;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  transition: background 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .compact-tx-row:hover {
-  background: #fafafa;
+  background: #fdfbf7;
+  border-color: #d6c5a8;
 }
 
-.compact-tx-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  flex: 1;
-}
-
-.compact-tx-icon {
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-sm);
+.compact-tx-col-check {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  background: var(--muted);
-  color: var(--foreground);
 }
 
-.compact-tx-content {
-  min-width: 0;
+.compact-tx-col-icon {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
 }
 
-.compact-tx-category {
-  font-weight: 500;
+.compact-tx-col-date {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.2;
+}
+
+.compact-tx-col-date .date-main {
   font-size: 0.8125rem;
+  font-weight: 700;
   color: var(--foreground);
+}
+
+.compact-tx-col-date .date-sub {
+  font-size: 0.6875rem;
+  color: var(--muted-foreground);
+}
+
+.compact-tx-col-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.compact-tx-col-main .tx-title-text {
+  font-size: 0.825rem;
+  font-weight: 600;
+  color: var(--foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.compact-tx-event-tag {
+.compact-tx-col-main .tx-author-text {
   font-size: 0.6875rem;
-  padding: 1px 6px;
-  border-radius: 4px;
+  color: var(--muted-foreground);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compact-tx-col-cat {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.compact-tx-category-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.compact-tx-category-pill.type-income {
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.compact-tx-category-pill.type-expense {
+  background: #fbf7f0;
+  color: #8c734b;
+  border-color: #e5dac7;
+}
+
+.compact-tx-category-pill.type-transfer {
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
+  border-color: rgba(37, 99, 235, 0.2);
+}
+
+.compact-tx-col-event {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.compact-tx-event-pill {
+  font-size: 0.72rem;
+  padding: 2px 7px;
+  border-radius: 5px;
   background: var(--muted);
   border: 1px solid var(--border);
   color: var(--foreground);
   font-weight: 500;
   white-space: nowrap;
-}
-
-.compact-tx-account-tag {
-  font-size: 0.75rem;
-  color: var(--muted-foreground);
-  white-space: nowrap;
-}
-
-.compact-tx-memo {
-  font-size: 0.75rem;
-  color: var(--muted-foreground);
-  font-style: italic;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 200px;
+  max-width: 100%;
 }
 
-.compact-tx-right {
+.compact-tx-col-account {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.2;
 }
 
-.compact-tx-amount {
-  font-size: 0.875rem;
+.compact-tx-col-account .account-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compact-tx-col-account .entity-badge {
+  font-size: 0.675rem;
+  color: #8c734b;
   font-weight: 600;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compact-tx-col-vat {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.compact-tx-vat-pill {
+  font-size: 0.6875rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compact-tx-col-amount {
+  text-align: right;
+  font-size: 0.9375rem;
+  font-weight: 800;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  color: var(--foreground);
+}
+
+.compact-tx-col-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* ========================================================================= */
+/* Mobile Fallback (< 880px)                                                 */
+/* ========================================================================= */
+@media (max-width: 880px) {
+  .tx-table-header {
+    display: none;
+  }
+
+  .compact-tx-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .mobile-top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .mobile-mid-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .mobile-bot-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px dashed var(--border);
+    padding-top: 6px;
+    font-size: 0.75rem;
+  }
 }
 
 /* Badges */

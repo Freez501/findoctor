@@ -75,16 +75,9 @@ export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelect
   const vatAmountValue = transaction.vatAmount ?? (vatRateValue > 0 ? Math.round((transaction.amount * vatRateValue) / (100 + vatRateValue)) : 0);
   const vatBadgeLabel = isExpense && transaction.hasVat
     ? vatRateValue > 0
-      ? `📄 Документы · НДС ${vatRateValue}% · ${formatRubles(vatAmountValue)}`
-      : '📄 Документы · без НДС'
+      ? `НДС ${vatRateValue}% (${formatRubles(vatAmountValue)})`
+      : 'Без НДС'
     : '';
-
-  const metaBadgeStyle: React.CSSProperties = {
-    fontSize: '0.675rem',
-    padding: '1px 6px',
-    borderRadius: '4px',
-    whiteSpace: 'nowrap',
-  };
 
   return (
     <div
@@ -96,24 +89,18 @@ export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelect
         borderColor: isSelected ? 'rgba(59, 130, 246, 0.4)' : isEventDeleted ? 'rgba(245, 158, 11, 0.4)' : undefined,
         borderLeft: isEventDeleted ? '4px solid #f59e0b' : undefined,
       }}
-      title={isEventDeleted ? '⚠️ Связанное мероприятие удалено! Нажмите, чтобы переназначить статью или перевести в общие расходы' : 'Нажмите, чтобы отредактировать статью, мероприятие или сумму'}
+      title={isEventDeleted ? '⚠️ Связанное мероприятие удалено! Нажмите, чтобы переназначить статью' : 'Нажмите, чтобы отредактировать операцию'}
     >
-      {/* Left Icon & Meta */}
-      <div className="compact-tx-left">
+      {/* 1. Чекбокс */}
+      <div className="compact-tx-col-check">
         {onToggleSelect && (
           <div
             onClick={(e) => {
               e.stopPropagation();
               onToggleSelect(transaction);
             }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              paddingRight: '6px',
-              cursor: 'pointer',
-            }}
-            title={isSelected ? 'Снять выбор' : 'Выбрать для массовых действий'}
+            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            title={isSelected ? 'Снять выбор' : 'Выбрать'}
           >
             <input
               type="checkbox"
@@ -128,107 +115,129 @@ export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelect
             />
           </div>
         )}
-        <div
-          className="compact-tx-icon"
-          style={{ backgroundColor: iconBgColor, color: amountColor }}
-        >
-          {isIncome ? <ArrowUpRight size={16} /> : isExpense ? <ArrowDownRight size={16} /> : <ArrowLeftRight size={16} />}
-        </div>
+      </div>
 
-        <div className="compact-tx-content">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            <span className="compact-tx-category">{categoryName}</span>
-            {isEventDeleted ? (
-              <span
-                className="compact-tx-review-badge"
-                style={{
-                  backgroundColor: 'rgba(245, 158, 11, 0.15)',
-                  color: '#b45309',
-                  border: '1px solid rgba(245, 158, 11, 0.4)',
-                  fontWeight: 700,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-                title="Мероприятие было удалено. Нажмите для переназначения статьи."
-              >
-                ⚠️ Ивент удалён
-              </span>
-            ) : needsReview ? (
-              <span className="compact-tx-review-badge">
-                ⚠️ Не разобрано
-              </span>
-            ) : null}
-            {transaction.eventId && !isEventDeleted && (
-              <span className="compact-tx-event-tag">
-                {eventTitle}
-              </span>
-            )}
-          </div>
-          <span className="compact-tx-account-tag">{accountLabel}</span>
-          {legalEntityLabel && (
-            <span
-              style={{ ...metaBadgeStyle, background: '#f6f2ea', border: '1px solid #c5b08e', color: '#8c734b', fontWeight: 600 }}
-              title="Юрлицо, к которому относится операция"
-            >
-              🏛️ {legalEntityLabel}
-            </span>
-          )}
-          {vatBadgeLabel && (
-            <span
-              style={{ ...metaBadgeStyle, background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#047857', fontWeight: 600 }}
-              title="По расходу есть закрывающие документы (УПД / Акт / ЭДО)"
-            >
-              {vatBadgeLabel}
-            </span>
-          )}
-          {quarterLabel && transaction.type !== 'transfer' && (
-            <span
-              style={{ ...metaBadgeStyle, background: 'rgba(100, 116, 139, 0.08)', color: 'var(--color-mid-gray)' }}
-              title="Налоговый период, в который попадает операция"
-            >
-              {quarterLabel}
-            </span>
-          )}
-          {transaction.description && (
-            <span className="compact-tx-memo" title={transaction.description}>
-              «{transaction.description}»
-            </span>
-          )}
-          <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
-            {formatDateTimeRu(transaction.transactionDate)}
-          </span>
-          {createdByDisplay && (
-            <span
-              style={{
-                fontSize: '0.675rem',
-                padding: '1px 6px',
-                borderRadius: '4px',
-                background: 'rgba(100, 116, 139, 0.1)',
-                color: 'var(--color-mid-gray)',
-                whiteSpace: 'nowrap',
-              }}
-              title={`Запись внёс сотрудник: ${createdByDisplay}`}
-            >
-              👤 {createdByDisplay}
-            </span>
-          )}
+      {/* 2. Иконка-стрелка */}
+      <div className="compact-tx-col-icon">
+        <div
+          style={{
+            width: '24px',
+            height: '24px',
+            borderRadius: '50%',
+            backgroundColor: iconBgColor,
+            color: amountColor,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {isIncome ? <ArrowUpRight size={14} /> : isExpense ? <ArrowDownRight size={14} /> : <ArrowLeftRight size={14} />}
         </div>
       </div>
 
-      {/* Right Amount & Actions */}
-      <div className="compact-tx-right" onClick={(e) => e.stopPropagation()}>
-        <span className="compact-tx-amount" style={{ color: amountColor }}>
-          {sign}{formatRubles(transaction.amount)}
+      {/* 3. Дата и период */}
+      <div className="compact-tx-col-date">
+        <span className="date-main">
+          {formatDateTimeRu(transaction.transactionDate).slice(0, 10)}
         </span>
+        <span className="date-sub">
+          {formatDateTimeRu(transaction.transactionDate).slice(12) || quarterLabel}
+        </span>
+      </div>
 
+      {/* 4. Операция / Описание и Автор */}
+      <div className="compact-tx-col-main">
+        <span className="tx-title-text" title={transaction.description || categoryName}>
+          {transaction.description ? `«${transaction.description}»` : categoryName}
+        </span>
+        <span className="tx-author-text">
+          {createdByDisplay ? `👤 ${createdByDisplay}` : '—'}
+          {needsReview && (
+            <span style={{ color: '#d97706', fontWeight: 700, marginLeft: '4px' }}>
+              ⚠️ Не разобрано
+            </span>
+          )}
+        </span>
+      </div>
+
+      {/* 5. Статья ДДС */}
+      <div className="compact-tx-col-cat">
+        <span className={`compact-tx-category-pill ${isIncome ? 'type-income' : isExpense ? 'type-expense' : 'type-transfer'}`}>
+          {categoryName}
+        </span>
+      </div>
+
+      {/* 6. Проект / Мероприятие */}
+      <div className="compact-tx-col-event">
+        {transaction.eventId && !isEventDeleted ? (
+          <span className="compact-tx-event-pill" title={eventTitle}>
+            {eventTitle}
+          </span>
+        ) : isEventDeleted ? (
+          <span className="compact-tx-event-pill" style={{ color: '#b45309', background: '#fef3c7', borderColor: '#fde68a' }}>
+            ⚠️ Удалён
+          </span>
+        ) : (
+          <span style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem' }}>—</span>
+        )}
+      </div>
+
+      {/* 7. Счёт и Юрлицо */}
+      <div className="compact-tx-col-account">
+        <span className="account-name" title={accountLabel}>
+          {transaction.type === 'transfer'
+            ? `${accMap.get(transaction.fromAccountId || '') || '—'} → ${accMap.get(transaction.toAccountId || '') || '—'}`
+            : isExpense ? (accMap.get(transaction.fromAccountId || '') || '—') : (accMap.get(transaction.toAccountId || '') || '—')}
+        </span>
+        <span className="entity-badge">
+          {legalEntityLabel ? `🏛️ ${legalEntityLabel}` : 'Управленческий'}
+        </span>
+      </div>
+
+      {/* 8. Закрывающие документы и НДС */}
+      <div className="compact-tx-col-vat">
+        {vatBadgeLabel ? (
+          <span
+            className="compact-tx-vat-pill"
+            style={{
+              background: 'rgba(16, 185, 129, 0.08)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              color: '#047857',
+            }}
+            title={vatBadgeLabel}
+          >
+            {vatBadgeLabel}
+          </span>
+        ) : (
+          <span style={{ color: 'var(--muted-foreground)', fontSize: '0.8rem' }}>—</span>
+        )}
+      </div>
+
+      {/* 9. Сумма */}
+      <div className="compact-tx-col-amount" style={{ color: amountColor }}>
+        {sign}{formatRubles(transaction.amount)}
+      </div>
+
+      {/* 10. Кнопка удаления */}
+      <div className="compact-tx-col-action" onClick={(e) => e.stopPropagation()}>
         {canDelete && (
           isConfirming ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-              <button type="button" onClick={handleDelete} disabled={isDeleting} className="btn-confirm-yes" style={{ fontSize: '0.7rem', padding: '6px 8px', minHeight: '36px' }}>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="btn-confirm-yes"
+                style={{ fontSize: '0.7rem', padding: '4px 6px', minHeight: '30px' }}
+              >
                 {isDeleting ? '...' : 'Да'}
               </button>
-              <button type="button" onClick={(e) => { e.stopPropagation(); setIsConfirming(false); }} className="btn-confirm-no" style={{ fontSize: '0.7rem', padding: '6px 8px', minHeight: '36px' }}>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setIsConfirming(false); }}
+                className="btn-confirm-no"
+                style={{ fontSize: '0.7rem', padding: '4px 6px', minHeight: '30px' }}
+              >
                 Нет
               </button>
             </div>
@@ -240,19 +249,20 @@ export const TransactionRow: React.FC<Props> = ({ transaction, onClick, isSelect
                 setIsConfirming(true);
               }}
               title="Удалить операцию"
-              className="btn-touch-target"
               style={{
                 color: 'var(--color-text-muted)',
-                minWidth: '44px',
-                minHeight: '44px',
+                width: '32px',
+                height: '32px',
                 borderRadius: '4px',
+                border: 'none',
+                background: 'transparent',
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <Trash2 size={16} />
+              <Trash2 size={15} />
             </button>
           )
         )}
